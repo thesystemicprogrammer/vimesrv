@@ -1,0 +1,105 @@
+.PHONY: help build build-prod run test test-unit test-integration test-config clean deps setup install lint fmt vet check dev
+
+# Variables
+BINARY_NAME=vimesrv
+BUILD_DIR=./bin
+CMD_DIR=./cmd/server
+GO=go
+GOFLAGS=
+LDFLAGS=-s -w
+
+# Default target
+help: ## Show this help message
+	@echo 'Usage: make [target]'
+	@echo ''
+	@echo 'Available targets:'
+	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+
+# Development commands
+dev: ## Run server in development mode with hot reload (requires air)
+	@./scripts/dev.sh
+
+run: build ## Build and run the server
+	@echo "Running $(BINARY_NAME)..."
+	@$(BUILD_DIR)/$(BINARY_NAME)
+
+# Build commands
+build: ## Build the application for development
+	@echo "Building $(BINARY_NAME) for development..."
+	@mkdir -p $(BUILD_DIR)
+	@$(GO) build $(GOFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) $(CMD_DIR)
+	@echo "Build complete: $(BUILD_DIR)/$(BINARY_NAME)"
+
+build-prod: ## Build the application for production with optimizations
+	@echo "Building $(BINARY_NAME) for production..."
+	@mkdir -p $(BUILD_DIR)
+	@$(GO) build $(GOFLAGS) -ldflags="$(LDFLAGS)" -trimpath -o $(BUILD_DIR)/$(BINARY_NAME) $(CMD_DIR)
+	@echo "Production build complete: $(BUILD_DIR)/$(BINARY_NAME)"
+
+# Testing commands
+test: ## Run all tests
+	@echo "Running all tests..."
+	@$(GO) test -v -race -coverprofile=coverage.out ./...
+	@echo "Coverage report generated: coverage.out"
+
+test-unit: ## Run unit tests only
+	@echo "Running unit tests..."
+	@$(GO) test -v -race -short ./...
+
+test-integration: ## Run integration tests only
+	@echo "Running integration tests..."
+	@$(GO) test -v -race -run Integration ./test/integration/...
+
+test-coverage: test ## Run tests and show coverage report
+	@echo "Generating coverage report..."
+	@$(GO) tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report: coverage.html"
+
+test-form: ## Test with nice formatting
+	@echo "Runnning all tests"
+	gotestsum --format dots
+
+# Code quality commands
+fmt: ## Format code with gofmt
+	@echo "Formatting code..."
+	@$(GO) fmt ./...
+
+vet: ## Run go vet
+	@echo "Running go vet..."
+	@$(GO) vet ./...
+
+lint: ## Run golangci-lint (requires golangci-lint)
+	@if command -v golangci-lint > /dev/null; then \
+		echo "Running golangci-lint..."; \
+		golangci-lint run ./...; \
+	else \
+		echo "golangci-lint not installed. Install with: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest"; \
+	fi
+
+check: fmt vet ## Run fmt and vet
+
+# Dependencies commands
+deps: ## Download dependencies
+	@echo "Downloading dependencies..."
+	@$(GO) mod download
+
+deps-tidy: ## Tidy dependencies
+	@echo "Tidying dependencies..."
+	@$(GO) mod tidy
+
+deps-verify: ## Verify dependencies
+	@echo "Verifying dependencies..."
+	@$(GO) mod verify
+
+deps-update: ## Update dependencies
+	@echo "Updating dependencies..."
+	@$(GO) get -u ./...
+	@$(GO) mod tidy
+
+
+# Docker commands (future)
+docker-build: ## Build Docker image
+	@echo "Docker support coming soon..."
+
+docker-run: ## Run Docker container
+	@echo "Docker support coming soon..."

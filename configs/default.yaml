@@ -1,0 +1,97 @@
+server:
+  host: "127.0.0.1"
+  port: 8080
+
+media:
+  library_path: "./media"
+  trash_path: "/trash" # subdirectory under the library_path
+  supported_formats:
+    - ".mp4"
+    - ".mkv"
+    - ".avi"
+    - ".mov"
+    - ".webm"
+    - ".flv"
+    - ".wmv"
+    - ".m4v"
+
+transcoding:
+  output_path: "/transcoded" # subdirectory under the library path
+  segment_duration: 4
+
+  # Quality presets using CRF-based encoding
+  # Set enabled: true to create transcodes for that quality
+  # CRF (Constant Rate Factor): Lower = better quality but larger files
+  #   18-20 = Near-lossless quality
+  #   21-23 = Excellent quality
+  #   24-26 = Good quality
+  quality_profiles:
+    - name: "360p"
+      enabled: true
+      resolution: "640x360"
+      crf: 25
+      max_bitrate: "900k"
+      audio_bitrate: "96k"
+
+    - name: "480p"
+      enabled: true
+      resolution: "854x480"
+      crf: 24
+      max_bitrate: "1500k"
+      audio_bitrate: "128k"
+
+    - name: "720p"
+      enabled: false
+      resolution: "1280x720"
+      crf: 23
+      max_bitrate: "2800k"
+      audio_bitrate: "128k"
+
+    - name: "900p"
+      enabled: false
+      resolution: "1600x900"
+      crf: 22
+      max_bitrate: "4500k"
+      audio_bitrate: "128k"
+
+    - name: "1080p"
+      enabled: false
+      resolution: "1920x1080"
+      crf: 21
+      max_bitrate: "5500k"
+      audio_bitrate: "192k"
+
+    - name: "1440p"
+      enabled: false
+      resolution: "2560x1440"
+      crf: 20
+      max_bitrate: "9000k"
+      audio_bitrate: "192k"
+
+    - name: "2160p"
+      enabled: false
+      resolution: "3840x2160"
+      crf: 18
+      max_bitrate: "16000k"
+      audio_bitrate: "256k"
+
+database:
+  path: "./data/vimesrv.db"
+
+logging:
+  level: "info"
+  format: "console"
+  file: ""
+
+tmdb:
+  enabled: false # Set to true and provide TMDB_API_KEY environment variable to enable
+  api_key: "" # Set via TMDB_API_KEY environment variable
+  language: "en-US"
+  auto_search: true
+  auto_link_threshold: 70
+  max_candidates: 5
+  image_cache_path: "./cache/tmdb"
+  download_images: true
+  poster_size: "w500"
+  backdrop_size: "w1280"
+  requests_per_10s: 35
