@@ -6,7 +6,15 @@ BUILD_DIR=./bin
 CMD_DIR=./cmd/server
 GO=go
 GOFLAGS=
-LDFLAGS=-s -w
+
+# Version information
+VERSION=0.0.1-dev
+GIT_COMMIT=$(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+BUILD_DATE=$(shell date -u '+%Y-%m-%d_%H:%M:%S')
+PACKAGE=github.com/thesystemicprogrammer/vimesrv/cmd/server
+
+# Build flags
+LDFLAGS=-s -w -X 'main.version=$(VERSION)' -X 'main.commit=$(GIT_COMMIT)' -X 'main.date=$(BUILD_DATE)'
 
 # Default target
 help: ## Show this help message
@@ -27,7 +35,7 @@ run: build ## Build and run the server
 build: ## Build the application for development
 	@echo "Building $(BINARY_NAME) for development..."
 	@mkdir -p $(BUILD_DIR)
-	@$(GO) build $(GOFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) $(CMD_DIR)
+	@$(GO) build $(GOFLAGS) -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME) $(CMD_DIR)
 	@echo "Build complete: $(BUILD_DIR)/$(BINARY_NAME)"
 
 build-prod: ## Build the application for production with optimizations
