@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
-	"github.com/thesystemicprogrammer/vimesrv/internal/utils/config"
+	"github.com/thesystemicprogrammer/vimesrv/internal/shared/config"
 )
 
 var (

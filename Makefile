@@ -1,6 +1,6 @@
 .PHONY: help build build-prod run test test-unit test-integration test-config clean deps setup install lint fmt vet check dev
 
-# Variables
+# Variables.1-dev.1-dev
 BINARY_NAME=vimesrv
 BUILD_DIR=./bin
 CMD_DIR=./cmd/server

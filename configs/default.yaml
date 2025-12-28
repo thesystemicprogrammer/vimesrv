@@ -2,6 +2,13 @@ server:
   host: "127.0.0.1"
   port: 8080
 
+job:
+  worker_count: 2
+  polling_interval_in_seconds: 2
+  scheduler_batch: 5
+  scheduler_interval_in_seconds: 2
+  max_attempts: 3
+
 media:
   library_path: "./media"
   trash_path: "/trash" # subdirectory under the library_path

@@ -63,6 +63,13 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("server.host", "127.0.0.1")
 	v.SetDefault("server.port", 8080)
 
+	// Job defaults
+	v.SetDefault("job.worker_count", 2)
+	v.SetDefault("job.max_attempts", 3)
+	v.SetDefault("job.polling_interval_in_seconds", 2)
+	v.SetDefault("job.scheduler_interval_in_seconds", 10)
+	v.SetDefault("job.scheduler_batch", 3)
+
 	// Media defaults
 	v.SetDefault("media.library_path", "./media")
 	v.SetDefault("media.trash_path", "./trash")
@@ -76,7 +83,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("transcoding.segment_pattern", "chunk-%03d.m4s")
 
 	// Quality profiles defaults
-	v.SetDefault("transcoding.quality_profiles", []map[string]interface{}{
+	v.SetDefault("transcoding.quality_profiles", []map[string]any{
 		{
 			"name":          "360p",
 			"enabled":       true,

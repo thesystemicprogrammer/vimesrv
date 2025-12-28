@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/thesystemicprogrammer/vimesrv/internal/utils/config"
-	"github.com/thesystemicprogrammer/vimesrv/internal/utils/logger"
+	"github.com/thesystemicprogrammer/vimesrv/internal/app"
+	"github.com/thesystemicprogrammer/vimesrv/internal/shared/config"
+	"github.com/thesystemicprogrammer/vimesrv/internal/shared/logger"
 )
 
 const (
@@ -60,6 +61,17 @@ func main() {
 
 	logger.Info().
 		Str("config", *configPath).
-		Str("version", "1").
+		Str("version", version).
 		Msg("starting vimesrv")
+
+	// Create and run application
+	application, err := app.NewApplication(cfg)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("failed to create application")
+	}
+
+	// Start application (blocks until shutdown signal)
+	if err := application.Start(); err != nil {
+		logger.Fatal().Err(err).Msg("failed to start application")
+	}
 }

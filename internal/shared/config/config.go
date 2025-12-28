@@ -8,6 +8,7 @@ import (
 // Config holds all application configuration
 type Config struct {
 	Server      ServerConfig      `mapstructure:"server"`
+	Job         JobConfig         `mapstructure:"job"`
 	Media       MediaConfig       `mapstructure:"media"`
 	Transcoding TranscodingConfig `mapstructure:"transcoding"`
 	Database    DatabaseConfig    `mapstructure:"database"`
@@ -15,27 +16,31 @@ type Config struct {
 	TMDB        TMDBConfig        `mapstructure:"tmdb"`
 }
 
-// ServerConfig holds HTTP server configuration
+type JobConfig struct {
+	WorkerCount                int `mapstructure:"worker_count"`
+	PollingIntervalInSeconds   int `mapstructure:"polling_interval_in_seconds"`
+	MaxAttempts                int `mapstructure:"max_attempts"`
+	SchedulerIntervalInSeconds int `mapstructure:"scheduler_interval_in_seconds"`
+	SchedulerBatch             int `mapstructure:"scheduler_batch"`
+}
+
 type ServerConfig struct {
 	Host string `mapstructure:"host"`
 	Port int    `mapstructure:"port"`
 }
 
-// MediaConfig holds media library configuration
 type MediaConfig struct {
 	LibraryPath      string   `mapstructure:"library_path"`
 	TrashPath        string   `mapstructure:"trash_path"`
 	SupportedFormats []string `mapstructure:"supported_formats"`
 }
 
-// TranscodingConfig holds transcoding configuration
 type TranscodingConfig struct {
 	OutputPath      string           `mapstructure:"output_path"`
 	SegmentDuration int              `mapstructure:"segment_duration"`
 	QualityProfiles []QualityProfile `mapstructure:"quality_profiles"`
 }
 
-// QualityProfile represents a transcoding quality profile
 type QualityProfile struct {
 	Name    string `mapstructure:"name"`
 	Enabled bool   `mapstructure:"enabled"` // Whether to create this quality
@@ -46,19 +51,16 @@ type QualityProfile struct {
 	MaxBitrate   string `mapstructure:"max_bitrate"` // Bitrate cap for CRF mode
 }
 
-// DatabaseConfig holds database configuration
 type DatabaseConfig struct {
 	Path string `mapstructure:"path"`
 }
 
-// LoggingConfig holds logging configuration
 type LoggingConfig struct {
 	Level  string `mapstructure:"level"`
 	Format string `mapstructure:"format"`
 	File   string `mapstructure:"file"`
 }
 
-// TMDBConfig holds TMDB API configuration
 type TMDBConfig struct {
 	Enabled           bool   `mapstructure:"enabled"`
 	APIKey            string `mapstructure:"api_key"`
@@ -73,34 +75,31 @@ type TMDBConfig struct {
 	RequestsPer10s    int    `mapstructure:"requests_per_10s"`
 }
 
-// Validate validates the configuration
 func (c *Config) Validate() error {
-	// Validate server config
 	if err := c.Server.Validate(); err != nil {
 		return fmt.Errorf("server config: %w", err)
 	}
 
-	// Validate media config
+	if err := c.Job.Validate(); err != nil {
+		return fmt.Errorf("job config: %w", err)
+	}
+
 	if err := c.Media.Validate(); err != nil {
 		return fmt.Errorf("media config: %w", err)
 	}
 
-	// Validate transcoding config
 	if err := c.Transcoding.Validate(); err != nil {
 		return fmt.Errorf("transcoding config: %w", err)
 	}
 
-	// Validate database config
 	if err := c.Database.Validate(); err != nil {
 		return fmt.Errorf("database config: %w", err)
 	}
 
-	// Validate logging config
 	if err := c.Logging.Validate(); err != nil {
 		return fmt.Errorf("logging config: %w", err)
 	}
 
-	// Validate TMDB config (only if enabled)
 	if c.TMDB.Enabled {
 		if err := c.TMDB.Validate(); err != nil {
 			return fmt.Errorf("tmdb config: %w", err)
@@ -110,7 +109,6 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// Validate validates server configuration
 func (s *ServerConfig) Validate() error {
 	if s.Host == "" {
 		return fmt.Errorf("host cannot be empty")
@@ -123,7 +121,30 @@ func (s *ServerConfig) Validate() error {
 	return nil
 }
 
-// Validate validates media configuration
+func (j *JobConfig) Validate() error {
+	if j.WorkerCount < 1 || j.WorkerCount > 10 {
+		return fmt.Errorf("worker count must be between 1 and 10, got %d", j.WorkerCount)
+	}
+
+	if j.PollingIntervalInSeconds < 1 || j.PollingIntervalInSeconds > 60 {
+		return fmt.Errorf("polling interval must be between 1 and 60, got %d", j.PollingIntervalInSeconds)
+	}
+
+	if j.MaxAttempts < 1 || j.MaxAttempts > 100 {
+		return fmt.Errorf("max attempts must be between 1 and 100, got %d", j.MaxAttempts)
+	}
+
+	if j.SchedulerIntervalInSeconds < 1 || j.SchedulerIntervalInSeconds > 3600 {
+		return fmt.Errorf("max scheduler interval must be between 1 and 3600, got %d", j.SchedulerIntervalInSeconds)
+	}
+
+	if j.SchedulerBatch < 5 || j.SchedulerIntervalInSeconds > 100 {
+		return fmt.Errorf("max scheduler batch must be between 1 and 100, got %d", j.SchedulerBatch)
+	}
+
+	return nil
+}
+
 func (m *MediaConfig) Validate() error {
 	if m.LibraryPath == "" {
 		return fmt.Errorf("library_path cannot be empty")
@@ -137,7 +158,6 @@ func (m *MediaConfig) Validate() error {
 		return fmt.Errorf("supported_formats cannot be empty")
 	}
 
-	// Validate that all formats start with a dot
 	for _, format := range m.SupportedFormats {
 		if !strings.HasPrefix(format, ".") {
 			return fmt.Errorf("format must start with a dot, got: %s", format)
@@ -147,7 +167,6 @@ func (m *MediaConfig) Validate() error {
 	return nil
 }
 
-// Validate validates transcoding configuration
 func (t *TranscodingConfig) Validate() error {
 	if t.OutputPath == "" {
 		return fmt.Errorf("output_path cannot be empty")
@@ -161,14 +180,12 @@ func (t *TranscodingConfig) Validate() error {
 		return fmt.Errorf("qualities cannot be empty, at least one quality must be defined")
 	}
 
-	// Validate each quality
 	for i, quality := range t.QualityProfiles {
 		if err := quality.Validate(); err != nil {
 			return fmt.Errorf("quality[%d]: %w", i, err)
 		}
 	}
 
-	// Check at least one quality is enabled
 	hasEnabled := false
 	for _, q := range t.QualityProfiles {
 		if q.Enabled {
@@ -183,7 +200,6 @@ func (t *TranscodingConfig) Validate() error {
 	return nil
 }
 
-// Validate validates quality configuration
 func (q *QualityProfile) Validate() error {
 	if q.Name == "" {
 		return fmt.Errorf("name cannot be empty")
@@ -197,12 +213,10 @@ func (q *QualityProfile) Validate() error {
 		return fmt.Errorf("audio_bitrate cannot be empty")
 	}
 
-	// CRF validation (must be in range 18-26)
 	if q.CRF < 18 || q.CRF > 26 {
 		return fmt.Errorf("crf must be between 18 and 26 for quality %s, got %d", q.Name, q.CRF)
 	}
 
-	// MaxBitrate required for CRF mode
 	if q.MaxBitrate == "" {
 		return fmt.Errorf("max_bitrate cannot be empty for quality %s (required for CRF mode)", q.Name)
 	}
@@ -210,7 +224,6 @@ func (q *QualityProfile) Validate() error {
 	return nil
 }
 
-// Validate validates database configuration
 func (d *DatabaseConfig) Validate() error {
 	if d.Path == "" {
 		return fmt.Errorf("path cannot be empty")
@@ -219,7 +232,6 @@ func (d *DatabaseConfig) Validate() error {
 	return nil
 }
 
-// Validate validates logging configuration
 func (l *LoggingConfig) Validate() error {
 	if l.Level == "" {
 		return fmt.Errorf("level cannot be empty")
@@ -252,7 +264,6 @@ func (l *LoggingConfig) Validate() error {
 	return nil
 }
 
-// Validate validates TMDB configuration
 func (t *TMDBConfig) Validate() error {
 	if t.APIKey == "" {
 		return fmt.Errorf("api_key cannot be empty when TMDB is enabled")
@@ -282,7 +293,6 @@ func (t *TMDBConfig) Validate() error {
 		return fmt.Errorf("backdrop_size cannot be empty")
 	}
 
-	// Validate poster size
 	validPosterSizes := map[string]bool{
 		"w92": true, "w154": true, "w185": true, "w342": true, "w500": true, "w780": true, "original": true,
 	}
@@ -290,7 +300,6 @@ func (t *TMDBConfig) Validate() error {
 		return fmt.Errorf("invalid poster_size: %s (must be one of: w92, w154, w185, w342, w500, w780, original)", t.PosterSize)
 	}
 
-	// Validate backdrop size
 	validBackdropSizes := map[string]bool{
 		"w300": true, "w780": true, "w1280": true, "original": true,
 	}
@@ -305,7 +314,6 @@ func (t *TMDBConfig) Validate() error {
 	return nil
 }
 
-// Address returns the server address in host:port format
 func (s *ServerConfig) Address() string {
 	return fmt.Sprintf("%s:%d", s.Host, s.Port)
 }
