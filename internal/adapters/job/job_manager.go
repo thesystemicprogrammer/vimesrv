@@ -10,14 +10,14 @@ import (
 
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/config"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/logger"
-	"github.com/thesystemicprogrammer/vimesrv/internal/usecase"
+	usecasejob "github.com/thesystemicprogrammer/vimesrv/internal/usecase/job"
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/ports"
 )
 
 type JobManagerInput struct {
 	Config                config.JobConfig
-	ProcessNextJobUseCase usecase.ProcessNextJobUseCase
-	SchedulerTickUseCase  usecase.SchedulerTickUseCase
+	ProcessNextJobUseCase usecasejob.ProcessNextJobUseCase
+	SchedulerTickUseCase  usecasejob.SchedulerTickUseCase
 	JobRepository         ports.JobRepository
 	ScheduleRepository    ports.ScheduleRepository
 	Handlers              ports.HandlerResolver
@@ -28,8 +28,8 @@ type JobManagerInput struct {
 
 type JobManager struct {
 	Config                config.JobConfig
-	ProcessNextJobUseCase usecase.ProcessNextJobUseCase
-	SchedulerTickUseCase  usecase.SchedulerTickUseCase
+	ProcessNextJobUseCase usecasejob.ProcessNextJobUseCase
+	SchedulerTickUseCase  usecasejob.SchedulerTickUseCase
 	JobRepository         ports.JobRepository
 	ScheduleRepository    ports.ScheduleRepository
 	Handlers              ports.HandlerResolver

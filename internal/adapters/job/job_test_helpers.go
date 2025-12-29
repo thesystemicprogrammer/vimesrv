@@ -14,7 +14,7 @@ import (
 	"github.com/thesystemicprogrammer/vimesrv/internal/domain"
 	"github.com/thesystemicprogrammer/vimesrv/internal/infrastructure/database"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/config"
-	"github.com/thesystemicprogrammer/vimesrv/internal/usecase"
+	usecasejob "github.com/thesystemicprogrammer/vimesrv/internal/usecase/job"
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/ports"
 )
 
@@ -23,10 +23,10 @@ type JobManagerDependencies struct {
 	DB                    *sql.DB
 	JobRepository         *repository.JobRepository
 	ScheduleRepository    *repository.ScheduleRepository
-	UpsertScheduleUseCase *usecase.UpsertScheduleUseCase
-	EnqueueJobUseCase     *usecase.EnqueueJobUseCase
-	ProcessNextJobUseCase *usecase.ProcessNextJobUseCase
-	SchedulerTickUseCase  *usecase.SchedulerTickUseCase
+	UpsertScheduleUseCase *usecasejob.UpsertScheduleUseCase
+	EnqueueJobUseCase     *usecasejob.EnqueueJobUseCase
+	ProcessNextJobUseCase *usecasejob.ProcessNextJobUseCase
+	SchedulerTickUseCase  *usecasejob.SchedulerTickUseCase
 	HandlerRegistry       *HandlerRegistry
 	BackoffStrategy       ports.BackoffStrategy
 	CronParser            ports.CronParser
@@ -98,10 +98,10 @@ func setupTestJobManager(t *testing.T, cfg config.JobConfig, handlers map[string
 	clock := ports.RealClock{}
 
 	// Create use cases
-	enqueueJobUC := usecase.NewEnqueueJobUseCase(cfg, jobRepo, clock)
-	processNextJobUC := usecase.NewProcessNextJobUseCase(jobRepo, handlerRegistry, backoffStrategy, clock)
-	schedulerTickUC := usecase.NewSchedulerTickUseCase(cfg, scheduleRepo, cronParser, clock)
-	upsertScheduleUC := usecase.NewUpsertScheduleUseCase(cfg, scheduleRepo, cronParser, clock)
+	enqueueJobUC := usecasejob.NewEnqueueJobUseCase(cfg, jobRepo, clock)
+	processNextJobUC := usecasejob.NewProcessNextJobUseCase(jobRepo, handlerRegistry, backoffStrategy, clock)
+	schedulerTickUC := usecasejob.NewSchedulerTickUseCase(cfg, scheduleRepo, cronParser, clock)
+	upsertScheduleUC := usecasejob.NewUpsertScheduleUseCase(cfg, scheduleRepo, cronParser, clock)
 
 	// Create JobManager
 	jobManager := NewJobManager(JobManagerInput{
@@ -154,10 +154,10 @@ func setupTestJobManagerWithMockClock(t *testing.T, cfg config.JobConfig, handle
 	cronParser := NewRobfigCronParser()
 
 	// Create use cases with mock clock
-	enqueueJobUC := usecase.NewEnqueueJobUseCase(cfg, jobRepo, mockClock)
-	processNextJobUC := usecase.NewProcessNextJobUseCase(jobRepo, handlerRegistry, backoffStrategy, mockClock)
-	schedulerTickUC := usecase.NewSchedulerTickUseCase(cfg, scheduleRepo, cronParser, mockClock)
-	upsertScheduleUC := usecase.NewUpsertScheduleUseCase(cfg, scheduleRepo, cronParser, mockClock)
+	enqueueJobUC := usecasejob.NewEnqueueJobUseCase(cfg, jobRepo, mockClock)
+	processNextJobUC := usecasejob.NewProcessNextJobUseCase(jobRepo, handlerRegistry, backoffStrategy, mockClock)
+	schedulerTickUC := usecasejob.NewSchedulerTickUseCase(cfg, scheduleRepo, cronParser, mockClock)
+	upsertScheduleUC := usecasejob.NewUpsertScheduleUseCase(cfg, scheduleRepo, cronParser, mockClock)
 
 	// Create JobManager
 	jobManager := NewJobManager(JobManagerInput{
@@ -215,10 +215,10 @@ func setupTestJobManagerWithSecondCron(t *testing.T, cfg config.JobConfig, handl
 	clock := ports.RealClock{}
 
 	// Create use cases
-	enqueueJobUC := usecase.NewEnqueueJobUseCase(cfg, jobRepo, clock)
-	processNextJobUC := usecase.NewProcessNextJobUseCase(jobRepo, handlerRegistry, backoffStrategy, clock)
-	schedulerTickUC := usecase.NewSchedulerTickUseCase(cfg, scheduleRepo, cronParser, clock)
-	upsertScheduleUC := usecase.NewUpsertScheduleUseCase(cfg, scheduleRepo, cronParser, clock)
+	enqueueJobUC := usecasejob.NewEnqueueJobUseCase(cfg, jobRepo, clock)
+	processNextJobUC := usecasejob.NewProcessNextJobUseCase(jobRepo, handlerRegistry, backoffStrategy, clock)
+	schedulerTickUC := usecasejob.NewSchedulerTickUseCase(cfg, scheduleRepo, cronParser, clock)
+	upsertScheduleUC := usecasejob.NewUpsertScheduleUseCase(cfg, scheduleRepo, cronParser, clock)
 
 	// Create JobManager
 	jobManager := NewJobManager(JobManagerInput{

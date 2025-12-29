@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/thesystemicprogrammer/vimesrv/internal/domain"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared"
-	"github.com/thesystemicprogrammer/vimesrv/internal/usecase"
+	usecasejob "github.com/thesystemicprogrammer/vimesrv/internal/usecase/job"
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/ports"
 )
 
@@ -57,7 +57,7 @@ func TestJobManager_SingleJobLifecycle(t *testing.T) {
 
 	// Enqueue a job
 	ctx := context.Background()
-	err = deps.EnqueueJobUseCase.Execute(ctx, usecase.EnqueueJobInput{
+	err = deps.EnqueueJobUseCase.Execute(ctx, usecasejob.EnqueueJobInput{
 		Type:     "test-job",
 		Priority: 0,
 	})
@@ -95,7 +95,7 @@ func TestJobManager_MultipleWorkersConcurrency(t *testing.T) {
 	ctx := context.Background()
 	jobCount := 15
 	for i := 0; i < jobCount; i++ {
-		err = deps.EnqueueJobUseCase.Execute(ctx, usecase.EnqueueJobInput{
+		err = deps.EnqueueJobUseCase.Execute(ctx, usecasejob.EnqueueJobInput{
 			Type:     "counter-job",
 			Priority: 0,
 		})
@@ -134,7 +134,7 @@ func TestJobManager_JobPriorityOrdering(t *testing.T) {
 	ctx := context.Background()
 	priorities := []int{1, 5, 3, 10, 2}
 	for _, priority := range priorities {
-		err := deps.EnqueueJobUseCase.Execute(ctx, usecase.EnqueueJobInput{
+		err := deps.EnqueueJobUseCase.Execute(ctx, usecasejob.EnqueueJobInput{
 			Type:     "priority-job",
 			Priority: priority,
 		})
@@ -173,7 +173,7 @@ func TestJobManager_GracefulShutdown(t *testing.T) {
 
 	// Enqueue a long-running job
 	ctx := context.Background()
-	err = deps.EnqueueJobUseCase.Execute(ctx, usecase.EnqueueJobInput{
+	err = deps.EnqueueJobUseCase.Execute(ctx, usecasejob.EnqueueJobInput{
 		Type: "long-job",
 	})
 	require.NoError(t, err)
@@ -216,7 +216,7 @@ func TestJobManager_JobRetryWithBackoff(t *testing.T) {
 
 	// Enqueue job
 	ctx := context.Background()
-	err = deps.EnqueueJobUseCase.Execute(ctx, usecase.EnqueueJobInput{
+	err = deps.EnqueueJobUseCase.Execute(ctx, usecasejob.EnqueueJobInput{
 		Type: "flaky-job",
 	})
 	require.NoError(t, err)
@@ -253,7 +253,7 @@ func TestJobManager_MaxAttemptsExceeded(t *testing.T) {
 
 	// Enqueue job
 	ctx := context.Background()
-	err = deps.EnqueueJobUseCase.Execute(ctx, usecase.EnqueueJobInput{
+	err = deps.EnqueueJobUseCase.Execute(ctx, usecasejob.EnqueueJobInput{
 		Type: "failing-job",
 	})
 	require.NoError(t, err)
@@ -287,7 +287,7 @@ func TestJobManager_UnregisteredHandler(t *testing.T) {
 
 	// Enqueue job with unregistered type
 	ctx := context.Background()
-	err = deps.EnqueueJobUseCase.Execute(ctx, usecase.EnqueueJobInput{
+	err = deps.EnqueueJobUseCase.Execute(ctx, usecasejob.EnqueueJobInput{
 		Type: "unknown-job",
 	})
 	require.NoError(t, err)
@@ -322,7 +322,7 @@ func TestJobManager_HandlerPanic(t *testing.T) {
 
 	// Enqueue job that will panic
 	ctx := context.Background()
-	err = deps.EnqueueJobUseCase.Execute(ctx, usecase.EnqueueJobInput{
+	err = deps.EnqueueJobUseCase.Execute(ctx, usecasejob.EnqueueJobInput{
 		Type: "panic-job",
 	})
 	require.NoError(t, err)
@@ -362,7 +362,7 @@ func TestJobManager_FutureJobScheduling(t *testing.T) {
 	// Enqueue job scheduled for 3 seconds in the future
 	ctx := context.Background()
 	futureTime := time.Now().Add(3 * time.Second)
-	err = deps.EnqueueJobUseCase.Execute(ctx, usecase.EnqueueJobInput{
+	err = deps.EnqueueJobUseCase.Execute(ctx, usecasejob.EnqueueJobInput{
 		Type:  "future-job",
 		RunAt: futureTime,
 	})
@@ -389,7 +389,7 @@ func TestJobManager_ScheduleUpsertAndExecution(t *testing.T) {
 
 	// Create schedule using UpsertScheduleUseCase
 	ctx := context.Background()
-	scheduleID, err := deps.UpsertScheduleUseCase.Execute(ctx, usecase.UpsertScheduleInput{
+	scheduleID, err := deps.UpsertScheduleUseCase.Execute(ctx, usecasejob.UpsertScheduleInput{
 		Name:     "test-schedule",
 		CronSpec: "* * * * *", // Every minute
 		JobType:  "scheduled-job",
@@ -452,7 +452,7 @@ func TestJobManager_ScheduleMultipleCronExpressions(t *testing.T) {
 	ctx := context.Background()
 
 	// Create multiple schedules with second-based cron
-	_, err := deps.UpsertScheduleUseCase.Execute(ctx, usecase.UpsertScheduleInput{
+	_, err := deps.UpsertScheduleUseCase.Execute(ctx, usecasejob.UpsertScheduleInput{
 		Name:     "every-2-seconds",
 		CronSpec: "*/2 * * * * *", // Every 2 seconds
 		JobType:  "job-a",
@@ -460,7 +460,7 @@ func TestJobManager_ScheduleMultipleCronExpressions(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = deps.UpsertScheduleUseCase.Execute(ctx, usecase.UpsertScheduleInput{
+	_, err = deps.UpsertScheduleUseCase.Execute(ctx, usecasejob.UpsertScheduleInput{
 		Name:     "every-5-seconds",
 		CronSpec: "*/5 * * * * *", // Every 5 seconds
 		JobType:  "job-b",
@@ -468,7 +468,7 @@ func TestJobManager_ScheduleMultipleCronExpressions(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = deps.UpsertScheduleUseCase.Execute(ctx, usecase.UpsertScheduleInput{
+	_, err = deps.UpsertScheduleUseCase.Execute(ctx, usecasejob.UpsertScheduleInput{
 		Name:     "every-10-seconds",
 		CronSpec: "*/10 * * * * *", // Every 10 seconds
 		JobType:  "job-c",
@@ -537,7 +537,7 @@ func TestJobManager_ScheduleDisabledIgnored(t *testing.T) {
 	ctx := context.Background()
 
 	// Create disabled schedule
-	scheduleID, err := deps.UpsertScheduleUseCase.Execute(ctx, usecase.UpsertScheduleInput{
+	scheduleID, err := deps.UpsertScheduleUseCase.Execute(ctx, usecasejob.UpsertScheduleInput{
 		Name:     "disabled-schedule",
 		CronSpec: "* * * * *",
 		JobType:  "disabled-job",
@@ -578,7 +578,7 @@ func TestJobManager_ScheduleNextRunAtAdvances(t *testing.T) {
 	ctx := context.Background()
 
 	// Create schedule - every 10 seconds
-	scheduleID, err := deps.UpsertScheduleUseCase.Execute(ctx, usecase.UpsertScheduleInput{
+	scheduleID, err := deps.UpsertScheduleUseCase.Execute(ctx, usecasejob.UpsertScheduleInput{
 		Name:     "advance-schedule",
 		CronSpec: "*/10 * * * * *", // Every 10 seconds
 		JobType:  "advance-job",
@@ -649,7 +649,7 @@ func TestJobManager_RestartWithQueuedJobs(t *testing.T) {
 	// Enqueue jobs directly to DB (simulating jobs from before restart)
 	ctx := context.Background()
 	for i := 0; i < 5; i++ {
-		err := deps.EnqueueJobUseCase.Execute(ctx, usecase.EnqueueJobInput{
+		err := deps.EnqueueJobUseCase.Execute(ctx, usecasejob.EnqueueJobInput{
 			Type: "restart-job",
 		})
 		require.NoError(t, err)
@@ -698,7 +698,7 @@ func TestJobManager_RestartWithRunningJobs(t *testing.T) {
 
 	// Enqueue job
 	ctx := context.Background()
-	err = deps.EnqueueJobUseCase.Execute(ctx, usecase.EnqueueJobInput{
+	err = deps.EnqueueJobUseCase.Execute(ctx, usecasejob.EnqueueJobInput{
 		Type: "long-running-job",
 	})
 	require.NoError(t, err)
@@ -741,7 +741,7 @@ func TestJobManager_RestartWithDeadJobs(t *testing.T) {
 
 	// Enqueue job that will become dead
 	ctx := context.Background()
-	err = deps.EnqueueJobUseCase.Execute(ctx, usecase.EnqueueJobInput{
+	err = deps.EnqueueJobUseCase.Execute(ctx, usecasejob.EnqueueJobInput{
 		Type: "dead-job",
 	})
 	require.NoError(t, err)
@@ -794,7 +794,7 @@ func TestJobManager_RestartWithDueScheduledJobs(t *testing.T) {
 	ctx := context.Background()
 
 	// Create schedule
-	scheduleID, err := deps.UpsertScheduleUseCase.Execute(ctx, usecase.UpsertScheduleInput{
+	scheduleID, err := deps.UpsertScheduleUseCase.Execute(ctx, usecasejob.UpsertScheduleInput{
 		Name:     "missed-schedule",
 		CronSpec: "* * * * *",
 		JobType:  "missed-job",

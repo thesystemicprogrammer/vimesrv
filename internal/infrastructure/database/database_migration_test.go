@@ -37,10 +37,21 @@ func TestMigrate_FreshDatabase(t *testing.T) {
 	// Execute
 	err := dm.Migrate()
 
-	// Assert - getCurrentVersion will fail on fresh db because table doesn't exist
-	// This is expected behavior - the first migration creates the schema_migrations table
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to get current version")
+	// Assert - migrations should succeed on fresh database
+	// The first migration creates the schema_migrations table
+	require.NoError(t, err)
+
+	// Verify schema_migrations table was created with all migrations
+	var count int
+	err = db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&count)
+	require.NoError(t, err)
+	assert.Equal(t, 2, count, "both migrations should be applied")
+
+	// Verify media table was created
+	var tableName string
+	err = db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='media'").Scan(&tableName)
+	require.NoError(t, err)
+	assert.Equal(t, "media", tableName)
 }
 
 func TestMigrate_WithInitialSchemaTable(t *testing.T) {
@@ -216,10 +227,9 @@ func TestGetCurrentVersion_NoTable(t *testing.T) {
 	// Execute - schema_migrations table doesn't exist
 	version, err := dm.getCurrentVersion()
 
-	// Assert - should handle gracefully and return 0
-	// Note: This will return an error since table doesn't exist
-	// The actual behavior depends on whether getCurrentVersion handles this case
-	assert.Error(t, err)
+	// Assert - should handle gracefully and return 0 with no error
+	// getCurrentVersion is designed to handle missing table by returning 0
+	require.NoError(t, err)
 	assert.Equal(t, 0, version)
 }
 
@@ -311,7 +321,7 @@ func TestMigrate_InvalidSQL(t *testing.T) {
 
 	// Assert - should return an error
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to execute migration")
+	assert.Contains(t, err.Error(), "syntax error")
 }
 
 func TestMigrate_FailedTransactionRollback(t *testing.T) {
@@ -350,7 +360,7 @@ func TestMigrate_FailedTransactionRollback(t *testing.T) {
 
 	// Assert - should return an error
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to execute migration")
+	assert.Contains(t, err.Error(), "no such table")
 
 	// Verify transaction was rolled back - test_table should not exist
 	var tableName string
@@ -400,7 +410,7 @@ func TestRecordMigration_DatabaseError(t *testing.T) {
 
 	// Assert - should return an error about recording failure
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to execute migration recording")
+	assert.Contains(t, err.Error(), "UNIQUE constraint failed")
 
 	// Verify test table was not created (transaction rolled back)
 	var count int

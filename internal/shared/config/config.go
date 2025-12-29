@@ -138,7 +138,7 @@ func (j *JobConfig) Validate() error {
 		return fmt.Errorf("max scheduler interval must be between 1 and 3600, got %d", j.SchedulerIntervalInSeconds)
 	}
 
-	if j.SchedulerBatch < 5 || j.SchedulerIntervalInSeconds > 100 {
+	if j.SchedulerBatch < 1 || j.SchedulerBatch > 100 {
 		return fmt.Errorf("max scheduler batch must be between 1 and 100, got %d", j.SchedulerBatch)
 	}
 

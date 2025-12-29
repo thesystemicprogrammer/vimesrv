@@ -975,6 +975,14 @@ func TestTMDBConfig_Validate(t *testing.T) {
 }
 
 func TestConfig_Validate(t *testing.T) {
+	validJobConfig := JobConfig{
+		WorkerCount:                2,
+		PollingIntervalInSeconds:   2,
+		MaxAttempts:                3,
+		SchedulerIntervalInSeconds: 2,
+		SchedulerBatch:             5,
+	}
+
 	validServerConfig := ServerConfig{
 		Host: "localhost",
 		Port: 8080,
@@ -1073,6 +1081,7 @@ func TestConfig_Validate(t *testing.T) {
 			name: "valid complete config",
 			config: Config{
 				Server:      validServerConfig,
+				Job:         validJobConfig,
 				Media:       validMediaConfig,
 				Transcoding: validTranscodingConfig,
 				Database:    validDatabaseConfig,
@@ -1085,6 +1094,7 @@ func TestConfig_Validate(t *testing.T) {
 			name: "valid config with TMDB disabled",
 			config: Config{
 				Server:      validServerConfig,
+				Job:         validJobConfig,
 				Media:       validMediaConfig,
 				Transcoding: validTranscodingConfig,
 				Database:    validDatabaseConfig,
@@ -1100,6 +1110,7 @@ func TestConfig_Validate(t *testing.T) {
 			name: "invalid server config",
 			config: Config{
 				Server:      invalidServerConfig,
+				Job:         validJobConfig,
 				Media:       validMediaConfig,
 				Transcoding: validTranscodingConfig,
 				Database:    validDatabaseConfig,
@@ -1112,6 +1123,7 @@ func TestConfig_Validate(t *testing.T) {
 			name: "invalid media config",
 			config: Config{
 				Server:      validServerConfig,
+				Job:         validJobConfig,
 				Media:       invalidMediaConfig,
 				Transcoding: validTranscodingConfig,
 				Database:    validDatabaseConfig,
@@ -1124,6 +1136,7 @@ func TestConfig_Validate(t *testing.T) {
 			name: "invalid transcoding config",
 			config: Config{
 				Server:      validServerConfig,
+				Job:         validJobConfig,
 				Media:       validMediaConfig,
 				Transcoding: invalidTranscodingConfig,
 				Database:    validDatabaseConfig,
@@ -1136,6 +1149,7 @@ func TestConfig_Validate(t *testing.T) {
 			name: "invalid database config",
 			config: Config{
 				Server:      validServerConfig,
+				Job:         validJobConfig,
 				Media:       validMediaConfig,
 				Transcoding: validTranscodingConfig,
 				Database:    invalidDatabaseConfig,
@@ -1148,6 +1162,7 @@ func TestConfig_Validate(t *testing.T) {
 			name: "invalid logging config",
 			config: Config{
 				Server:      validServerConfig,
+				Job:         validJobConfig,
 				Media:       validMediaConfig,
 				Transcoding: validTranscodingConfig,
 				Database:    validDatabaseConfig,
@@ -1160,6 +1175,7 @@ func TestConfig_Validate(t *testing.T) {
 			name: "invalid TMDB config when enabled",
 			config: Config{
 				Server:      validServerConfig,
+				Job:         validJobConfig,
 				Media:       validMediaConfig,
 				Transcoding: validTranscodingConfig,
 				Database:    validDatabaseConfig,
