@@ -49,10 +49,11 @@ func (repo *JobRepository) ClaimNextJobDue(ctx context.Context, workerID string)
 	`
 	row := repo.db.QueryRowContext(ctx, command, workerID)
 	var job domain.Job
+	var payloadStr string // Scan as string first due to SQLite TEXT type
 	err := row.Scan(
 		&job.ID,
 		&job.Type,
-		&job.Payload,
+		&payloadStr, // Scan payload as string
 		&job.Status,
 		&job.Priority,
 		&job.RunAt,
@@ -73,6 +74,8 @@ func (repo *JobRepository) ClaimNextJobDue(ctx context.Context, workerID string)
 		logger.Error().Err(err).Msg("sql error claiming next job")
 		return nil, false, err
 	}
+	// Convert string to json.RawMessage
+	job.Payload = []byte(payloadStr)
 	return &job, true, nil
 }
 

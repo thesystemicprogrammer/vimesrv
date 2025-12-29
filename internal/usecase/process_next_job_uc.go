@@ -3,7 +3,6 @@ package usecase
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/logger"
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/ports"
@@ -53,7 +52,7 @@ func (uc *ProcessNextJobUseCase) Execute(ctx context.Context, workerID string) (
 
 	start := uc.clock.Now()
 	err = handler(ctx, job)
-	duration := time.Since(start)
+	duration := uc.clock.Now().Sub(start) // Use clock for end time to support MockClock
 
 	if err == nil {
 		_ = uc.jobRepository.MarkSuccess(ctx, job.ID)
