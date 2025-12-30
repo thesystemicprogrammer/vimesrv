@@ -39,32 +39,38 @@ DROP TABLE IF EXISTS schema_migrations;
 	},
 	{
 		version: 2,
-		name:    "create_media_table",
+		name:    "create_media_files_table",
 		up: `
-CREATE TABLE IF NOT EXISTS media (
+CREATE TABLE IF NOT EXISTS media_files (
     id TEXT PRIMARY KEY,
+    fingerprint TEXT NOT NULL UNIQUE,
     file_path TEXT NOT NULL UNIQUE,
+    original_filename TEXT NOT NULL,
     filename TEXT NOT NULL,
     title TEXT,
     duration INTEGER DEFAULT 0,
     file_size INTEGER DEFAULT 0,
     format TEXT,
     video_codec TEXT,
-    audio_codec TEXT,
+    audio_codecs TEXT,
     resolution TEXT,
     width INTEGER DEFAULT 0,
     height INTEGER DEFAULT 0,
     bitrate INTEGER DEFAULT 0,
     audio_tracks INTEGER DEFAULT 0,
     subtitle_tracks INTEGER DEFAULT 0,
+    subtitle_languages TEXT,
+    status TEXT CHECK(status IN ('processing','ready','error')) DEFAULT 'ready',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     scanned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_media_filename ON media(filename);
-CREATE INDEX IF NOT EXISTS idx_media_file_path ON media(file_path);
-CREATE INDEX IF NOT EXISTS idx_media_created_at ON media(created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_media_files_fingerprint ON media_files(fingerprint);
+CREATE INDEX IF NOT EXISTS idx_media_files_filename ON media_files(filename);
+CREATE INDEX IF NOT EXISTS idx_media_files_file_path ON media_files(file_path);
+CREATE INDEX IF NOT EXISTS idx_media_files_created_at ON media_files(created_at);
+CREATE INDEX IF NOT EXISTS idx_media_files_status ON media_files(status);
 
 CREATE TABLE IF NOT EXISTS jobs (
 	id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -105,10 +111,12 @@ CREATE TABLE IF NOT EXISTS schedules (
 CREATE INDEX IF NOT EXISTS idx_sched_enabled_next ON schedules(enabled, next_run_at);
 `,
 		down: `
-DROP INDEX IF EXISTS idx_media_created_at;
-DROP INDEX IF EXISTS idx_media_file_path;
-DROP INDEX IF EXISTS idx_media_filename;
-DROP TABLE IF EXISTS media;
+DROP INDEX IF EXISTS idx_media_files_status;
+DROP INDEX IF EXISTS idx_media_files_created_at;
+DROP INDEX IF EXISTS idx_media_files_file_path;
+DROP INDEX IF EXISTS idx_media_files_filename;
+DROP INDEX IF EXISTS idx_media_files_fingerprint;
+DROP TABLE IF EXISTS media_files;
 `,
 	},
 }

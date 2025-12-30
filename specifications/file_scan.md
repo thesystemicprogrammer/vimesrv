@@ -13,7 +13,7 @@ The idea is that new files can be put into a kind of a staging area (aka directo
 - If it is not valid video file, a warning is logged and the file is skipped
 - If is is a valid video file, a fingerprint is created. Use a clever algorithm to find a good balance between collision avoiding and speed
 - Check with the created fingerprint, if this exact video file already exist in the library
-- If it does not exists, create a new entry in the media file table, copy the file from the staging area to the library area (aka directory). Create a new subdirectory that uses the fingerpring as name. Then copy the media file into this subdirectory.
+- If it does not exists, create a new entry in the media file table, copy the file from the staging area to the library area (aka directory). Create a new subdirectory that uses the UUID as name. Then copy the media file into this subdirectory.
 - Afterwards, create a new entry in the media file table. Use the fingerprint as key. Put the file path in canonical form a field into the entity. Additionally, store relevant meta data as well.
 - Delete the file from the staging area
 - If there is no more content to scan, delete all empty subdirectories. Keep those, where still files are existing (those which were not video files or if the processing stopped with an error)

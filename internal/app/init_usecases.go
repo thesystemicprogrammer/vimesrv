@@ -23,6 +23,12 @@ func initUseCases(config *config.Config, adapters *Adapters) *UseCases {
 		RecoverStuckJobsUseCase: job.NewRecoverStuckJobsUseCase(config.Job, adapters.JobRepository, ports.RealClock{}),
 		SchedulerTickUseCase:    job.NewSchedulerTickUseCase(config.Job, adapters.ScheduleRepository, adapters.CronParser, ports.RealClock{}),
 		UpsertScheduleUseCase:   job.NewUpsertScheduleUseCase(config.Job, adapters.ScheduleRepository, adapters.CronParser, ports.RealClock{}),
-		ScanLibraryUseCase:      library.NewScanLibraryUseCase(config.Media, adapters.ScanLibraryRepository),
+		ScanLibraryUseCase: library.NewScanLibraryUseCase(
+			config.Media,
+			adapters.FileHasher,
+			adapters.FFProbeService,
+			adapters.FileSystemService,
+			adapters.MediaRepository,
+		),
 	}
 }

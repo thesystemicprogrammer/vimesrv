@@ -55,6 +55,12 @@ func (app *Application) initialize() error {
 	}()
 
 	adapters := initAdapters(app.config, app.db)
+
+	// Validate external dependencies are available
+	if err := validateExternalDependencies(adapters); err != nil {
+		return fmt.Errorf("external dependency validation failed: %w", err)
+	}
+
 	useCases := initUseCases(app.config, adapters)
 
 	app.httpServer = initializeHTTPServer(app.config.Server)
@@ -174,5 +180,20 @@ func validateJobHandlers(registry *job.HandlerRegistry) error {
 	}
 
 	logger.Debug().Int("count", len(requiredHandlers)).Msg("all required job handlers registered")
+	return nil
+}
+
+// validateExternalDependencies ensures all required external dependencies are available
+func validateExternalDependencies(adapters *Adapters) error {
+	logger.Info().Msg("validating external dependencies")
+
+	// Validate ffprobe is available
+	if err := adapters.FFProbeService.IsAvailable(); err != nil {
+		return fmt.Errorf("ffprobe validation failed: %w", err)
+	}
+	logger.Info().Msg("ffprobe is available")
+
+	// Add more external dependency checks here as needed
+
 	return nil
 }

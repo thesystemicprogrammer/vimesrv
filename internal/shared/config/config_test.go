@@ -159,22 +159,24 @@ func TestMediaConfig_Validate(t *testing.T) {
 		{
 			name: "valid config",
 			config: MediaConfig{
-				LibraryPath:      "/media/library",
-				MediaPath:        "/media/library/media",
-				StagingPath:      "/media/library/staging",
-				TrashPath:        "/media/trash",
-				SupportedFormats: []string{".mp4", ".mkv", ".avi"},
+				LibraryPath:           "/media/library",
+				MediaPath:             "/media/library/media",
+				StagingPath:           "/media/library/staging",
+				TrashPath:             "/media/trash",
+				SupportedFormats:      []string{".mp4", ".mkv", ".avi"},
+				FFProbeTimeoutSeconds: 30,
 			},
 			wantErr: false,
 		},
 		{
 			name: "valid config with many formats",
 			config: MediaConfig{
-				LibraryPath:      "/path/to/media",
-				MediaPath:        "/path/to/media/media",
-				StagingPath:      "/path/to/media/staging",
-				TrashPath:        "/path/to/trash",
-				SupportedFormats: []string{".mp4", ".mkv", ".avi", ".mov", ".webm", ".flv"},
+				LibraryPath:           "/path/to/media",
+				MediaPath:             "/path/to/media/media",
+				StagingPath:           "/path/to/media/staging",
+				TrashPath:             "/path/to/trash",
+				SupportedFormats:      []string{".mp4", ".mkv", ".avi", ".mov", ".webm", ".flv"},
+				FFProbeTimeoutSeconds: 30,
 			},
 			wantErr: false,
 		},
@@ -992,11 +994,12 @@ func TestConfig_Validate(t *testing.T) {
 	}
 
 	validMediaConfig := MediaConfig{
-		LibraryPath:      "/media/library",
-		MediaPath:        "/media/library/media",
-		StagingPath:      "/media/library/staging",
-		TrashPath:        "/media/trash",
-		SupportedFormats: []string{".mp4", ".mkv"},
+		LibraryPath:           "/media/library",
+		MediaPath:             "/media/library/media",
+		StagingPath:           "/media/library/staging",
+		TrashPath:             "/media/trash",
+		SupportedFormats:      []string{".mp4", ".mkv"},
+		FFProbeTimeoutSeconds: 30,
 	}
 
 	invalidMediaConfig := MediaConfig{

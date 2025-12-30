@@ -35,11 +35,12 @@ type ServerConfig struct {
 }
 
 type MediaConfig struct {
-	LibraryPath      string   `mapstructure:"library_path"`
-	MediaPath        string   `mapstructure:"media_path"`
-	StagingPath      string   `mapstructure:"staging_path"`
-	TrashPath        string   `mapstructure:"trash_path"`
-	SupportedFormats []string `mapstructure:"supported_formats"`
+	LibraryPath           string   `mapstructure:"library_path"`
+	MediaPath             string   `mapstructure:"media_path"`
+	StagingPath           string   `mapstructure:"staging_path"`
+	TrashPath             string   `mapstructure:"trash_path"`
+	SupportedFormats      []string `mapstructure:"supported_formats"`
+	FFProbeTimeoutSeconds int      `mapstructure:"ffprobe_timeout_seconds"`
 }
 
 type TranscodingConfig struct {
@@ -196,6 +197,10 @@ func (m *MediaConfig) Validate() error {
 		if !strings.HasPrefix(format, ".") {
 			return fmt.Errorf("format must start with a dot, got: %s", format)
 		}
+	}
+
+	if m.FFProbeTimeoutSeconds < 1 || m.FFProbeTimeoutSeconds > 300 {
+		return fmt.Errorf("ffprobe_timeout_seconds must be between 1 and 300, got %d", m.FFProbeTimeoutSeconds)
 	}
 
 	return nil

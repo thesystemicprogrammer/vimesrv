@@ -1,143 +1,455 @@
 package library
 
 import (
+	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/thesystemicprogrammer/vimesrv/internal/domain"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/config"
+	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/ports"
 )
 
-// MockScanLibraryRepository is a mock implementation of ports.ScanLibraryRepository
-type MockScanLibraryRepository struct {
+// Mock implementations
+type MockFileHasher struct {
 	mock.Mock
 }
 
-func (m *MockScanLibraryRepository) Scan(libraryPath string) error {
-	args := m.Called(libraryPath)
+func (m *MockFileHasher) HashFile(filePath string) (string, error) {
+	args := m.Called(filePath)
+	return args.String(0), args.Error(1)
+}
+
+type MockFFProbeService struct {
+	mock.Mock
+}
+
+func (m *MockFFProbeService) IsAvailable() error {
+	args := m.Called()
 	return args.Error(0)
 }
 
-// TestScanLibraryUseCase_Execute_Success tests successful library scan
-func TestScanLibraryUseCase_Execute_Success(t *testing.T) {
-	mockRepo := new(MockScanLibraryRepository)
-
-	cfg := config.MediaConfig{
-		LibraryPath:      "/media/library",
-		TrashPath:        "/media/trash",
-		SupportedFormats: []string{".mp4", ".mkv", ".avi"},
-	}
-
-	mockRepo.On("Scan", "/media/library").Return(nil)
-
-	uc := NewScanLibraryUseCase(cfg, mockRepo)
-
-	err := uc.Execute()
-
-	require.NoError(t, err)
-	mockRepo.AssertExpectations(t)
+func (m *MockFFProbeService) ValidateVideo(filePath string) (bool, error) {
+	args := m.Called(filePath)
+	return args.Bool(0), args.Error(1)
 }
 
-// TestScanLibraryUseCase_Execute_ScanError tests error during scan
-func TestScanLibraryUseCase_Execute_ScanError(t *testing.T) {
-	mockRepo := new(MockScanLibraryRepository)
-
-	cfg := config.MediaConfig{
-		LibraryPath: "/media/library",
+func (m *MockFFProbeService) ExtractMetadata(filePath string) (*ports.VideoMetadata, error) {
+	args := m.Called(filePath)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
 	}
+	return args.Get(0).(*ports.VideoMetadata), args.Error(1)
+}
 
-	expectedErr := errors.New("scan failed: directory not found")
-	mockRepo.On("Scan", "/media/library").Return(expectedErr)
+type MockFileSystemService struct {
+	mock.Mock
+}
 
-	uc := NewScanLibraryUseCase(cfg, mockRepo)
+func (m *MockFileSystemService) WalkDir(root string, walkFn filepath.WalkFunc) error {
+	args := m.Called(root, walkFn)
+	return args.Error(0)
+}
 
-	err := uc.Execute()
+func (m *MockFileSystemService) CopyFile(src, dst string) error {
+	args := m.Called(src, dst)
+	return args.Error(0)
+}
+
+func (m *MockFileSystemService) DeleteFile(path string) error {
+	args := m.Called(path)
+	return args.Error(0)
+}
+
+func (m *MockFileSystemService) CreateDir(path string) error {
+	args := m.Called(path)
+	return args.Error(0)
+}
+
+func (m *MockFileSystemService) RemoveEmptyDirs(root string) error {
+	args := m.Called(root)
+	return args.Error(0)
+}
+
+func (m *MockFileSystemService) FileExists(path string) bool {
+	args := m.Called(path)
+	return args.Bool(0)
+}
+
+func (m *MockFileSystemService) GetFileSize(path string) (int64, error) {
+	args := m.Called(path)
+	return args.Get(0).(int64), args.Error(1)
+}
+
+type MockMediaRepository struct {
+	mock.Mock
+}
+
+func (m *MockMediaRepository) Create(ctx context.Context, media *domain.MediaFile) error {
+	args := m.Called(ctx, media)
+	return args.Error(0)
+}
+
+func (m *MockMediaRepository) FindByFingerprint(ctx context.Context, fingerprint string) (*domain.MediaFile, error) {
+	args := m.Called(ctx, fingerprint)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.MediaFile), args.Error(1)
+}
+
+func (m *MockMediaRepository) ExistsByFingerprint(ctx context.Context, fingerprint string) (bool, error) {
+	args := m.Called(ctx, fingerprint)
+	return args.Bool(0), args.Error(1)
+}
+
+func (m *MockMediaRepository) Update(ctx context.Context, media *domain.MediaFile) error {
+	args := m.Called(ctx, media)
+	return args.Error(0)
+}
+
+// Helper to create test config
+func testConfig() config.MediaConfig {
+	return config.MediaConfig{
+		LibraryPath:           "/library",
+		MediaPath:             "/library/media",
+		StagingPath:           "/library/staging",
+		TrashPath:             "/library/trash",
+		SupportedFormats:      []string{".mp4", ".mkv", ".avi"},
+		FFProbeTimeoutSeconds: 30,
+	}
+}
+
+// TestScanLibraryUseCase_Execute_StagingPathNotExists tests when staging path doesn't exist
+func TestScanLibraryUseCase_Execute_StagingPathNotExists(t *testing.T) {
+	mockHasher := new(MockFileHasher)
+	mockFFProbe := new(MockFFProbeService)
+	mockFS := new(MockFileSystemService)
+	mockRepo := new(MockMediaRepository)
+
+	cfg := testConfig()
+
+	mockFS.On("FileExists", cfg.StagingPath).Return(false)
+
+	uc := NewScanLibraryUseCase(cfg, mockHasher, mockFFProbe, mockFS, mockRepo)
+
+	err := uc.Execute(context.Background())
 
 	require.Error(t, err)
-	assert.Equal(t, expectedErr, err)
-	mockRepo.AssertExpectations(t)
+	assert.Contains(t, err.Error(), "staging path does not exist")
+	mockFS.AssertExpectations(t)
 }
 
-// TestScanLibraryUseCase_Execute_EmptyLibraryPath tests scan with empty path
-func TestScanLibraryUseCase_Execute_EmptyLibraryPath(t *testing.T) {
-	mockRepo := new(MockScanLibraryRepository)
+// TestScanLibraryUseCase_Execute_EmptyDirectory tests scanning empty directory
+func TestScanLibraryUseCase_Execute_EmptyDirectory(t *testing.T) {
+	mockHasher := new(MockFileHasher)
+	mockFFProbe := new(MockFFProbeService)
+	mockFS := new(MockFileSystemService)
+	mockRepo := new(MockMediaRepository)
 
-	cfg := config.MediaConfig{
-		LibraryPath: "",
-	}
+	cfg := testConfig()
 
-	mockRepo.On("Scan", "").Return(nil)
+	mockFS.On("FileExists", cfg.StagingPath).Return(true)
+	mockFS.On("WalkDir", cfg.StagingPath, mock.Anything).Return(nil)
+	mockFS.On("RemoveEmptyDirs", cfg.StagingPath).Return(nil)
 
-	uc := NewScanLibraryUseCase(cfg, mockRepo)
+	uc := NewScanLibraryUseCase(cfg, mockHasher, mockFFProbe, mockFS, mockRepo)
 
-	err := uc.Execute()
+	err := uc.Execute(context.Background())
 
 	require.NoError(t, err)
+	mockFS.AssertExpectations(t)
+}
+
+// TestScanLibraryUseCase_Execute_UnsupportedFormat tests skipping unsupported file formats
+func TestScanLibraryUseCase_Execute_UnsupportedFormat(t *testing.T) {
+	mockHasher := new(MockFileHasher)
+	mockFFProbe := new(MockFFProbeService)
+	mockFS := new(MockFileSystemService)
+	mockRepo := new(MockMediaRepository)
+
+	cfg := testConfig()
+	ctx := context.Background()
+
+	mockFS.On("FileExists", cfg.StagingPath).Return(true)
+
+	// Simulate WalkDir finding an unsupported file
+	mockFS.On("WalkDir", cfg.StagingPath, mock.Anything).Run(func(args mock.Arguments) {
+		walkFn := args.Get(1).(filepath.WalkFunc)
+		// Call with .txt file (unsupported)
+		walkFn("/library/staging/document.txt", &mockFileInfo{name: "document.txt", isDir: false}, nil)
+	}).Return(nil)
+
+	mockFS.On("RemoveEmptyDirs", cfg.StagingPath).Return(nil)
+
+	uc := NewScanLibraryUseCase(cfg, mockHasher, mockFFProbe, mockFS, mockRepo)
+
+	err := uc.Execute(ctx)
+
+	require.NoError(t, err)
+	mockFS.AssertExpectations(t)
+	// Should not call ffprobe, hash, or repo for unsupported format
+	mockFFProbe.AssertNotCalled(t, "ValidateVideo")
+	mockHasher.AssertNotCalled(t, "HashFile")
+}
+
+// TestScanLibraryUseCase_Execute_InvalidVideo tests handling invalid video file
+func TestScanLibraryUseCase_Execute_InvalidVideo(t *testing.T) {
+	mockHasher := new(MockFileHasher)
+	mockFFProbe := new(MockFFProbeService)
+	mockFS := new(MockFileSystemService)
+	mockRepo := new(MockMediaRepository)
+
+	cfg := testConfig()
+	ctx := context.Background()
+	filePath := "/library/staging/corrupted.mp4"
+
+	mockFS.On("FileExists", cfg.StagingPath).Return(true)
+
+	mockFS.On("WalkDir", cfg.StagingPath, mock.Anything).Run(func(args mock.Arguments) {
+		walkFn := args.Get(1).(filepath.WalkFunc)
+		walkFn(filePath, &mockFileInfo{name: "corrupted.mp4", isDir: false}, nil)
+	}).Return(nil)
+
+	mockFFProbe.On("ValidateVideo", filePath).Return(false, nil)
+	mockFS.On("DeleteFile", filePath).Return(nil)
+	mockFS.On("RemoveEmptyDirs", cfg.StagingPath).Return(nil)
+
+	uc := NewScanLibraryUseCase(cfg, mockHasher, mockFFProbe, mockFS, mockRepo)
+
+	err := uc.Execute(ctx)
+
+	require.NoError(t, err)
+	mockFFProbe.AssertExpectations(t)
+	mockFS.AssertExpectations(t)
+	// Should not proceed to hashing
+	mockHasher.AssertNotCalled(t, "HashFile")
+}
+
+// TestScanLibraryUseCase_Execute_DuplicateFile tests duplicate detection
+func TestScanLibraryUseCase_Execute_DuplicateFile(t *testing.T) {
+	mockHasher := new(MockFileHasher)
+	mockFFProbe := new(MockFFProbeService)
+	mockFS := new(MockFileSystemService)
+	mockRepo := new(MockMediaRepository)
+
+	cfg := testConfig()
+	ctx := context.Background()
+	filePath := "/library/staging/video.mp4"
+	fingerprint := "abc123def456"
+
+	mockFS.On("FileExists", cfg.StagingPath).Return(true)
+
+	mockFS.On("WalkDir", cfg.StagingPath, mock.Anything).Run(func(args mock.Arguments) {
+		walkFn := args.Get(1).(filepath.WalkFunc)
+		walkFn(filePath, &mockFileInfo{name: "video.mp4", isDir: false}, nil)
+	}).Return(nil)
+
+	mockFFProbe.On("ValidateVideo", filePath).Return(true, nil)
+	mockHasher.On("HashFile", filePath).Return(fingerprint, nil)
+	mockRepo.On("ExistsByFingerprint", ctx, fingerprint).Return(true, nil)
+	mockFS.On("DeleteFile", filePath).Return(nil)
+	mockFS.On("RemoveEmptyDirs", cfg.StagingPath).Return(nil)
+
+	uc := NewScanLibraryUseCase(cfg, mockHasher, mockFFProbe, mockFS, mockRepo)
+
+	err := uc.Execute(ctx)
+
+	require.NoError(t, err)
+	mockFFProbe.AssertExpectations(t)
+	mockHasher.AssertExpectations(t)
 	mockRepo.AssertExpectations(t)
+	mockFS.AssertExpectations(t)
+	// Should not call ExtractMetadata or Create for duplicate
+	mockFFProbe.AssertNotCalled(t, "ExtractMetadata")
+	mockRepo.AssertNotCalled(t, "Create")
 }
 
-// TestScanLibraryUseCase_Execute_DifferentPaths tests that correct path is used
-func TestScanLibraryUseCase_Execute_DifferentPaths(t *testing.T) {
-	testCases := []struct {
-		name        string
-		libraryPath string
-	}{
-		{
-			name:        "Unix absolute path",
-			libraryPath: "/home/user/videos",
-		},
-		{
-			name:        "Windows path",
-			libraryPath: "C:\\Videos\\Library",
-		},
-		{
-			name:        "Relative path",
-			libraryPath: "./media/library",
-		},
-		{
-			name:        "Path with spaces",
-			libraryPath: "/media/my library/videos",
-		},
+// TestScanLibraryUseCase_Execute_SuccessfulImport tests successful file import
+func TestScanLibraryUseCase_Execute_SuccessfulImport(t *testing.T) {
+	mockHasher := new(MockFileHasher)
+	mockFFProbe := new(MockFFProbeService)
+	mockFS := new(MockFileSystemService)
+	mockRepo := new(MockMediaRepository)
+
+	cfg := testConfig()
+	ctx := context.Background()
+	filePath := "/library/staging/video.mp4"
+	fingerprint := "abc123def456"
+
+	metadata := &ports.VideoMetadata{
+		Duration:          120,
+		FileSize:          1024000,
+		Format:            "mp4",
+		VideoCodec:        "h264",
+		AudioCodecs:       []string{"aac"},
+		Resolution:        "1920x1080",
+		Width:             1920,
+		Height:            1080,
+		Bitrate:           5000000,
+		AudioTracks:       1,
+		SubtitleTracks:    0,
+		SubtitleLanguages: []string{},
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			mockRepo := new(MockScanLibraryRepository)
+	mockFS.On("FileExists", cfg.StagingPath).Return(true)
 
-			cfg := config.MediaConfig{
-				LibraryPath: tc.libraryPath,
-			}
+	mockFS.On("WalkDir", cfg.StagingPath, mock.Anything).Run(func(args mock.Arguments) {
+		walkFn := args.Get(1).(filepath.WalkFunc)
+		walkFn(filePath, &mockFileInfo{name: "video.mp4", isDir: false}, nil)
+	}).Return(nil)
 
-			mockRepo.On("Scan", tc.libraryPath).Return(nil)
+	mockFFProbe.On("ValidateVideo", filePath).Return(true, nil)
+	mockHasher.On("HashFile", filePath).Return(fingerprint, nil)
+	mockRepo.On("ExistsByFingerprint", ctx, fingerprint).Return(false, nil)
+	mockFFProbe.On("ExtractMetadata", filePath).Return(metadata, nil)
 
-			uc := NewScanLibraryUseCase(cfg, mockRepo)
+	// Expect CreateDir with UUID-based path (any valid UUID pattern)
+	mockFS.On("CreateDir", mock.MatchedBy(func(path string) bool {
+		// Path should be /library/media/{uuid}
+		return filepath.Dir(path) == cfg.MediaPath && len(filepath.Base(path)) == 36
+	})).Return(nil)
 
-			err := uc.Execute()
+	// Expect CopyFile with UUID-based path
+	mockFS.On("CopyFile", filePath, mock.MatchedBy(func(path string) bool {
+		// Path should be /library/media/{uuid}/video.mp4
+		return filepath.Base(path) == "video.mp4" &&
+			filepath.Dir(filepath.Dir(path)) == cfg.MediaPath &&
+			len(filepath.Base(filepath.Dir(path))) == 36
+	})).Return(nil)
 
-			require.NoError(t, err)
-			mockRepo.AssertExpectations(t)
-		})
-	}
+	mockRepo.On("Create", ctx, mock.MatchedBy(func(m *domain.MediaFile) bool {
+		return m.Fingerprint == fingerprint &&
+			m.OriginalFilename == "video.mp4" &&
+			m.Duration == 120 &&
+			m.FileSize == 1024000 &&
+			len(m.ID) == 36 // UUID length
+	})).Return(nil)
+	mockFS.On("DeleteFile", filePath).Return(nil)
+	mockFS.On("RemoveEmptyDirs", cfg.StagingPath).Return(nil)
+
+	uc := NewScanLibraryUseCase(cfg, mockHasher, mockFFProbe, mockFS, mockRepo)
+
+	err := uc.Execute(ctx)
+
+	require.NoError(t, err)
+	mockFFProbe.AssertExpectations(t)
+	mockHasher.AssertExpectations(t)
+	mockRepo.AssertExpectations(t)
+	mockFS.AssertExpectations(t)
 }
 
-// TestScanLibraryUseCase_Execute_PermissionError tests permission denied error
-func TestScanLibraryUseCase_Execute_PermissionError(t *testing.T) {
-	mockRepo := new(MockScanLibraryRepository)
+// TestScanLibraryUseCase_Execute_DatabaseError_Rollback tests rollback on DB error
+func TestScanLibraryUseCase_Execute_DatabaseError_Rollback(t *testing.T) {
+	mockHasher := new(MockFileHasher)
+	mockFFProbe := new(MockFFProbeService)
+	mockFS := new(MockFileSystemService)
+	mockRepo := new(MockMediaRepository)
 
-	cfg := config.MediaConfig{
-		LibraryPath: "/root/restricted",
+	cfg := testConfig()
+	ctx := context.Background()
+	filePath := "/library/staging/video.mp4"
+	fingerprint := "abc123def456"
+
+	metadata := &ports.VideoMetadata{
+		Duration:   120,
+		FileSize:   1024000,
+		Format:     "mp4",
+		VideoCodec: "h264",
 	}
 
-	expectedErr := errors.New("permission denied")
-	mockRepo.On("Scan", "/root/restricted").Return(expectedErr)
+	mockFS.On("FileExists", cfg.StagingPath).Return(true)
 
-	uc := NewScanLibraryUseCase(cfg, mockRepo)
+	mockFS.On("WalkDir", cfg.StagingPath, mock.Anything).Run(func(args mock.Arguments) {
+		walkFn := args.Get(1).(filepath.WalkFunc)
+		walkFn(filePath, &mockFileInfo{name: "video.mp4", isDir: false}, nil)
+	}).Return(nil)
 
-	err := uc.Execute()
+	mockFFProbe.On("ValidateVideo", filePath).Return(true, nil)
+	mockHasher.On("HashFile", filePath).Return(fingerprint, nil)
+	mockRepo.On("ExistsByFingerprint", ctx, fingerprint).Return(false, nil)
+	mockFFProbe.On("ExtractMetadata", filePath).Return(metadata, nil)
+
+	// Expect CreateDir with UUID-based path
+	mockFS.On("CreateDir", mock.MatchedBy(func(path string) bool {
+		return filepath.Dir(path) == cfg.MediaPath && len(filepath.Base(path)) == 36
+	})).Return(nil)
+
+	// Expect CopyFile with UUID-based path
+	mockFS.On("CopyFile", filePath, mock.MatchedBy(func(path string) bool {
+		return filepath.Base(path) == "video.mp4" &&
+			filepath.Dir(filepath.Dir(path)) == cfg.MediaPath &&
+			len(filepath.Base(filepath.Dir(path))) == 36
+	})).Return(nil)
+
+	// Database insert fails
+	dbError := errors.New("database connection failed")
+	mockRepo.On("Create", ctx, mock.AnythingOfType("*domain.MediaFile")).Return(dbError)
+
+	// Should rollback by deleting copied file (with UUID-based path)
+	mockFS.On("DeleteFile", mock.MatchedBy(func(path string) bool {
+		return filepath.Base(path) == "video.mp4" &&
+			filepath.Dir(filepath.Dir(path)) == cfg.MediaPath &&
+			len(filepath.Base(filepath.Dir(path))) == 36
+	})).Return(nil)
+	mockFS.On("RemoveEmptyDirs", cfg.StagingPath).Return(nil)
+
+	uc := NewScanLibraryUseCase(cfg, mockHasher, mockFFProbe, mockFS, mockRepo)
+
+	err := uc.Execute(ctx)
+
+	require.NoError(t, err) // Execute itself doesn't fail, but file processing does
+	mockRepo.AssertExpectations(t)
+	mockFS.AssertExpectations(t)
+	// Verify rollback was called
+	mockFS.AssertCalled(t, "DeleteFile", mock.MatchedBy(func(path string) bool {
+		return filepath.Base(path) == "video.mp4"
+	}))
+}
+
+// TestScanLibraryUseCase_Execute_ContextCanceled tests context cancellation
+func TestScanLibraryUseCase_Execute_ContextCanceled(t *testing.T) {
+	mockHasher := new(MockFileHasher)
+	mockFFProbe := new(MockFFProbeService)
+	mockFS := new(MockFileSystemService)
+	mockRepo := new(MockMediaRepository)
+
+	cfg := testConfig()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	mockFS.On("FileExists", cfg.StagingPath).Return(true)
+
+	mockFS.On("WalkDir", cfg.StagingPath, mock.Anything).Run(func(args mock.Arguments) {
+		walkFn := args.Get(1).(filepath.WalkFunc)
+		// Simulate finding a file, but context is canceled
+		walkFn("/library/staging/video.mp4", &mockFileInfo{name: "video.mp4", isDir: false}, nil)
+	}).Return(context.Canceled)
+
+	uc := NewScanLibraryUseCase(cfg, mockHasher, mockFFProbe, mockFS, mockRepo)
+
+	err := uc.Execute(ctx)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "permission denied")
-	mockRepo.AssertExpectations(t)
+	assert.Contains(t, err.Error(), "context canceled")
+	mockFS.AssertExpectations(t)
 }
+
+// mockFileInfo implements os.FileInfo for testing
+type mockFileInfo struct {
+	name  string
+	isDir bool
+}
+
+func (m *mockFileInfo) Name() string       { return m.name }
+func (m *mockFileInfo) Size() int64        { return 1024 }
+func (m *mockFileInfo) Mode() os.FileMode  { return 0644 }
+func (m *mockFileInfo) ModTime() time.Time { return time.Time{} }
+func (m *mockFileInfo) IsDir() bool        { return m.isDir }
+func (m *mockFileInfo) Sys() interface{}   { return nil }

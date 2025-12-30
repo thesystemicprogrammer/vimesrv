@@ -44,7 +44,7 @@ if [ "$CLEAN_MODE" = true ]; then
     # Create directory structure
     echo "Creating directory structure..."
     mkdir -p "$BIN_DIR/configs"
-    mkdir -p "$BIN_DIR/media"
+    mkdir -p "$BIN_DIR/library/staging"
     mkdir -p "$BIN_DIR/data"
     
     # Copy config
@@ -54,7 +54,7 @@ if [ "$CLEAN_MODE" = true ]; then
     # Copy all .mkv files from Downloads if any exist
     echo "Copying .mkv files from Downloads..."
     if ls "$DOWNLOADS_DIR"/*.mkv 1> /dev/null 2>&1; then
-        cp "$DOWNLOADS_DIR"/*.mkv "$BIN_DIR/media/"
+        cp "$DOWNLOADS_DIR"/*.mkv "$BIN_DIR/library/staging/"
         echo "Copied $(ls "$DOWNLOADS_DIR"/*.mkv 2>/dev/null | wc -l) .mkv file(s)"
     else
         echo "No .mkv files found in $DOWNLOADS_DIR"

@@ -49,9 +49,9 @@ func TestMigrate_FreshDatabase(t *testing.T) {
 
 	// Verify media table was created
 	var tableName string
-	err = db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='media'").Scan(&tableName)
+	err = db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='media_files'").Scan(&tableName)
 	require.NoError(t, err)
-	assert.Equal(t, "media", tableName)
+	assert.Equal(t, "media_files", tableName)
 }
 
 func TestMigrate_WithInitialSchemaTable(t *testing.T) {
@@ -82,9 +82,9 @@ func TestMigrate_WithInitialSchemaTable(t *testing.T) {
 
 	// Verify media table was created
 	var tableName string
-	err = db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='media'").Scan(&tableName)
+	err = db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='media_files'").Scan(&tableName)
 	require.NoError(t, err)
-	assert.Equal(t, "media", tableName)
+	assert.Equal(t, "media_files", tableName)
 
 	// Verify correct versions were recorded
 	var maxVersion int
@@ -116,7 +116,7 @@ func TestMigrate_WithInitialSchemaTable(t *testing.T) {
 	assert.Equal(t, 1, migrations[0].version)
 	assert.Equal(t, "create_schema_migrations_table", migrations[0].name)
 	assert.Equal(t, 2, migrations[1].version)
-	assert.Equal(t, "create_media_table", migrations[1].name)
+	assert.Equal(t, "create_media_files_table", migrations[1].name)
 }
 
 func TestMigrate_Idempotency(t *testing.T) {
@@ -179,9 +179,9 @@ func TestMigrate_PartiallyMigrated(t *testing.T) {
 
 	// Verify media table was created
 	var tableName string
-	err = db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='media'").Scan(&tableName)
+	err = db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='media_files'").Scan(&tableName)
 	require.NoError(t, err)
-	assert.Equal(t, "media", tableName)
+	assert.Equal(t, "media_files", tableName)
 }
 
 func TestMigrate_AlreadyUpToDate(t *testing.T) {

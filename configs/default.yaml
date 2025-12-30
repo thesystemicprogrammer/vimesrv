@@ -19,6 +19,7 @@ media:
   media_path: "./media"
   staging_path: "./staging"
   trash_path: "/trash" # subdirectory under the library_path
+  ffprobe_timeout_seconds: 30
   supported_formats:
     - ".mp4"
     - ".mkv"

@@ -12,7 +12,7 @@ import (
 // This handler is registered with the job manager to process "scan_library" job types.
 func NewScanLibraryJobHandler(useCase *library.ScanLibraryUseCase) ports.JobHandler {
 	return func(ctx context.Context, job *domain.Job) error {
-		// No payload needed - the use case uses config.Media.LibraryPath
-		return useCase.Execute()
+		// No payload needed - the use case uses config.Media.StagingPath
+		return useCase.Execute(ctx)
 	}
 }

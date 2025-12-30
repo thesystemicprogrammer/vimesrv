@@ -80,6 +80,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("media.media_path", "./media")
 	v.SetDefault("media.staging_path", "./staging")
 	v.SetDefault("media.trash_path", "./trash")
+	v.SetDefault("media.ffprobe_timeout_seconds", 30)
 	v.SetDefault("media.supported_formats", []string{
 		".mp4", ".mkv", ".avi", ".mov", ".webm", ".flv", ".wmv", ".m4v",
 	})
@@ -179,6 +180,7 @@ func bindEnvVars(v *viper.Viper) {
 	// Media
 	v.BindEnv("media.library_path", "MEDIA_LIBRARY_PATH")
 	v.BindEnv("media.trash_path", "MEDIA_TRASH_PATH")
+	v.BindEnv("media.ffprobe_timeout_seconds", "MEDIA_FFPROBE_TIMEOUT_SECONDS")
 
 	// Transcoding
 	v.BindEnv("transcoding.segment_duration", "TRANSCODING_SEGMENT_DURATION")
