@@ -83,8 +83,8 @@ func setupTestJobManager(t *testing.T, cfg config.JobConfig, handlers map[string
 	db, sqlDB := setupTestDatabase(t)
 
 	// Create repositories
-	jobRepo := repository.NewJobRepository(*db)
-	scheduleRepo := repository.NewScheduleRepository(sqlDB)
+	jobRepo := repository.NewJobRepository(db)
+	scheduleRepo := repository.NewScheduleRepository(db)
 
 	// Create handler registry
 	handlerRegistry := NewHandlerRegistry()
@@ -93,7 +93,7 @@ func setupTestJobManager(t *testing.T, cfg config.JobConfig, handlers map[string
 	}
 
 	// Create components
-	backoffStrategy := NewExponentialBackoff(1*time.Second, 1*time.Minute)
+	backoffStrategy := NewExponentialBackoff(1, 60)
 	cronParser := NewRobfigCronParser()
 	clock := ports.RealClock{}
 
@@ -102,18 +102,20 @@ func setupTestJobManager(t *testing.T, cfg config.JobConfig, handlers map[string
 	processNextJobUC := usecasejob.NewProcessNextJobUseCase(jobRepo, handlerRegistry, backoffStrategy, clock)
 	schedulerTickUC := usecasejob.NewSchedulerTickUseCase(cfg, scheduleRepo, cronParser, clock)
 	upsertScheduleUC := usecasejob.NewUpsertScheduleUseCase(cfg, scheduleRepo, cronParser, clock)
+	recoverStuckJobsUC := usecasejob.NewRecoverStuckJobsUseCase(cfg, jobRepo, clock)
 
 	// Create JobManager
 	jobManager := NewJobManager(JobManagerInput{
-		Config:                cfg,
-		ProcessNextJobUseCase: *processNextJobUC,
-		SchedulerTickUseCase:  *schedulerTickUC,
-		JobRepository:         jobRepo,
-		ScheduleRepository:    scheduleRepo,
-		Handlers:              handlerRegistry,
-		BackoffStrategy:       backoffStrategy,
-		Cron:                  cronParser,
-		Clock:                 clock,
+		Config:                  cfg,
+		ProcessNextJobUseCase:   processNextJobUC,
+		SchedulerTickUseCase:    schedulerTickUC,
+		RecoverStuckJobsUseCase: recoverStuckJobsUC,
+		JobRepository:           jobRepo,
+		ScheduleRepository:      scheduleRepo,
+		Handlers:                handlerRegistry,
+		BackoffStrategy:         backoffStrategy,
+		Cron:                    cronParser,
+		Clock:                   clock,
 	})
 
 	deps := &JobManagerDependencies{
@@ -140,8 +142,8 @@ func setupTestJobManagerWithMockClock(t *testing.T, cfg config.JobConfig, handle
 	db, sqlDB := setupTestDatabase(t)
 
 	// Create repositories
-	jobRepo := repository.NewJobRepository(*db)
-	scheduleRepo := repository.NewScheduleRepository(sqlDB)
+	jobRepo := repository.NewJobRepository(db)
+	scheduleRepo := repository.NewScheduleRepository(db)
 
 	// Create handler registry
 	handlerRegistry := NewHandlerRegistry()
@@ -150,7 +152,7 @@ func setupTestJobManagerWithMockClock(t *testing.T, cfg config.JobConfig, handle
 	}
 
 	// Create components
-	backoffStrategy := NewExponentialBackoff(1*time.Second, 1*time.Minute)
+	backoffStrategy := NewExponentialBackoff(1, 60)
 	cronParser := NewRobfigCronParser()
 
 	// Create use cases with mock clock
@@ -158,18 +160,20 @@ func setupTestJobManagerWithMockClock(t *testing.T, cfg config.JobConfig, handle
 	processNextJobUC := usecasejob.NewProcessNextJobUseCase(jobRepo, handlerRegistry, backoffStrategy, mockClock)
 	schedulerTickUC := usecasejob.NewSchedulerTickUseCase(cfg, scheduleRepo, cronParser, mockClock)
 	upsertScheduleUC := usecasejob.NewUpsertScheduleUseCase(cfg, scheduleRepo, cronParser, mockClock)
+	recoverStuckJobsUC := usecasejob.NewRecoverStuckJobsUseCase(cfg, jobRepo, mockClock)
 
 	// Create JobManager
 	jobManager := NewJobManager(JobManagerInput{
-		Config:                cfg,
-		ProcessNextJobUseCase: *processNextJobUC,
-		SchedulerTickUseCase:  *schedulerTickUC,
-		JobRepository:         jobRepo,
-		ScheduleRepository:    scheduleRepo,
-		Handlers:              handlerRegistry,
-		BackoffStrategy:       backoffStrategy,
-		Cron:                  cronParser,
-		Clock:                 mockClock,
+		Config:                  cfg,
+		ProcessNextJobUseCase:   processNextJobUC,
+		SchedulerTickUseCase:    schedulerTickUC,
+		RecoverStuckJobsUseCase: recoverStuckJobsUC,
+		JobRepository:           jobRepo,
+		ScheduleRepository:      scheduleRepo,
+		Handlers:                handlerRegistry,
+		BackoffStrategy:         backoffStrategy,
+		Cron:                    cronParser,
+		Clock:                   mockClock,
 	})
 
 	deps := &JobManagerDependencies{
@@ -200,8 +204,8 @@ func setupTestJobManagerWithSecondCron(t *testing.T, cfg config.JobConfig, handl
 	db, sqlDB := setupTestDatabase(t)
 
 	// Create repositories
-	jobRepo := repository.NewJobRepository(*db)
-	scheduleRepo := repository.NewScheduleRepository(sqlDB)
+	jobRepo := repository.NewJobRepository(db)
+	scheduleRepo := repository.NewScheduleRepository(db)
 
 	// Create handler registry
 	handlerRegistry := NewHandlerRegistry()
@@ -210,7 +214,7 @@ func setupTestJobManagerWithSecondCron(t *testing.T, cfg config.JobConfig, handl
 	}
 
 	// Create components with second-based cron parser
-	backoffStrategy := NewExponentialBackoff(1*time.Second, 1*time.Minute)
+	backoffStrategy := NewExponentialBackoff(1, 60)
 	cronParser := NewSecondBasedCronParser() // Use second-based parser for fast tests
 	clock := ports.RealClock{}
 
@@ -219,18 +223,20 @@ func setupTestJobManagerWithSecondCron(t *testing.T, cfg config.JobConfig, handl
 	processNextJobUC := usecasejob.NewProcessNextJobUseCase(jobRepo, handlerRegistry, backoffStrategy, clock)
 	schedulerTickUC := usecasejob.NewSchedulerTickUseCase(cfg, scheduleRepo, cronParser, clock)
 	upsertScheduleUC := usecasejob.NewUpsertScheduleUseCase(cfg, scheduleRepo, cronParser, clock)
+	recoverStuckJobsUC := usecasejob.NewRecoverStuckJobsUseCase(cfg, jobRepo, clock)
 
 	// Create JobManager
 	jobManager := NewJobManager(JobManagerInput{
-		Config:                cfg,
-		ProcessNextJobUseCase: *processNextJobUC,
-		SchedulerTickUseCase:  *schedulerTickUC,
-		JobRepository:         jobRepo,
-		ScheduleRepository:    scheduleRepo,
-		Handlers:              handlerRegistry,
-		BackoffStrategy:       backoffStrategy,
-		Cron:                  cronParser,
-		Clock:                 clock,
+		Config:                  cfg,
+		ProcessNextJobUseCase:   processNextJobUC,
+		SchedulerTickUseCase:    schedulerTickUC,
+		RecoverStuckJobsUseCase: recoverStuckJobsUC,
+		JobRepository:           jobRepo,
+		ScheduleRepository:      scheduleRepo,
+		Handlers:                handlerRegistry,
+		BackoffStrategy:         backoffStrategy,
+		Cron:                    cronParser,
+		Clock:                   clock,
 	})
 
 	deps := &JobManagerDependencies{
@@ -259,13 +265,21 @@ func setupTestJobManagerWithSecondCron(t *testing.T, cfg config.JobConfig, handl
 // Note: SchedulerIntervalInSeconds is set to 10 hours (36000 seconds) to effectively
 // disable background scheduler ticks. Tests manually trigger SchedulerTickUseCase.Execute()
 // for deterministic scheduler behavior. Workers still poll every 1 second for jobs.
+//
+// Note: StuckJobCheckIntervalMinutes is set to 10 hours (600 minutes) to effectively
+// disable background stuck job recovery. Tests can manually trigger RecoverStuckJobsUseCase.Execute()
+// for deterministic stuck job recovery behavior.
 func testJobConfig() config.JobConfig {
 	return config.JobConfig{
-		WorkerCount:                2,
-		PollingIntervalInSeconds:   1,
-		MaxAttempts:                3,
-		SchedulerIntervalInSeconds: 36000, // 10 hours - effectively disabled for manual testing
-		SchedulerBatch:             10,
+		WorkerCount:                  2,
+		PollingIntervalInSeconds:     1,
+		MaxAttempts:                  3,
+		SchedulerIntervalInSeconds:   36000, // 10 hours - effectively disabled for manual testing
+		SchedulerBatch:               10,
+		BackoffBaseSeconds:           1,
+		BackoffMaxSeconds:            60,
+		StuckJobThresholdMinutes:     480, // 8 hours
+		StuckJobCheckIntervalMinutes: 600, // 10 hours - effectively disabled for manual testing
 	}
 }
 
@@ -551,7 +565,8 @@ func insertJobDirectly(t *testing.T, db *sql.DB, job *domain.Job) int64 {
 		INSERT INTO jobs (type, payload, status, priority, run_at, attempt, max_attempts, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 	`
-	result, err := db.Exec(query, job.Type, string(job.Payload), job.Status, job.Priority, job.RunAt, job.Attempts, job.MaxAttempts)
+	// IMPORTANT: Convert RunAt to UTC to match behavior of JobRepository.Enqueue
+	result, err := db.Exec(query, job.Type, string(job.Payload), job.Status, job.Priority, job.RunAt.UTC(), job.Attempts, job.MaxAttempts)
 	require.NoError(t, err, "failed to insert job")
 
 	id, err := result.LastInsertId()

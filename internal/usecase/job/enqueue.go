@@ -28,25 +28,23 @@ type EnqueueJobUseCase struct {
 }
 
 func NewEnqueueJobUseCase(config config.JobConfig, jobRepository ports.JobRepository, clock ports.Clock) *EnqueueJobUseCase {
-	enqueueJobUseCase := &EnqueueJobUseCase{
+	return &EnqueueJobUseCase{
 		config:        config,
 		jobRepository: jobRepository,
 		clock:         clock,
 	}
-
-	return enqueueJobUseCase
 }
 
-func (uc *EnqueueJobUseCase) Execute(ctx context.Context, jobInput EnqueueJobInput) error {
+func (uc *EnqueueJobUseCase) Execute(ctx context.Context, jobInput EnqueueJobInput) (int64, error) {
 	if jobInput.Type == "" {
-		return fmt.Errorf("job type must not be empty")
+		return 0, fmt.Errorf("job type must not be empty")
 	}
 
 	var payload json.RawMessage
 	if jobInput.Payload != nil {
 		b, err := json.Marshal(jobInput.Payload)
 		if err != nil {
-			return fmt.Errorf("cannot marshalling json payload: %w", err)
+			return 0, fmt.Errorf("cannot marshalling json payload: %w", err)
 		}
 		payload = b
 	}
@@ -56,6 +54,11 @@ func (uc *EnqueueJobUseCase) Execute(ctx context.Context, jobInput EnqueueJobInp
 		runAt = uc.clock.Now()
 	}
 
+	maxAttempts := uc.config.MaxAttempts
+	if jobInput.MaxAttempts > 0 {
+		maxAttempts = jobInput.MaxAttempts
+	}
+
 	job := &domain.Job{
 		Type:        jobInput.Type,
 		Payload:     payload,
@@ -63,13 +66,14 @@ func (uc *EnqueueJobUseCase) Execute(ctx context.Context, jobInput EnqueueJobInp
 		Priority:    jobInput.Priority,
 		RunAt:       runAt,
 		Attempts:    0,
-		MaxAttempts: uc.config.MaxAttempts,
+		MaxAttempts: maxAttempts,
 	}
 
-	_, err := uc.jobRepository.Enqueue(ctx, job)
+	jobID, err := uc.jobRepository.Enqueue(ctx, job)
 	if err != nil {
 		logger.Error().Err(err).Msg("error enqueuing job")
+		return 0, err
 	}
 
-	return err
+	return jobID, nil
 }

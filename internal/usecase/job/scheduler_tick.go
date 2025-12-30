@@ -19,14 +19,12 @@ type SchedulerTickUseCase struct {
 }
 
 func NewSchedulerTickUseCase(config config.JobConfig, scheduleRepository ports.ScheduleRepository, cronParser ports.CronParser, clock ports.Clock) *SchedulerTickUseCase {
-	schedulerTickUseCase := &SchedulerTickUseCase{
+	return &SchedulerTickUseCase{
 		config:             config,
 		scheduleRepository: scheduleRepository,
 		cronParser:         cronParser,
 		clock:              clock,
 	}
-
-	return schedulerTickUseCase
 }
 
 func (uc *SchedulerTickUseCase) Execute(ctx context.Context) error {

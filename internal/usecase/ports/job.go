@@ -13,4 +13,6 @@ type JobRepository interface {
 	MarkSuccess(ctx context.Context, jobID int64) error
 	Reschedule(ctx context.Context, jobID int64, runAt time.Time, lastErr string) error
 	MarkDead(ctx context.Context, jobID int64, lastErr string) error
+	FindStuckJobs(ctx context.Context, threshold time.Duration) ([]*domain.Job, error)
+	ResetStuckJob(ctx context.Context, jobID int64) error
 }

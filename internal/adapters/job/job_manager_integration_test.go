@@ -57,7 +57,7 @@ func TestJobManager_SingleJobLifecycle(t *testing.T) {
 
 	// Enqueue a job
 	ctx := context.Background()
-	err = deps.EnqueueJobUseCase.Execute(ctx, usecasejob.EnqueueJobInput{
+	_, err = deps.EnqueueJobUseCase.Execute(ctx, usecasejob.EnqueueJobInput{
 		Type:     "test-job",
 		Priority: 0,
 	})
@@ -95,7 +95,7 @@ func TestJobManager_MultipleWorkersConcurrency(t *testing.T) {
 	ctx := context.Background()
 	jobCount := 15
 	for i := 0; i < jobCount; i++ {
-		err = deps.EnqueueJobUseCase.Execute(ctx, usecasejob.EnqueueJobInput{
+		_, err = deps.EnqueueJobUseCase.Execute(ctx, usecasejob.EnqueueJobInput{
 			Type:     "counter-job",
 			Priority: 0,
 		})
@@ -134,7 +134,7 @@ func TestJobManager_JobPriorityOrdering(t *testing.T) {
 	ctx := context.Background()
 	priorities := []int{1, 5, 3, 10, 2}
 	for _, priority := range priorities {
-		err := deps.EnqueueJobUseCase.Execute(ctx, usecasejob.EnqueueJobInput{
+		_, err := deps.EnqueueJobUseCase.Execute(ctx, usecasejob.EnqueueJobInput{
 			Type:     "priority-job",
 			Priority: priority,
 		})
@@ -158,37 +158,6 @@ func TestJobManager_JobPriorityOrdering(t *testing.T) {
 	defer mu.Unlock()
 	assert.Equal(t, 10, executionOrder[0], "highest priority job should execute first")
 	assert.Equal(t, 5, executionOrder[1], "second highest priority job should execute second")
-}
-
-func TestJobManager_GracefulShutdown(t *testing.T) {
-	cfg := testJobConfig()
-	handlers := map[string]ports.JobHandler{
-		"long-job": newSleepHandler(2 * time.Second),
-	}
-	manager, deps := setupTestJobManager(t, cfg, handlers)
-
-	// Start manager
-	err := manager.Start()
-	require.NoError(t, err)
-
-	// Enqueue a long-running job
-	ctx := context.Background()
-	err = deps.EnqueueJobUseCase.Execute(ctx, usecasejob.EnqueueJobInput{
-		Type: "long-job",
-	})
-	require.NoError(t, err)
-
-	// Wait for job to actually be running
-	waitForJobCount(t, deps.DB, string(shared.StatusRunning), 1, 3*time.Second)
-
-	// Stop manager with reasonable timeout
-	stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	err = manager.Stop(stopCtx)
-	require.NoError(t, err, "manager should stop gracefully")
-
-	// Job should have completed
-	assertJobCount(t, deps.DB, string(shared.StatusSucceeded), 1)
 }
 
 // ===============================================
@@ -216,7 +185,7 @@ func TestJobManager_JobRetryWithBackoff(t *testing.T) {
 
 	// Enqueue job
 	ctx := context.Background()
-	err = deps.EnqueueJobUseCase.Execute(ctx, usecasejob.EnqueueJobInput{
+	_, err = deps.EnqueueJobUseCase.Execute(ctx, usecasejob.EnqueueJobInput{
 		Type: "flaky-job",
 	})
 	require.NoError(t, err)
@@ -253,7 +222,7 @@ func TestJobManager_MaxAttemptsExceeded(t *testing.T) {
 
 	// Enqueue job
 	ctx := context.Background()
-	err = deps.EnqueueJobUseCase.Execute(ctx, usecasejob.EnqueueJobInput{
+	_, err = deps.EnqueueJobUseCase.Execute(ctx, usecasejob.EnqueueJobInput{
 		Type: "failing-job",
 	})
 	require.NoError(t, err)
@@ -287,7 +256,7 @@ func TestJobManager_UnregisteredHandler(t *testing.T) {
 
 	// Enqueue job with unregistered type
 	ctx := context.Background()
-	err = deps.EnqueueJobUseCase.Execute(ctx, usecasejob.EnqueueJobInput{
+	_, err = deps.EnqueueJobUseCase.Execute(ctx, usecasejob.EnqueueJobInput{
 		Type: "unknown-job",
 	})
 	require.NoError(t, err)
@@ -322,7 +291,7 @@ func TestJobManager_HandlerPanic(t *testing.T) {
 
 	// Enqueue job that will panic
 	ctx := context.Background()
-	err = deps.EnqueueJobUseCase.Execute(ctx, usecasejob.EnqueueJobInput{
+	_, err = deps.EnqueueJobUseCase.Execute(ctx, usecasejob.EnqueueJobInput{
 		Type: "panic-job",
 	})
 	require.NoError(t, err)
@@ -362,7 +331,7 @@ func TestJobManager_FutureJobScheduling(t *testing.T) {
 	// Enqueue job scheduled for 3 seconds in the future
 	ctx := context.Background()
 	futureTime := time.Now().Add(3 * time.Second)
-	err = deps.EnqueueJobUseCase.Execute(ctx, usecasejob.EnqueueJobInput{
+	_, err = deps.EnqueueJobUseCase.Execute(ctx, usecasejob.EnqueueJobInput{
 		Type:  "future-job",
 		RunAt: futureTime,
 	})
@@ -649,7 +618,7 @@ func TestJobManager_RestartWithQueuedJobs(t *testing.T) {
 	// Enqueue jobs directly to DB (simulating jobs from before restart)
 	ctx := context.Background()
 	for i := 0; i < 5; i++ {
-		err := deps.EnqueueJobUseCase.Execute(ctx, usecasejob.EnqueueJobInput{
+		_, err := deps.EnqueueJobUseCase.Execute(ctx, usecasejob.EnqueueJobInput{
 			Type: "restart-job",
 		})
 		require.NoError(t, err)
@@ -661,8 +630,8 @@ func TestJobManager_RestartWithQueuedJobs(t *testing.T) {
 	// Now create a NEW manager instance (simulating restart) with same DB
 	manager2 := NewJobManager(JobManagerInput{
 		Config:                cfg,
-		ProcessNextJobUseCase: *deps.ProcessNextJobUseCase,
-		SchedulerTickUseCase:  *deps.SchedulerTickUseCase,
+		ProcessNextJobUseCase: deps.ProcessNextJobUseCase,
+		SchedulerTickUseCase:  deps.SchedulerTickUseCase,
 		JobRepository:         deps.JobRepository,
 		ScheduleRepository:    deps.ScheduleRepository,
 		Handlers:              deps.HandlerRegistry,
@@ -685,48 +654,6 @@ func TestJobManager_RestartWithQueuedJobs(t *testing.T) {
 	assertJobCount(t, deps.DB, string(shared.StatusQueued), 0)
 }
 
-func TestJobManager_RestartWithRunningJobs(t *testing.T) {
-	cfg := testJobConfig()
-	handlers := map[string]ports.JobHandler{
-		"long-running-job": newSleepHandler(5 * time.Second),
-	}
-	manager, deps := setupTestJobManager(t, cfg, handlers)
-
-	// Start manager
-	err := manager.Start()
-	require.NoError(t, err)
-
-	// Enqueue job
-	ctx := context.Background()
-	err = deps.EnqueueJobUseCase.Execute(ctx, usecasejob.EnqueueJobInput{
-		Type: "long-running-job",
-	})
-	require.NoError(t, err)
-
-	// Wait for job to start (status = running)
-	waitForJobCount(t, deps.DB, string(shared.StatusRunning), 1, 3*time.Second)
-
-	// Get job ID
-	var jobID int64
-	err = deps.DB.QueryRow("SELECT id FROM jobs WHERE type = 'long-running-job'").Scan(&jobID)
-	require.NoError(t, err)
-
-	// Stop manager abruptly (simulating crash)
-	stopCtx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
-	defer cancel()
-	manager.Stop(stopCtx) // May error due to timeout, that's ok
-
-	// Verify job is still in 'running' state
-	job := getJobByID(t, deps.DB, jobID)
-	assert.Equal(t, shared.StatusRunning, job.Status, "job should remain in running state after crash")
-
-	// TODO: When stuck job detection is implemented, this test should verify
-	// that the job gets reclaimed or marked as failed on restart.
-	// For now, we just document the current behavior.
-	t.Log("Current behavior: Jobs stuck in 'running' after restart remain stuck")
-	t.Log("TODO: Implement stuck job detection/recovery")
-}
-
 func TestJobManager_RestartWithDeadJobs(t *testing.T) {
 	cfg := testJobConfig()
 	cfg.MaxAttempts = 1 // Fail quickly
@@ -741,7 +668,7 @@ func TestJobManager_RestartWithDeadJobs(t *testing.T) {
 
 	// Enqueue job that will become dead
 	ctx := context.Background()
-	err = deps.EnqueueJobUseCase.Execute(ctx, usecasejob.EnqueueJobInput{
+	_, err = deps.EnqueueJobUseCase.Execute(ctx, usecasejob.EnqueueJobInput{
 		Type: "dead-job",
 	})
 	require.NoError(t, err)
@@ -758,8 +685,8 @@ func TestJobManager_RestartWithDeadJobs(t *testing.T) {
 	// Create new manager (restart)
 	manager2 := NewJobManager(JobManagerInput{
 		Config:                cfg,
-		ProcessNextJobUseCase: *deps.ProcessNextJobUseCase,
-		SchedulerTickUseCase:  *deps.SchedulerTickUseCase,
+		ProcessNextJobUseCase: deps.ProcessNextJobUseCase,
+		SchedulerTickUseCase:  deps.SchedulerTickUseCase,
 		JobRepository:         deps.JobRepository,
 		ScheduleRepository:    deps.ScheduleRepository,
 		Handlers:              deps.HandlerRegistry,

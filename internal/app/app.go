@@ -8,8 +8,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/thesystemicprogrammer/vimesrv/internal/adapters/job"
 	"github.com/thesystemicprogrammer/vimesrv/internal/infrastructure/database"
 	"github.com/thesystemicprogrammer/vimesrv/internal/infrastructure/server"
+	"github.com/thesystemicprogrammer/vimesrv/internal/shared"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/config"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/logger"
 )
@@ -17,7 +19,8 @@ import (
 type Application struct {
 	config     *config.Config
 	db         *database.DB
-	httpServer *server.HttpServer
+	httpServer *server.HTTPServer
+	jobManager *job.JobManager
 }
 
 func NewApplication(cfg *config.Config) (*Application, error) {
@@ -37,44 +40,58 @@ func (app *Application) initialize() error {
 	if err != nil {
 		return err
 	}
-
 	app.db = db
 
-	logger.Debug().Msg("creating HTTP server")
-	app.httpServer = server.NewHttpServer(server.HttpServerConfig{
-		Host: app.config.Server.Host,
-		Port: app.config.Server.Port,
-	})
+	// Ensure cleanup on failure
+	initSuccess := false
+	defer func() {
+		if !initSuccess && app.db != nil {
+			logger.Warn().Msg("initialization failed, cleaning up database connection")
+			if closeErr := app.db.Close(); closeErr != nil {
+				logger.Error().Err(closeErr).Msg("failed to close database during cleanup")
+			}
+			app.db = nil
+		}
+	}()
 
+	adapters := initAdapters(app.config, app.db)
+	useCases := initUseCases(app.config, adapters)
+
+	app.httpServer = initializeHTTPServer(app.config.Server)
+
+	jobManager, err := initializeJobManager(app.config, adapters, useCases)
+	if err != nil {
+		return fmt.Errorf("failed to initialize job manager: %w", err)
+	}
+	app.jobManager = jobManager
+
+	registerJobs(useCases, adapters)
+
+	// Validate that all required job handlers are registered
+	if err := validateJobHandlers(adapters.HandlerRegistry); err != nil {
+		return fmt.Errorf("job handler validation failed: %w", err)
+	}
+
+	registerHTTPHandlers(useCases, app.httpServer)
+
+	initSuccess = true // Mark initialization as successful
 	return nil
 }
 
-func initializeDatabase(dbConfig config.DatabaseConfig) (*database.DB, error) {
-	logger.Info().Str("path", dbConfig.Path).Msg("initializing database")
-	db, err := database.New(database.Config{
-		Path: dbConfig.Path,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize database: %w", err)
-	}
-
-	// Run migrations
-	logger.Info().Msg("running database migrations")
-	databaseMigration := database.NewDatabaseMigration(db.DB)
-	if err := databaseMigration.Migrate(); err != nil {
-		return nil, fmt.Errorf("failed to run migrations: %w", err)
-	}
-	return db, nil
-}
-
 func (app *Application) Start() error {
-	// Channel to listen for errors from server
+	// Channel to listen for errors from HTTP server
 	serverErrors := make(chan error, 1)
 
+	// Start HTTP server in goroutine
 	go func() {
 		logger.Info().Str("address", app.httpServer.Addr()).Msg("HTTP server listening")
 		serverErrors <- app.httpServer.Start()
 	}()
+
+	// Start job manager (returns immediately after launching workers)
+	if err := app.jobManager.Start(); err != nil {
+		return fmt.Errorf("job manager startup error: %w", err)
+	}
 
 	// Channel to listen for interrupt signal
 	shutdown := make(chan os.Signal, 1)
@@ -83,7 +100,7 @@ func (app *Application) Start() error {
 	// Block until we receive a signal or error
 	select {
 	case err := <-serverErrors:
-		return fmt.Errorf("server error: %w", err)
+		return fmt.Errorf("HTTP server error: %w", err)
 
 	case sig := <-shutdown:
 		logger.Info().Str("signal", sig.String()).Msg("received shutdown signal")
@@ -93,21 +110,69 @@ func (app *Application) Start() error {
 
 // Shutdown gracefully shuts down the application
 func (app *Application) Shutdown() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// Use configurable timeout
+	shutdownTimeout := time.Duration(app.config.Server.ShutdownTimeoutSeconds) * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 
+	// Track shutdown errors
+	var shutdownErrors []error
+
+	// Step 1: Shutdown HTTP server (prevents new requests/job creation)
 	logger.Info().Msg("shutting down HTTP server")
 	if err := app.httpServer.Shutdown(ctx); err != nil {
 		logger.Error().Err(err).Msg("error during HTTP server shutdown")
-		return fmt.Errorf("failed to shutdown HTTP server: %w", err)
+		shutdownErrors = append(shutdownErrors, fmt.Errorf("HTTP server shutdown: %w", err))
+	} else {
+		logger.Info().Msg("HTTP server stopped successfully")
 	}
 
+	// Step 2: Stop job manager (let workers finish in-flight jobs)
+	logger.Info().Msg("stopping job manager")
+	if err := app.jobManager.Stop(ctx); err != nil {
+		logger.Error().Err(err).Msg("error during job manager shutdown")
+		shutdownErrors = append(shutdownErrors, fmt.Errorf("job manager shutdown: %w", err))
+	} else {
+		logger.Info().Msg("job manager stopped successfully")
+	}
+
+	// Step 3: Close database connection
 	logger.Info().Msg("closing database connection")
 	if err := app.db.Close(); err != nil {
 		logger.Error().Err(err).Msg("error closing database")
-		// Don't return error, continue cleanup
+		shutdownErrors = append(shutdownErrors, fmt.Errorf("database close: %w", err))
+	} else {
+		logger.Info().Msg("database closed successfully")
+	}
+
+	// Return combined errors if any
+	if len(shutdownErrors) > 0 {
+		logger.Error().Int("errorCount", len(shutdownErrors)).Msg("graceful shutdown completed with errors")
+		return fmt.Errorf("shutdown encountered %d error(s): %v", len(shutdownErrors), shutdownErrors)
 	}
 
 	logger.Info().Msg("graceful shutdown complete")
+	return nil
+}
+
+// validateJobHandlers ensures all required job handlers are registered
+func validateJobHandlers(registry *job.HandlerRegistry) error {
+	requiredHandlers := []string{
+		shared.JobTypeScanLibrary,
+		// Add more job types here as they are implemented
+	}
+
+	var missingHandlers []string
+	for _, jobType := range requiredHandlers {
+		if _, exists := registry.Get(jobType); !exists {
+			missingHandlers = append(missingHandlers, jobType)
+		}
+	}
+
+	if len(missingHandlers) > 0 {
+		return fmt.Errorf("missing job handlers: %v", missingHandlers)
+	}
+
+	logger.Debug().Int("count", len(requiredHandlers)).Msg("all required job handlers registered")
 	return nil
 }

@@ -12,10 +12,12 @@ type ExponentialBackoff struct {
 	rand *rand.Rand
 }
 
-func NewExponentialBackoff(base, max time.Duration) *ExponentialBackoff {
+func NewExponentialBackoff(base, max int) *ExponentialBackoff {
+	baseDuration := time.Duration(base) * time.Second
+	maxDuration := time.Duration(max) * time.Second
 	return &ExponentialBackoff{
-		Base: base,
-		Max:  max,
+		Base: baseDuration,
+		Max:  maxDuration,
 		rand: rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }

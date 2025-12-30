@@ -10,14 +10,14 @@ import (
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/logger"
 )
 
-type HttpServer struct {
+type HTTPServer struct {
 	router     *gin.Engine
 	httpServer *http.Server
 	host       string
 	port       int
 }
 
-type HttpServerConfig struct {
+type HTTPServerConfig struct {
 	Host         string
 	Port         int
 	ReadTimeout  time.Duration
@@ -25,7 +25,7 @@ type HttpServerConfig struct {
 	IdleTimeout  time.Duration
 }
 
-func NewHttpServer(config HttpServerConfig) *HttpServer {
+func NewHTTPServer(config HTTPServerConfig) *HTTPServer {
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 
@@ -46,7 +46,7 @@ func NewHttpServer(config HttpServerConfig) *HttpServer {
 		config.IdleTimeout = 120 * time.Second
 	}
 
-	return &HttpServer{
+	return &HTTPServer{
 		router: router,
 		host:   config.Host,
 		port:   config.Port,
@@ -60,7 +60,7 @@ func NewHttpServer(config HttpServerConfig) *HttpServer {
 	}
 }
 
-func (s *HttpServer) Start() error {
+func (s *HTTPServer) Start() error {
 	s.setupHealthEndpoint()
 
 	if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -71,7 +71,7 @@ func (s *HttpServer) Start() error {
 	return nil
 }
 
-func (s *HttpServer) Shutdown(ctx context.Context) error {
+func (s *HTTPServer) Shutdown(ctx context.Context) error {
 	logger.Info().Msg("shutting down HTTP server")
 
 	if err := s.httpServer.Shutdown(ctx); err != nil {
@@ -82,11 +82,11 @@ func (s *HttpServer) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-func (s *HttpServer) Addr() string {
+func (s *HTTPServer) Addr() string {
 	return s.httpServer.Addr
 }
 
-func (s *HttpServer) setupHealthEndpoint() {
+func (s *HTTPServer) setupHealthEndpoint() {
 	s.router.GET("/health", func(c *gin.Context) {
 		c.JSON(200, SuccessResponse(map[string]interface{}{
 			"status": "healthy",
@@ -94,4 +94,15 @@ func (s *HttpServer) setupHealthEndpoint() {
 	})
 
 	logger.Debug().Msg("Health endpoint setup conducted")
+}
+
+// RegisterRoutes registers all HTTP routes with their handlers.
+// This should be called after the server is created but before it starts.
+func (s *HTTPServer) RegisterRoutes(scanLibraryHandler interface{ Handle(*gin.Context) }) {
+	api := s.router.Group("/api/v1")
+	{
+		api.POST("/scanlib", scanLibraryHandler.Handle)
+	}
+
+	logger.Debug().Msg("API routes registered")
 }

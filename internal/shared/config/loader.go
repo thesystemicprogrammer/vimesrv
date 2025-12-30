@@ -62,6 +62,7 @@ func setDefaults(v *viper.Viper) {
 	// Server defaults
 	v.SetDefault("server.host", "127.0.0.1")
 	v.SetDefault("server.port", 8080)
+	v.SetDefault("server.shutdown_timeout_seconds", 30)
 
 	// Job defaults
 	v.SetDefault("job.worker_count", 2)
@@ -69,16 +70,21 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("job.polling_interval_in_seconds", 2)
 	v.SetDefault("job.scheduler_interval_in_seconds", 10)
 	v.SetDefault("job.scheduler_batch", 3)
+	v.SetDefault("job.backoff_base_seconds", 2)
+	v.SetDefault("job.backoff_max_seconds", 300)
+	v.SetDefault("job.stuck_job_threshold_minutes", 480)
+	v.SetDefault("job.stuck_job_check_interval_minutes", 5)
 
 	// Media defaults
-	v.SetDefault("media.library_path", "./media")
+	v.SetDefault("media.library_path", "./library")
+	v.SetDefault("media.media_path", "./media")
+	v.SetDefault("media.staging_path", "./staging")
 	v.SetDefault("media.trash_path", "./trash")
 	v.SetDefault("media.supported_formats", []string{
 		".mp4", ".mkv", ".avi", ".mov", ".webm", ".flv", ".wmv", ".m4v",
 	})
 
 	// Transcoding defaults
-	v.SetDefault("transcoding.output_path", "./transcoded")
 	v.SetDefault("transcoding.segment_duration", 4)
 	v.SetDefault("transcoding.segment_pattern", "chunk-%03d.m4s")
 
@@ -175,7 +181,6 @@ func bindEnvVars(v *viper.Viper) {
 	v.BindEnv("media.trash_path", "MEDIA_TRASH_PATH")
 
 	// Transcoding
-	v.BindEnv("transcoding.output_path", "TRANSCODING_OUTPUT_PATH")
 	v.BindEnv("transcoding.segment_duration", "TRANSCODING_SEGMENT_DURATION")
 
 	// Database
@@ -211,7 +216,7 @@ func normalizePathsToAbsolute(cfg *Config) error {
 		}
 	}
 
-	// Note: Media.TrashPath and Transcoding.OutputPath are derived in deriveSubpaths()
+	// Note: Media.TrashPath is derived in deriveSubpaths()
 
 	// Normalize database path
 	if cfg.Database.Path != "" {
@@ -234,11 +239,14 @@ func normalizePathsToAbsolute(cfg *Config) error {
 
 // deriveSubpaths sets paths that are derived from other config values
 func deriveSubpaths(cfg *Config) error {
-	// Derive trash path as subdirectory of library path
-	cfg.Media.TrashPath = filepath.Join(cfg.Media.LibraryPath, "trash")
+	// Derive media path as subdirectory of library path
+	cfg.Media.MediaPath = filepath.Join(cfg.Media.LibraryPath, cfg.Media.MediaPath)
 
-	// Derive transcoding output path as subdirectory of library path
-	cfg.Transcoding.OutputPath = filepath.Join(cfg.Media.LibraryPath, "transcoded")
+	// Derive staging path as subdirectory of library path
+	cfg.Media.StagingPath = filepath.Join(cfg.Media.LibraryPath, cfg.Media.StagingPath)
+
+	// Derive trash path as subdirectory of library path
+	cfg.Media.TrashPath = filepath.Join(cfg.Media.LibraryPath, cfg.Media.TrashPath)
 
 	return nil
 }
@@ -248,8 +256,9 @@ func createDirectories(cfg *Config) error {
 	// List of directories to create
 	dirs := []string{
 		cfg.Media.LibraryPath,
+		cfg.Media.MediaPath,
+		cfg.Media.StagingPath,
 		cfg.Media.TrashPath,
-		cfg.Transcoding.OutputPath,
 	}
 
 	// Also create subdirectories in trash

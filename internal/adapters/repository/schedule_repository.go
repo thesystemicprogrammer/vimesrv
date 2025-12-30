@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/thesystemicprogrammer/vimesrv/internal/domain"
+	"github.com/thesystemicprogrammer/vimesrv/internal/infrastructure/database"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/logger"
 )
 
@@ -13,8 +14,8 @@ type ScheduleRepository struct {
 	db *sql.DB
 }
 
-func NewScheduleRepository(db *sql.DB) *ScheduleRepository {
-	return &ScheduleRepository{db: db}
+func NewScheduleRepository(db *database.DB) *ScheduleRepository {
+	return &ScheduleRepository{db: db.DB}
 }
 
 func (repo *ScheduleRepository) Upsert(ctx context.Context, schedule *domain.Schedule) (int64, error) {

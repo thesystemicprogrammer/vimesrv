@@ -14,7 +14,7 @@ type JobRepository struct {
 	db *sql.DB
 }
 
-func NewJobRepository(db database.DB) *JobRepository {
+func NewJobRepository(db *database.DB) *JobRepository {
 	return &JobRepository{db: db.DB}
 }
 
@@ -31,6 +31,11 @@ func (repo *JobRepository) Enqueue(ctx context.Context, j *domain.Job) (int64, e
 	return res.LastInsertId()
 }
 
+// ClaimNextJobDue atomically claims the next job due for processing.
+// This uses SQLite's atomic UPDATE...RETURNING behavior to claim a job in a single query.
+// NOTE: This implementation is SQLite-specific. When migrating to PostgreSQL/MySQL,
+// wrap the UPDATE and SELECT in an explicit transaction with appropriate isolation level
+// (e.g., FOR UPDATE SKIP LOCKED in PostgreSQL).
 func (repo *JobRepository) ClaimNextJobDue(ctx context.Context, workerID string) (*domain.Job, bool, error) {
 	const command = `
 	UPDATE jobs
@@ -126,4 +131,74 @@ func shorten(s string, n int) string {
 		return s
 	}
 	return s[:n]
+}
+
+// FindStuckJobs finds jobs that have been in 'running' state longer than the threshold
+func (repo *JobRepository) FindStuckJobs(ctx context.Context, threshold time.Duration) ([]*domain.Job, error) {
+	thresholdTime := time.Now().Add(-threshold).UTC()
+
+	const command = `
+	SELECT id, type, payload, status, priority, run_at, attempt, max_attempts, last_error, worker_id, scheduled_id, created_at, started_at, finished_at, updated_at
+	FROM jobs
+	WHERE status='running' AND started_at < ?
+	ORDER BY started_at ASC
+	`
+	rows, err := repo.db.QueryContext(ctx, command, thresholdTime)
+	if err != nil {
+		logger.Error().Err(err).Msg("sql error finding stuck jobs")
+		return nil, err
+	}
+	defer rows.Close()
+
+	var jobs []*domain.Job
+	for rows.Next() {
+		var job domain.Job
+		var payloadStr string
+		err := rows.Scan(
+			&job.ID,
+			&job.Type,
+			&payloadStr,
+			&job.Status,
+			&job.Priority,
+			&job.RunAt,
+			&job.Attempts,
+			&job.MaxAttempts,
+			&job.LastError,
+			&job.WorkerID,
+			&job.ScheduledID,
+			&job.CreatedAt,
+			&job.StartedAt,
+			&job.FinishedAt,
+			&job.UpdatedAt,
+		)
+		if err != nil {
+			logger.Error().Err(err).Msg("sql error scanning stuck job")
+			return nil, err
+		}
+		job.Payload = []byte(payloadStr)
+		jobs = append(jobs, &job)
+	}
+
+	return jobs, rows.Err()
+}
+
+// ResetStuckJob resets a stuck job back to 'queued' status so it can be retried
+func (repo *JobRepository) ResetStuckJob(ctx context.Context, jobID int64) error {
+	const command = `
+	UPDATE jobs
+	SET status='queued', worker_id=NULL, started_at=NULL, updated_at=CURRENT_TIMESTAMP
+	WHERE id=? AND status='running'
+	`
+	result, err := repo.db.ExecContext(ctx, command, jobID)
+	if err != nil {
+		logger.Error().Err(err).Int64("jobID", jobID).Msg("sql error resetting stuck job")
+		return err
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		logger.Warn().Int64("jobID", jobID).Msg("no rows affected when resetting stuck job - job may have already completed")
+	}
+
+	return nil
 }

@@ -72,6 +72,27 @@ func New(config Config) (*DB, error) {
 		return nil, fmt.Errorf("failed to set busy timeout: %w", err)
 	}
 
+	// Set synchronous mode to NORMAL for better performance with WAL
+	// FULL is safer but slower; NORMAL is safe with WAL mode
+	if _, err := db.Exec("PRAGMA synchronous=NORMAL"); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to set synchronous mode: %w", err)
+	}
+
+	// Increase cache size to 10MB (default is 2MB)
+	// Larger cache reduces disk I/O and contention
+	// Negative value means size in KB: -10000 = 10MB
+	if _, err := db.Exec("PRAGMA cache_size=-10000"); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to set cache size: %w", err)
+	}
+
+	// Set temp_store to MEMORY for faster temporary operations
+	if _, err := db.Exec("PRAGMA temp_store=MEMORY"); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to set temp store: %w", err)
+	}
+
 	// Verify connection
 	if err := db.Ping(); err != nil {
 		db.Close()

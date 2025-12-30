@@ -15,32 +15,36 @@ func TestServerConfig_Validate(t *testing.T) {
 		{
 			name: "valid config",
 			config: ServerConfig{
-				Host: "localhost",
-				Port: 8080,
+				Host:                   "localhost",
+				Port:                   8080,
+				ShutdownTimeoutSeconds: 30,
 			},
 			wantErr: false,
 		},
 		{
 			name: "valid config with IP",
 			config: ServerConfig{
-				Host: "127.0.0.1",
-				Port: 3000,
+				Host:                   "127.0.0.1",
+				Port:                   3000,
+				ShutdownTimeoutSeconds: 30,
 			},
 			wantErr: false,
 		},
 		{
 			name: "valid config with port 1",
 			config: ServerConfig{
-				Host: "0.0.0.0",
-				Port: 1,
+				Host:                   "0.0.0.0",
+				Port:                   1,
+				ShutdownTimeoutSeconds: 30,
 			},
 			wantErr: false,
 		},
 		{
 			name: "valid config with port 65535",
 			config: ServerConfig{
-				Host: "localhost",
-				Port: 65535,
+				Host:                   "localhost",
+				Port:                   65535,
+				ShutdownTimeoutSeconds: 30,
 			},
 			wantErr: false,
 		},
@@ -156,6 +160,8 @@ func TestMediaConfig_Validate(t *testing.T) {
 			name: "valid config",
 			config: MediaConfig{
 				LibraryPath:      "/media/library",
+				MediaPath:        "/media/library/media",
+				StagingPath:      "/media/library/staging",
 				TrashPath:        "/media/trash",
 				SupportedFormats: []string{".mp4", ".mkv", ".avi"},
 			},
@@ -165,6 +171,8 @@ func TestMediaConfig_Validate(t *testing.T) {
 			name: "valid config with many formats",
 			config: MediaConfig{
 				LibraryPath:      "/path/to/media",
+				MediaPath:        "/path/to/media/media",
+				StagingPath:      "/path/to/media/staging",
 				TrashPath:        "/path/to/trash",
 				SupportedFormats: []string{".mp4", ".mkv", ".avi", ".mov", ".webm", ".flv"},
 			},
@@ -405,7 +413,6 @@ func TestTranscodingConfig_Validate(t *testing.T) {
 		{
 			name: "valid config",
 			config: TranscodingConfig{
-				OutputPath:      "/transcoded",
 				SegmentDuration: 4,
 				QualityProfiles: []QualityProfile{validQuality},
 			},
@@ -414,25 +421,14 @@ func TestTranscodingConfig_Validate(t *testing.T) {
 		{
 			name: "valid config with multiple qualities",
 			config: TranscodingConfig{
-				OutputPath:      "/output",
 				SegmentDuration: 6,
 				QualityProfiles: []QualityProfile{validQuality, disabledQuality},
 			},
 			wantErr: false,
 		},
 		{
-			name: "empty output_path",
-			config: TranscodingConfig{
-				OutputPath:      "",
-				SegmentDuration: 4,
-				QualityProfiles: []QualityProfile{validQuality},
-			},
-			wantErr: true,
-		},
-		{
 			name: "segment_duration zero",
 			config: TranscodingConfig{
-				OutputPath:      "/transcoded",
 				SegmentDuration: 0,
 				QualityProfiles: []QualityProfile{validQuality},
 			},
@@ -441,7 +437,6 @@ func TestTranscodingConfig_Validate(t *testing.T) {
 		{
 			name: "segment_duration negative",
 			config: TranscodingConfig{
-				OutputPath:      "/transcoded",
 				SegmentDuration: -1,
 				QualityProfiles: []QualityProfile{validQuality},
 			},
@@ -450,7 +445,6 @@ func TestTranscodingConfig_Validate(t *testing.T) {
 		{
 			name: "empty qualities",
 			config: TranscodingConfig{
-				OutputPath:      "/transcoded",
 				SegmentDuration: 4,
 				QualityProfiles: []QualityProfile{},
 			},
@@ -459,7 +453,6 @@ func TestTranscodingConfig_Validate(t *testing.T) {
 		{
 			name: "all qualities disabled",
 			config: TranscodingConfig{
-				OutputPath:      "/transcoded",
 				SegmentDuration: 4,
 				QualityProfiles: []QualityProfile{disabledQuality},
 			},
@@ -468,7 +461,6 @@ func TestTranscodingConfig_Validate(t *testing.T) {
 		{
 			name: "invalid quality profile",
 			config: TranscodingConfig{
-				OutputPath:      "/transcoded",
 				SegmentDuration: 4,
 				QualityProfiles: []QualityProfile{invalidQuality},
 			},
@@ -976,31 +968,41 @@ func TestTMDBConfig_Validate(t *testing.T) {
 
 func TestConfig_Validate(t *testing.T) {
 	validJobConfig := JobConfig{
-		WorkerCount:                2,
-		PollingIntervalInSeconds:   2,
-		MaxAttempts:                3,
-		SchedulerIntervalInSeconds: 2,
-		SchedulerBatch:             5,
+		WorkerCount:                  2,
+		PollingIntervalInSeconds:     2,
+		MaxAttempts:                  3,
+		SchedulerIntervalInSeconds:   2,
+		SchedulerBatch:               5,
+		BackoffBaseSeconds:           2,
+		BackoffMaxSeconds:            300,
+		StuckJobThresholdMinutes:     480,
+		StuckJobCheckIntervalMinutes: 5,
 	}
 
 	validServerConfig := ServerConfig{
-		Host: "localhost",
-		Port: 8080,
+		Host:                   "localhost",
+		Port:                   8080,
+		ShutdownTimeoutSeconds: 30,
 	}
 
 	invalidServerConfig := ServerConfig{
-		Host: "",
-		Port: 8080,
+		Host:                   "",
+		Port:                   8080,
+		ShutdownTimeoutSeconds: 30,
 	}
 
 	validMediaConfig := MediaConfig{
 		LibraryPath:      "/media/library",
+		MediaPath:        "/media/library/media",
+		StagingPath:      "/media/library/staging",
 		TrashPath:        "/media/trash",
 		SupportedFormats: []string{".mp4", ".mkv"},
 	}
 
 	invalidMediaConfig := MediaConfig{
 		LibraryPath:      "",
+		MediaPath:        "/media/media",
+		StagingPath:      "/media/staging",
 		TrashPath:        "/media/trash",
 		SupportedFormats: []string{".mp4"},
 	}
@@ -1015,14 +1017,12 @@ func TestConfig_Validate(t *testing.T) {
 	}
 
 	validTranscodingConfig := TranscodingConfig{
-		OutputPath:      "/transcoded",
 		SegmentDuration: 4,
 		QualityProfiles: []QualityProfile{validQuality},
 	}
 
 	invalidTranscodingConfig := TranscodingConfig{
-		OutputPath:      "",
-		SegmentDuration: 4,
+		SegmentDuration: 0,
 		QualityProfiles: []QualityProfile{validQuality},
 	}
 

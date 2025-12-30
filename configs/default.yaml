@@ -1,6 +1,7 @@
 server:
   host: "127.0.0.1"
   port: 8080
+  shutdown_timeout_seconds: 30
 
 job:
   worker_count: 2
@@ -8,9 +9,15 @@ job:
   scheduler_batch: 5
   scheduler_interval_in_seconds: 2
   max_attempts: 3
+  backoff_base_seconds: 2
+  backoff_max_seconds: 300
+  stuck_job_threshold_minutes: 480 # 8 hours - jobs running longer are considered stuck
+  stuck_job_check_interval_minutes: 5 # Check for stuck jobs every 5 minutes
 
 media:
-  library_path: "./media"
+  library_path: "./library"
+  media_path: "./media"
+  staging_path: "./staging"
   trash_path: "/trash" # subdirectory under the library_path
   supported_formats:
     - ".mp4"
@@ -23,7 +30,6 @@ media:
     - ".m4v"
 
 transcoding:
-  output_path: "/transcoded" # subdirectory under the library path
   segment_duration: 4
 
   # Quality presets using CRF-based encoding

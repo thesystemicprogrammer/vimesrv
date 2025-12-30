@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,13 +13,25 @@ import (
 func TestLoad_WithValidYAMLFile(t *testing.T) {
 	tempDir := t.TempDir()
 
-	yamlContent := `
+	yamlContent := fmt.Sprintf(`
 server:
   host: "192.168.1.1"
   port: 9000
+  shutdown_timeout_seconds: 30
+
+job:
+  worker_count: 2
+  polling_interval_in_seconds: 2
+  scheduler_batch: 5
+  scheduler_interval_in_seconds: 2
+  max_attempts: 3
+  backoff_base_seconds: 2
+  backoff_max_seconds: 300
+  stuck_job_threshold_minutes: 480
+  stuck_job_check_interval_minutes: 5
 
 media:
-  library_path: "./custom-media"
+  library_path: "%s/custom-media"
   supported_formats:
     - ".mp4"
     - ".mkv"
@@ -34,16 +47,16 @@ transcoding:
       max_bitrate: "2800k"
 
 database:
-  path: "./custom-data/vimesrv.db"
+  path: "%s/custom-data/vimesrv.db"
 
 logging:
   level: "debug"
   format: "json"
-  file: "./custom-logs/app.log"
+  file: "%s/custom-logs/app.log"
 
 tmdb:
   enabled: false
-`
+`, tempDir, tempDir, tempDir)
 
 	configPath := createTestConfigYAML(t, tempDir, yamlContent)
 
@@ -62,12 +75,10 @@ tmdb:
 
 	// Verify derived paths
 	assert.Equal(t, filepath.Join(cfg.Media.LibraryPath, "trash"), cfg.Media.TrashPath)
-	assert.Equal(t, filepath.Join(cfg.Media.LibraryPath, "transcoded"), cfg.Transcoding.OutputPath)
 
 	// Verify directories were created
 	assertDirExistsInIntegration(t, cfg.Media.LibraryPath)
 	assertDirExistsInIntegration(t, cfg.Media.TrashPath)
-	assertDirExistsInIntegration(t, cfg.Transcoding.OutputPath)
 	assertDirExistsInIntegration(t, filepath.Dir(cfg.Database.Path))
 	assertDirExistsInIntegration(t, filepath.Dir(cfg.Logging.File))
 
@@ -148,32 +159,48 @@ func TestLoad_WithNonExistentFile(t *testing.T) {
 }
 
 func TestLoad_WithEmptyPath(t *testing.T) {
+	// Use temp directory to avoid creating directories in code directory
+	tempDir := t.TempDir()
+	t.Chdir(tempDir)
+
 	// Should use defaults (TMDB is disabled by default so this should succeed)
 	cfg, err := Load("")
 	assert.NoError(t, err)
 	assert.NotNil(t, cfg)
 	assert.False(t, cfg.TMDB.Enabled)
+
+	// Verify directories were created in temp dir
+	assert.True(t, filepath.IsAbs(cfg.Media.LibraryPath))
+	assert.Contains(t, cfg.Media.LibraryPath, tempDir)
 }
 
 func TestLoadWithDefaults(t *testing.T) {
+	// Use temp directory to avoid creating directories in code directory
+	tempDir := t.TempDir()
+	t.Chdir(tempDir)
+
 	// TMDB is disabled by default, so this should succeed
 	cfg, err := LoadWithDefaults()
 	assert.NoError(t, err)
 	assert.NotNil(t, cfg)
 	assert.False(t, cfg.TMDB.Enabled)
+
+	// Verify directories were created in temp dir
+	assert.True(t, filepath.IsAbs(cfg.Media.LibraryPath))
+	assert.Contains(t, cfg.Media.LibraryPath, tempDir)
 }
 
 func TestLoadWithDefaults_WithMinimalConfig(t *testing.T) {
 	tempDir := t.TempDir()
 
 	// Create a minimal config file with just necessary fields
-	yamlContent := `
+	yamlContent := fmt.Sprintf(`
 server:
   host: "127.0.0.1"
   port: 8080
 
 media:
-  library_path: "./media"
+  library_path: "%s/media"
   supported_formats:
     - ".mp4"
 
@@ -194,7 +221,7 @@ transcoding:
       max_bitrate: "1500k"
 
 database:
-  path: "./data/vimesrv.db"
+  path: "%s/data/vimesrv.db"
 
 logging:
   level: "info"
@@ -202,7 +229,7 @@ logging:
 
 tmdb:
   enabled: false
-`
+`, tempDir, tempDir)
 
 	configPath := createTestConfigYAML(t, tempDir, yamlContent)
 
@@ -230,13 +257,13 @@ func TestLoad_WithEnvironmentVariables(t *testing.T) {
 	tempDir := t.TempDir()
 
 	// Create a minimal config file
-	yamlContent := `
+	yamlContent := fmt.Sprintf(`
 server:
   host: "localhost"
   port: 8080
 
 media:
-  library_path: "./media"
+  library_path: "%s/media"
   supported_formats:
     - ".mp4"
 
@@ -251,7 +278,7 @@ transcoding:
       max_bitrate: "2800k"
 
 database:
-  path: "./data/vimesrv.db"
+  path: "%s/data/vimesrv.db"
 
 logging:
   level: "info"
@@ -259,14 +286,14 @@ logging:
 
 tmdb:
   enabled: false
-`
+`, tempDir, tempDir)
 
 	configPath := createTestConfigYAML(t, tempDir, yamlContent)
 
 	// Set environment variables to override
 	t.Setenv("SERVER_HOST", "10.0.0.1")
 	t.Setenv("SERVER_PORT", "7000")
-	t.Setenv("DATABASE_PATH", "./custom-db/vimesrv.db")
+	t.Setenv("DATABASE_PATH", filepath.Join(tempDir, "custom-db/vimesrv.db"))
 	t.Setenv("LOG_LEVEL", "warn")
 
 	cfg, err := Load(configPath)
@@ -283,13 +310,13 @@ tmdb:
 func TestLoad_WithVIMESRVPrefixEnvironmentVariables(t *testing.T) {
 	tempDir := t.TempDir()
 
-	yamlContent := `
+	yamlContent := fmt.Sprintf(`
 server:
   host: "localhost"
   port: 8080
 
 media:
-  library_path: "./media"
+  library_path: "%s/media"
   supported_formats:
     - ".mp4"
 
@@ -304,7 +331,7 @@ transcoding:
       max_bitrate: "2800k"
 
 database:
-  path: "./data/vimesrv.db"
+  path: "%s/data/vimesrv.db"
 
 logging:
   level: "info"
@@ -312,7 +339,7 @@ logging:
 
 tmdb:
   enabled: false
-`
+`, tempDir, tempDir)
 
 	configPath := createTestConfigYAML(t, tempDir, yamlContent)
 
@@ -332,13 +359,13 @@ tmdb:
 func TestLoad_CombineYAMLAndEnvVars(t *testing.T) {
 	tempDir := t.TempDir()
 
-	yamlContent := `
+	yamlContent := fmt.Sprintf(`
 server:
   host: "localhost"
   port: 8080
 
 media:
-  library_path: "./media"
+  library_path: "%s/media"
   supported_formats:
     - ".mp4"
     - ".mkv"
@@ -354,7 +381,7 @@ transcoding:
       max_bitrate: "2800k"
 
 database:
-  path: "./data/vimesrv.db"
+  path: "%s/data/vimesrv.db"
 
 logging:
   level: "info"
@@ -367,12 +394,12 @@ tmdb:
   auto_search: true
   auto_link_threshold: 70
   max_candidates: 5
-  image_cache_path: "./cache/tmdb"
+  image_cache_path: "%s/cache/tmdb"
   download_images: true
   poster_size: "w500"
   backdrop_size: "w1280"
   requests_per_10s: 35
-`
+`, tempDir, tempDir, tempDir)
 
 	configPath := createTestConfigYAML(t, tempDir, yamlContent)
 
@@ -398,13 +425,13 @@ tmdb:
 func TestLoad_PathNormalizationIntegration(t *testing.T) {
 	tempDir := t.TempDir()
 
-	yamlContent := `
+	yamlContent := fmt.Sprintf(`
 server:
   host: "localhost"
   port: 8080
 
 media:
-  library_path: "./relative/media"
+  library_path: "%s/relative/media"
   supported_formats:
     - ".mp4"
 
@@ -419,16 +446,16 @@ transcoding:
       max_bitrate: "2800k"
 
 database:
-  path: "./relative/data/vimesrv.db"
+  path: "%s/relative/data/vimesrv.db"
 
 logging:
   level: "info"
   format: "console"
-  file: "./relative/logs/app.log"
+  file: "%s/relative/logs/app.log"
 
 tmdb:
   enabled: false
-`
+`, tempDir, tempDir, tempDir)
 
 	configPath := createTestConfigYAML(t, tempDir, yamlContent)
 
@@ -439,13 +466,11 @@ tmdb:
 	// All paths should be absolute
 	assert.True(t, filepath.IsAbs(cfg.Media.LibraryPath))
 	assert.True(t, filepath.IsAbs(cfg.Media.TrashPath))
-	assert.True(t, filepath.IsAbs(cfg.Transcoding.OutputPath))
 	assert.True(t, filepath.IsAbs(cfg.Database.Path))
 	assert.True(t, filepath.IsAbs(cfg.Logging.File))
 
 	// Verify derived paths are correct
 	assert.Equal(t, filepath.Join(cfg.Media.LibraryPath, "trash"), cfg.Media.TrashPath)
-	assert.Equal(t, filepath.Join(cfg.Media.LibraryPath, "transcoded"), cfg.Transcoding.OutputPath)
 }
 
 func TestLoad_DirectoryCreationIntegration(t *testing.T) {
@@ -494,7 +519,6 @@ tmdb:
 	assertDirExistsInIntegration(t, cfg.Media.TrashPath)
 	assertDirExistsInIntegration(t, filepath.Join(cfg.Media.TrashPath, "original"))
 	assertDirExistsInIntegration(t, filepath.Join(cfg.Media.TrashPath, "transcoded"))
-	assertDirExistsInIntegration(t, cfg.Transcoding.OutputPath)
 	assertDirExistsInIntegration(t, filepath.Dir(cfg.Database.Path))
 	assertDirExistsInIntegration(t, filepath.Dir(cfg.Logging.File))
 
@@ -509,13 +533,13 @@ func TestLoad_FullWorkflow(t *testing.T) {
 	tempDir := t.TempDir()
 
 	// Create partial config (relying on defaults for some values)
-	yamlContent := `
+	yamlContent := fmt.Sprintf(`
 server:
   host: "192.168.1.100"
   port: 3000
 
 media:
-  library_path: "./test-media"
+  library_path: "%s/test-media"
   supported_formats:
     - ".mp4"
     - ".avi"
@@ -537,7 +561,7 @@ transcoding:
       max_bitrate: "2800k"
 
 database:
-  path: "./test-db/vimesrv.db"
+  path: "%s/test-db/vimesrv.db"
 
 logging:
   level: "error"
@@ -545,7 +569,7 @@ logging:
 
 tmdb:
   enabled: false
-`
+`, tempDir, tempDir)
 
 	configPath := createTestConfigYAML(t, tempDir, yamlContent)
 
@@ -583,25 +607,23 @@ tmdb:
 
 	// Verify subpaths derived
 	assert.Equal(t, filepath.Join(cfg.Media.LibraryPath, "trash"), cfg.Media.TrashPath)
-	assert.Equal(t, filepath.Join(cfg.Media.LibraryPath, "transcoded"), cfg.Transcoding.OutputPath)
 
 	// Verify directories created
 	assertDirExistsInIntegration(t, cfg.Media.LibraryPath)
 	assertDirExistsInIntegration(t, cfg.Media.TrashPath)
-	assertDirExistsInIntegration(t, cfg.Transcoding.OutputPath)
 	assertDirExistsInIntegration(t, filepath.Dir(cfg.Database.Path))
 }
 
 func TestLoad_TMDBValidationWhenEnabled(t *testing.T) {
 	tempDir := t.TempDir()
 
-	yamlContent := `
+	yamlContent := fmt.Sprintf(`
 server:
   host: "localhost"
   port: 8080
 
 media:
-  library_path: "./media"
+  library_path: "%s/media"
   supported_formats:
     - ".mp4"
 
@@ -616,7 +638,7 @@ transcoding:
       max_bitrate: "2800k"
 
 database:
-  path: "./data/vimesrv.db"
+  path: "%s/data/vimesrv.db"
 
 logging:
   level: "info"
@@ -629,12 +651,12 @@ tmdb:
   auto_search: true
   auto_link_threshold: 75
   max_candidates: 10
-  image_cache_path: "./cache/tmdb"
+  image_cache_path: "%s/cache/tmdb"
   download_images: true
   poster_size: "w342"
   backdrop_size: "w780"
   requests_per_10s: 30
-`
+`, tempDir, tempDir, tempDir)
 
 	configPath := createTestConfigYAML(t, tempDir, yamlContent)
 
@@ -657,13 +679,13 @@ tmdb:
 func TestLoad_TMDBValidationFailsWhenEnabledWithoutAPIKey(t *testing.T) {
 	tempDir := t.TempDir()
 
-	yamlContent := `
+	yamlContent := fmt.Sprintf(`
 server:
   host: "localhost"
   port: 8080
 
 media:
-  library_path: "./media"
+  library_path: "%s/media"
   supported_formats:
     - ".mp4"
 
@@ -678,7 +700,7 @@ transcoding:
       max_bitrate: "2800k"
 
 database:
-  path: "./data/vimesrv.db"
+  path: "%s/data/vimesrv.db"
 
 logging:
   level: "info"
@@ -691,12 +713,12 @@ tmdb:
   auto_search: true
   auto_link_threshold: 70
   max_candidates: 5
-  image_cache_path: "./cache/tmdb"
+  image_cache_path: "%s/cache/tmdb"
   download_images: true
   poster_size: "w500"
   backdrop_size: "w1280"
   requests_per_10s: 35
-`
+`, tempDir, tempDir, tempDir)
 
 	configPath := createTestConfigYAML(t, tempDir, yamlContent)
 
@@ -711,13 +733,13 @@ func TestLoad_NormalizationError(t *testing.T) {
 	// Create a config that will pass validation but might have normalization issues
 	// We'll create a scenario where the config has a value that should cause an error
 	// However, filepath.Abs rarely errors in practice, so this test mainly ensures the error path exists
-	yamlContent := `
+	yamlContent := fmt.Sprintf(`
 server:
   host: "localhost"
   port: 8080
 
 media:
-  library_path: "./media"
+  library_path: "%s/media"
   supported_formats:
     - ".mp4"
 
@@ -732,7 +754,7 @@ transcoding:
       max_bitrate: "2800k"
 
 database:
-  path: "./data/vimesrv.db"
+  path: "%s/data/vimesrv.db"
 
 logging:
   level: "info"
@@ -740,7 +762,7 @@ logging:
 
 tmdb:
   enabled: false
-`
+`, tempDir, tempDir)
 
 	configPath := createTestConfigYAML(t, tempDir, yamlContent)
 
@@ -754,13 +776,13 @@ func TestLoad_DeriveSubpathsError(t *testing.T) {
 	tempDir := t.TempDir()
 
 	// deriveSubpaths doesn't actually return errors, but we test it anyway
-	yamlContent := `
+	yamlContent := fmt.Sprintf(`
 server:
   host: "localhost"
   port: 8080
 
 media:
-  library_path: "./media"
+  library_path: "%s/media"
   supported_formats:
     - ".mp4"
 
@@ -775,7 +797,7 @@ transcoding:
       max_bitrate: "2800k"
 
 database:
-  path: "./data/vimesrv.db"
+  path: "%s/data/vimesrv.db"
 
 logging:
   level: "info"
@@ -783,7 +805,7 @@ logging:
 
 tmdb:
   enabled: false
-`
+`, tempDir, tempDir)
 
 	configPath := createTestConfigYAML(t, tempDir, yamlContent)
 
@@ -793,20 +815,19 @@ tmdb:
 
 	// Verify subpaths were derived correctly
 	assert.Contains(t, cfg.Media.TrashPath, "trash")
-	assert.Contains(t, cfg.Transcoding.OutputPath, "transcoded")
 }
 
 func TestLoad_InvalidUnmarshalData(t *testing.T) {
 	tempDir := t.TempDir()
 
 	// Create a YAML with data types that can't be unmarshaled properly
-	yamlContent := `
+	yamlContent := fmt.Sprintf(`
 server:
   host: "localhost"
   port: "not-a-number"
 
 media:
-  library_path: "./media"
+  library_path: "%s/media"
   supported_formats:
     - ".mp4"
 
@@ -821,7 +842,7 @@ transcoding:
       max_bitrate: "2800k"
 
 database:
-  path: "./data/vimesrv.db"
+  path: "%s/data/vimesrv.db"
 
 logging:
   level: "info"
@@ -829,7 +850,7 @@ logging:
 
 tmdb:
   enabled: false
-`
+`, tempDir, tempDir)
 
 	configPath := createTestConfigYAML(t, tempDir, yamlContent)
 
@@ -845,13 +866,13 @@ func TestLoad_AllPosterSizes(t *testing.T) {
 
 	for _, size := range posterSizes {
 		t.Run("poster_size_"+size, func(t *testing.T) {
-			yamlContent := `
+			yamlContent := fmt.Sprintf(`
 server:
   host: "localhost"
   port: 8080
 
 media:
-  library_path: "./media"
+  library_path: "%s/media"
   supported_formats:
     - ".mp4"
 
@@ -866,7 +887,7 @@ transcoding:
       max_bitrate: "2800k"
 
 database:
-  path: "./data/vimesrv.db"
+  path: "%s/data/vimesrv.db"
 
 logging:
   level: "info"
@@ -879,12 +900,12 @@ tmdb:
   auto_search: true
   auto_link_threshold: 70
   max_candidates: 5
-  image_cache_path: "./cache/tmdb"
+  image_cache_path: "%s/cache/tmdb"
   download_images: true
-  poster_size: "` + size + `"
+  poster_size: "`+size+`"
   backdrop_size: "w1280"
   requests_per_10s: 35
-`
+`, tempDir, tempDir, tempDir)
 			configPath := createTestConfigYAML(t, tempDir, yamlContent)
 			cfg, err := Load(configPath)
 			require.NoError(t, err)
@@ -900,13 +921,13 @@ func TestLoad_AllBackdropSizes(t *testing.T) {
 
 	for _, size := range backdropSizes {
 		t.Run("backdrop_size_"+size, func(t *testing.T) {
-			yamlContent := `
+			yamlContent := fmt.Sprintf(`
 server:
   host: "localhost"
   port: 8080
 
 media:
-  library_path: "./media"
+  library_path: "%s/media"
   supported_formats:
     - ".mp4"
 
@@ -921,7 +942,7 @@ transcoding:
       max_bitrate: "2800k"
 
 database:
-  path: "./data/vimesrv.db"
+  path: "%s/data/vimesrv.db"
 
 logging:
   level: "info"
@@ -934,12 +955,12 @@ tmdb:
   auto_search: true
   auto_link_threshold: 70
   max_candidates: 5
-  image_cache_path: "./cache/tmdb"
+  image_cache_path: "%s/cache/tmdb"
   download_images: true
   poster_size: "w500"
-  backdrop_size: "` + size + `"
+  backdrop_size: "`+size+`"
   requests_per_10s: 35
-`
+`, tempDir, tempDir, tempDir)
 			configPath := createTestConfigYAML(t, tempDir, yamlContent)
 			cfg, err := Load(configPath)
 			require.NoError(t, err)

@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/thesystemicprogrammer/vimesrv/internal/shared"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/config"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/logger"
 	usecasejob "github.com/thesystemicprogrammer/vimesrv/internal/usecase/job"
@@ -15,30 +16,34 @@ import (
 )
 
 type JobManagerInput struct {
-	Config                config.JobConfig
-	ProcessNextJobUseCase usecasejob.ProcessNextJobUseCase
-	SchedulerTickUseCase  usecasejob.SchedulerTickUseCase
-	JobRepository         ports.JobRepository
-	ScheduleRepository    ports.ScheduleRepository
-	Handlers              ports.HandlerResolver
-	BackoffStrategy       ports.BackoffStrategy
-	Cron                  ports.CronParser
-	Clock                 ports.Clock
+	Config                  config.JobConfig
+	ProcessNextJobUseCase   *usecasejob.ProcessNextJobUseCase
+	SchedulerTickUseCase    *usecasejob.SchedulerTickUseCase
+	RecoverStuckJobsUseCase *usecasejob.RecoverStuckJobsUseCase
+	JobRepository           ports.JobRepository
+	ScheduleRepository      ports.ScheduleRepository
+	Handlers                ports.HandlerResolver
+	BackoffStrategy         ports.BackoffStrategy
+	Cron                    ports.CronParser
+	Clock                   ports.Clock
 }
 
 type JobManager struct {
-	Config                config.JobConfig
-	ProcessNextJobUseCase usecasejob.ProcessNextJobUseCase
-	SchedulerTickUseCase  usecasejob.SchedulerTickUseCase
-	JobRepository         ports.JobRepository
-	ScheduleRepository    ports.ScheduleRepository
-	Handlers              ports.HandlerResolver
-	BackoffStrategy       ports.BackoffStrategy
-	Cron                  ports.CronParser
-	Clock                 ports.Clock
-	stopCh                chan struct{}
-	started               int32
-	wg                    sync.WaitGroup
+	Config                  config.JobConfig
+	ProcessNextJobUseCase   *usecasejob.ProcessNextJobUseCase
+	SchedulerTickUseCase    *usecasejob.SchedulerTickUseCase
+	RecoverStuckJobsUseCase *usecasejob.RecoverStuckJobsUseCase
+	JobRepository           ports.JobRepository
+	ScheduleRepository      ports.ScheduleRepository
+	Handlers                ports.HandlerResolver
+	BackoffStrategy         ports.BackoffStrategy
+	Cron                    ports.CronParser
+	Clock                   ports.Clock
+	stopCh                  chan struct{}
+	cancelFunc              context.CancelFunc
+	started                 int32
+	stopped                 int32
+	wg                      sync.WaitGroup
 }
 
 func NewJobManager(jobManagerInput JobManagerInput) *JobManager {
@@ -47,16 +52,17 @@ func NewJobManager(jobManagerInput JobManagerInput) *JobManager {
 	}
 
 	return &JobManager{
-		Config:                jobManagerInput.Config,
-		ProcessNextJobUseCase: jobManagerInput.ProcessNextJobUseCase,
-		SchedulerTickUseCase:  jobManagerInput.SchedulerTickUseCase,
-		JobRepository:         jobManagerInput.JobRepository,
-		ScheduleRepository:    jobManagerInput.ScheduleRepository,
-		Handlers:              jobManagerInput.Handlers,
-		BackoffStrategy:       jobManagerInput.BackoffStrategy,
-		Cron:                  jobManagerInput.Cron,
-		Clock:                 jobManagerInput.Clock,
-		stopCh:                make(chan struct{}),
+		Config:                  jobManagerInput.Config,
+		ProcessNextJobUseCase:   jobManagerInput.ProcessNextJobUseCase,
+		SchedulerTickUseCase:    jobManagerInput.SchedulerTickUseCase,
+		RecoverStuckJobsUseCase: jobManagerInput.RecoverStuckJobsUseCase,
+		JobRepository:           jobManagerInput.JobRepository,
+		ScheduleRepository:      jobManagerInput.ScheduleRepository,
+		Handlers:                jobManagerInput.Handlers,
+		BackoffStrategy:         jobManagerInput.BackoffStrategy,
+		Cron:                    jobManagerInput.Cron,
+		Clock:                   jobManagerInput.Clock,
+		stopCh:                  make(chan struct{}),
 	}
 }
 
@@ -65,28 +71,42 @@ func (manager *JobManager) Start() error {
 		return fmt.Errorf("manager already started")
 	}
 
+	// Create a cancellable context for all workers
+	ctx, cancel := context.WithCancel(context.Background())
+	manager.cancelFunc = cancel
+
 	// Workers
 	for i := 0; i < manager.Config.WorkerCount; i++ {
 		id := manager.workerID(i)
 		manager.wg.Add(1)
 		go func(workerID string) {
 			defer manager.wg.Done()
-			manager.workerLoop(workerID)
+			manager.workerLoop(ctx, workerID)
 		}(id)
 	}
 	// Scheduler
-	manager.wg.Go(func() {
-		manager.schedulerLoop()
-	})
+	manager.wg.Add(1)
+	go func() {
+		defer manager.wg.Done()
+		manager.schedulerLoop(ctx)
+	}()
+	// Stuck job recovery
+	manager.wg.Add(1)
+	go func() {
+		defer manager.wg.Done()
+		manager.stuckJobRecoveryLoop(ctx)
+	}()
 
 	logger.Info().Int("workerCount", manager.Config.WorkerCount).Msg("job manager started")
 	return nil
 }
 
 func (manager *JobManager) Stop(ctx context.Context) error {
-	select {
-	case <-manager.stopCh:
-	default:
+	if atomic.CompareAndSwapInt32(&manager.stopped, 0, 1) {
+		// Cancel the worker context to interrupt ongoing jobs
+		if manager.cancelFunc != nil {
+			manager.cancelFunc()
+		}
 		close(manager.stopCh)
 	}
 	done := make(chan struct{})
@@ -100,15 +120,17 @@ func (manager *JobManager) Stop(ctx context.Context) error {
 	}
 }
 
-func (manager *JobManager) workerLoop(workerID string) {
+func (manager *JobManager) workerLoop(ctx context.Context, workerID string) {
 	duration := time.Duration(manager.Config.PollingIntervalInSeconds) * time.Second
 	ticker := time.NewTicker(duration)
 	defer ticker.Stop()
-	ctx := context.Background()
 
 	for {
 		select {
 		case <-manager.stopCh:
+			return
+		case <-ctx.Done():
+			logger.Info().Str("workerID", workerID).Msg("worker context cancelled, shutting down")
 			return
 		default:
 		}
@@ -116,8 +138,10 @@ func (manager *JobManager) workerLoop(workerID string) {
 		if err != nil {
 			logger.Error().Err(err).Str("workerID", workerID).Msg("Use Case Processing Next Job failed")
 			select {
-			case <-time.After(500 * time.Millisecond):
+			case <-time.After(shared.ErrorBackoffDuration):
 			case <-manager.stopCh:
+				return
+			case <-ctx.Done():
 				return
 			}
 			continue
@@ -127,20 +151,24 @@ func (manager *JobManager) workerLoop(workerID string) {
 			case <-ticker.C:
 			case <-manager.stopCh:
 				return
+			case <-ctx.Done():
+				return
 			}
 		}
 	}
 }
 
-func (manager *JobManager) schedulerLoop() {
+func (manager *JobManager) schedulerLoop(ctx context.Context) {
 	duration := time.Duration(manager.Config.SchedulerIntervalInSeconds) * time.Second
 	ticker := time.NewTicker(duration)
 	defer ticker.Stop()
-	ctx := context.Background()
 
 	for {
 		select {
 		case <-manager.stopCh:
+			return
+		case <-ctx.Done():
+			logger.Info().Msg("scheduler context cancelled, shutting down")
 			return
 		case <-ticker.C:
 			_ = manager.SchedulerTickUseCase.Execute(ctx)
@@ -148,7 +176,29 @@ func (manager *JobManager) schedulerLoop() {
 	}
 }
 
+func (manager *JobManager) stuckJobRecoveryLoop(ctx context.Context) {
+	duration := time.Duration(manager.Config.StuckJobCheckIntervalMinutes) * time.Minute
+	ticker := time.NewTicker(duration)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-manager.stopCh:
+			return
+		case <-ctx.Done():
+			logger.Info().Msg("stuck job recovery context cancelled, shutting down")
+			return
+		case <-ticker.C:
+			_ = manager.RecoverStuckJobsUseCase.Execute(ctx)
+		}
+	}
+}
+
 func (manager *JobManager) workerID(i int) string {
-	host, _ := os.Hostname()
+	host, err := os.Hostname()
+	if err != nil {
+		logger.Warn().Err(err).Msg("failed to get hostname, using fallback")
+		host = "unknown-host"
+	}
 	return fmt.Sprintf("%s-%d-%d", host, os.Getpid(), i)
 }

@@ -1,5 +1,7 @@
 package shared
 
+import "time"
+
 type JobStatus string
 
 const (
@@ -8,3 +10,11 @@ const (
 	StatusSucceeded JobStatus = "succeeded"
 	StatusDead      JobStatus = "dead"
 )
+
+// Job types
+const (
+	JobTypeScanLibrary = "scan_library"
+)
+
+// ErrorBackoffDuration is the wait time after a job processing error before retrying
+const ErrorBackoffDuration = 500 * time.Millisecond

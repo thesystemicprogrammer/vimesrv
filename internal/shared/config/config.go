@@ -17,26 +17,32 @@ type Config struct {
 }
 
 type JobConfig struct {
-	WorkerCount                int `mapstructure:"worker_count"`
-	PollingIntervalInSeconds   int `mapstructure:"polling_interval_in_seconds"`
-	MaxAttempts                int `mapstructure:"max_attempts"`
-	SchedulerIntervalInSeconds int `mapstructure:"scheduler_interval_in_seconds"`
-	SchedulerBatch             int `mapstructure:"scheduler_batch"`
+	WorkerCount                  int `mapstructure:"worker_count"`
+	PollingIntervalInSeconds     int `mapstructure:"polling_interval_in_seconds"`
+	MaxAttempts                  int `mapstructure:"max_attempts"`
+	SchedulerIntervalInSeconds   int `mapstructure:"scheduler_interval_in_seconds"`
+	SchedulerBatch               int `mapstructure:"scheduler_batch"`
+	BackoffBaseSeconds           int `mapstructure:"backoff_base_seconds"`
+	BackoffMaxSeconds            int `mapstructure:"backoff_max_seconds"`
+	StuckJobThresholdMinutes     int `mapstructure:"stuck_job_threshold_minutes"`
+	StuckJobCheckIntervalMinutes int `mapstructure:"stuck_job_check_interval_minutes"`
 }
 
 type ServerConfig struct {
-	Host string `mapstructure:"host"`
-	Port int    `mapstructure:"port"`
+	Host                   string `mapstructure:"host"`
+	Port                   int    `mapstructure:"port"`
+	ShutdownTimeoutSeconds int    `mapstructure:"shutdown_timeout_seconds"`
 }
 
 type MediaConfig struct {
 	LibraryPath      string   `mapstructure:"library_path"`
+	MediaPath        string   `mapstructure:"media_path"`
+	StagingPath      string   `mapstructure:"staging_path"`
 	TrashPath        string   `mapstructure:"trash_path"`
 	SupportedFormats []string `mapstructure:"supported_formats"`
 }
 
 type TranscodingConfig struct {
-	OutputPath      string           `mapstructure:"output_path"`
 	SegmentDuration int              `mapstructure:"segment_duration"`
 	QualityProfiles []QualityProfile `mapstructure:"quality_profiles"`
 }
@@ -118,6 +124,10 @@ func (s *ServerConfig) Validate() error {
 		return fmt.Errorf("port must be between 1 and 65535, got %d", s.Port)
 	}
 
+	if s.ShutdownTimeoutSeconds < 5 || s.ShutdownTimeoutSeconds > 300 {
+		return fmt.Errorf("shutdown_timeout_seconds must be between 5 and 300, got %d", s.ShutdownTimeoutSeconds)
+	}
+
 	return nil
 }
 
@@ -142,12 +152,36 @@ func (j *JobConfig) Validate() error {
 		return fmt.Errorf("max scheduler batch must be between 1 and 100, got %d", j.SchedulerBatch)
 	}
 
+	if j.BackoffBaseSeconds < 1 || j.BackoffBaseSeconds > 60 {
+		return fmt.Errorf("backoff base seconds must be between 1 and 60, got %d", j.BackoffBaseSeconds)
+	}
+
+	if j.BackoffMaxSeconds < j.BackoffBaseSeconds || j.BackoffMaxSeconds > 3600 {
+		return fmt.Errorf("backoff max seconds must be between backoff_base_seconds and 3600, got %d", j.BackoffMaxSeconds)
+	}
+
+	if j.StuckJobThresholdMinutes < 30 || j.StuckJobThresholdMinutes > 10080 {
+		return fmt.Errorf("stuck job threshold must be between 30 and 10080 minutes (7 days), got %d", j.StuckJobThresholdMinutes)
+	}
+
+	if j.StuckJobCheckIntervalMinutes < 1 || j.StuckJobCheckIntervalMinutes > 1440 {
+		return fmt.Errorf("stuck job check interval must be between 1 and 1440 minutes (24 hours), got %d", j.StuckJobCheckIntervalMinutes)
+	}
+
 	return nil
 }
 
 func (m *MediaConfig) Validate() error {
 	if m.LibraryPath == "" {
 		return fmt.Errorf("library_path cannot be empty")
+	}
+
+	if m.MediaPath == "" {
+		return fmt.Errorf("media_path cannot be empty")
+	}
+
+	if m.StagingPath == "" {
+		return fmt.Errorf("staging_path cannot be empty")
 	}
 
 	if m.TrashPath == "" {
@@ -168,10 +202,6 @@ func (m *MediaConfig) Validate() error {
 }
 
 func (t *TranscodingConfig) Validate() error {
-	if t.OutputPath == "" {
-		return fmt.Errorf("output_path cannot be empty")
-	}
-
 	if t.SegmentDuration < 1 {
 		return fmt.Errorf("segment_duration must be at least 1 second, got %d", t.SegmentDuration)
 	}

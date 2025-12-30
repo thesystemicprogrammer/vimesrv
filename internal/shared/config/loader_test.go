@@ -19,7 +19,9 @@ func TestSetDefaults(t *testing.T) {
 	assert.Equal(t, 8080, v.GetInt("server.port"))
 
 	// Media defaults
-	assert.Equal(t, "./media", v.GetString("media.library_path"))
+	assert.Equal(t, "./library", v.GetString("media.library_path"))
+	assert.Equal(t, "./media", v.GetString("media.media_path"))
+	assert.Equal(t, "./staging", v.GetString("media.staging_path"))
 	assert.Equal(t, "./trash", v.GetString("media.trash_path"))
 	supportedFormats := v.GetStringSlice("media.supported_formats")
 	assert.Contains(t, supportedFormats, ".mp4")
@@ -27,7 +29,6 @@ func TestSetDefaults(t *testing.T) {
 	assert.Contains(t, supportedFormats, ".avi")
 
 	// Transcoding defaults
-	assert.Equal(t, "./transcoded", v.GetString("transcoding.output_path"))
 	assert.Equal(t, 4, v.GetInt("transcoding.segment_duration"))
 	assert.Equal(t, "chunk-%03d.m4s", v.GetString("transcoding.segment_pattern"))
 
@@ -105,9 +106,7 @@ func TestBindEnvVars(t *testing.T) {
 	assert.Equal(t, "/custom/trash", v.GetString("media.trash_path"))
 
 	// Test transcoding env vars
-	t.Setenv("TRANSCODING_OUTPUT_PATH", "/custom/output")
 	t.Setenv("TRANSCODING_SEGMENT_DURATION", "6")
-	assert.Equal(t, "/custom/output", v.GetString("transcoding.output_path"))
 	assert.Equal(t, 6, v.GetInt("transcoding.segment_duration"))
 
 	// Test database env vars
@@ -296,32 +295,52 @@ func TestDeriveSubpaths(t *testing.T) {
 	tests := []struct {
 		name        string
 		libraryPath string
+		mediaPath   string
+		stagingPath string
+		trashPath   string
+		wantMedia   string
+		wantStaging string
 		wantTrash   string
-		wantOutput  string
 	}{
 		{
 			name:        "absolute path",
 			libraryPath: "/media/library",
+			mediaPath:   "./media",
+			stagingPath: "./staging",
+			trashPath:   "./trash",
+			wantMedia:   "/media/library/media",
+			wantStaging: "/media/library/staging",
 			wantTrash:   "/media/library/trash",
-			wantOutput:  "/media/library/transcoded",
 		},
 		{
 			name:        "relative path",
 			libraryPath: "./media",
+			mediaPath:   "./media",
+			stagingPath: "./staging",
+			trashPath:   "./trash",
+			wantMedia:   "media/media",
+			wantStaging: "media/staging",
 			wantTrash:   "media/trash",
-			wantOutput:  "media/transcoded",
 		},
 		{
 			name:        "path with trailing slash",
 			libraryPath: "/media/library/",
+			mediaPath:   "./media",
+			stagingPath: "./staging",
+			trashPath:   "./trash",
+			wantMedia:   "/media/library/media",
+			wantStaging: "/media/library/staging",
 			wantTrash:   "/media/library/trash",
-			wantOutput:  "/media/library/transcoded",
 		},
 		{
 			name:        "complex path",
 			libraryPath: "/var/data/media/lib",
+			mediaPath:   "./media",
+			stagingPath: "./staging",
+			trashPath:   "./trash",
+			wantMedia:   "/var/data/media/lib/media",
+			wantStaging: "/var/data/media/lib/staging",
 			wantTrash:   "/var/data/media/lib/trash",
-			wantOutput:  "/var/data/media/lib/transcoded",
 		},
 	}
 
@@ -330,13 +349,17 @@ func TestDeriveSubpaths(t *testing.T) {
 			cfg := &Config{
 				Media: MediaConfig{
 					LibraryPath: tt.libraryPath,
+					MediaPath:   tt.mediaPath,
+					StagingPath: tt.stagingPath,
+					TrashPath:   tt.trashPath,
 				},
 			}
 
 			err := deriveSubpaths(cfg)
 			assert.NoError(t, err)
+			assert.Equal(t, tt.wantMedia, cfg.Media.MediaPath)
+			assert.Equal(t, tt.wantStaging, cfg.Media.StagingPath)
 			assert.Equal(t, tt.wantTrash, cfg.Media.TrashPath)
-			assert.Equal(t, tt.wantOutput, cfg.Transcoding.OutputPath)
 		})
 	}
 }
@@ -348,10 +371,12 @@ func TestCreateDirectories(t *testing.T) {
 		cfg := &Config{
 			Media: MediaConfig{
 				LibraryPath: filepath.Join(tempDir, "media"),
+				MediaPath:   filepath.Join(tempDir, "media", "media"),
+				StagingPath: filepath.Join(tempDir, "media", "staging"),
 				TrashPath:   filepath.Join(tempDir, "media", "trash"),
 			},
 			Transcoding: TranscodingConfig{
-				OutputPath: filepath.Join(tempDir, "media", "transcoded"),
+				SegmentDuration: 4,
 			},
 			Database: DatabaseConfig{
 				Path: filepath.Join(tempDir, "data", "vimesrv.db"),
@@ -367,15 +392,18 @@ func TestCreateDirectories(t *testing.T) {
 		// Check library path
 		assertDirExists(t, cfg.Media.LibraryPath)
 
+		// Check media path
+		assertDirExists(t, cfg.Media.MediaPath)
+
+		// Check staging path
+		assertDirExists(t, cfg.Media.StagingPath)
+
 		// Check trash path
 		assertDirExists(t, cfg.Media.TrashPath)
 
 		// Check trash subdirectories
 		assertDirExists(t, filepath.Join(cfg.Media.TrashPath, "original"))
 		assertDirExists(t, filepath.Join(cfg.Media.TrashPath, "transcoded"))
-
-		// Check transcoding output path
-		assertDirExists(t, cfg.Transcoding.OutputPath)
 
 		// Check database directory
 		assertDirExists(t, filepath.Dir(cfg.Database.Path))
@@ -390,10 +418,12 @@ func TestCreateDirectories(t *testing.T) {
 		cfg := &Config{
 			Media: MediaConfig{
 				LibraryPath: tempDir,
+				MediaPath:   filepath.Join(tempDir, "media"),
+				StagingPath: filepath.Join(tempDir, "staging"),
 				TrashPath:   filepath.Join(tempDir, "trash"),
 			},
 			Transcoding: TranscodingConfig{
-				OutputPath: filepath.Join(tempDir, "transcoded"),
+				SegmentDuration: 4,
 			},
 			Database: DatabaseConfig{
 				Path: filepath.Join(tempDir, "db.db"),
@@ -417,10 +447,12 @@ func TestCreateDirectories(t *testing.T) {
 		cfg := &Config{
 			Media: MediaConfig{
 				LibraryPath: filepath.Join(tempDir, "media"),
+				MediaPath:   filepath.Join(tempDir, "media", "media"),
+				StagingPath: filepath.Join(tempDir, "media", "staging"),
 				TrashPath:   filepath.Join(tempDir, "media", "trash"),
 			},
 			Transcoding: TranscodingConfig{
-				OutputPath: filepath.Join(tempDir, "media", "transcoded"),
+				SegmentDuration: 4,
 			},
 			Database: DatabaseConfig{
 				Path: filepath.Join(tempDir, "data", "vimesrv.db"),
@@ -446,10 +478,12 @@ func TestCreateDirectories(t *testing.T) {
 		cfg := &Config{
 			Media: MediaConfig{
 				LibraryPath: filepath.Join(tempDir, "media"),
+				MediaPath:   filepath.Join(tempDir, "media", "media"),
+				StagingPath: filepath.Join(tempDir, "media", "staging"),
 				TrashPath:   filepath.Join(tempDir, "media", "trash"),
 			},
 			Transcoding: TranscodingConfig{
-				OutputPath: filepath.Join(tempDir, "media", "transcoded"),
+				SegmentDuration: 4,
 			},
 			Database: DatabaseConfig{
 				Path: filepath.Join(tempDir, "data", "vimesrv.db"),
@@ -469,10 +503,12 @@ func TestCreateDirectories(t *testing.T) {
 		cfg := &Config{
 			Media: MediaConfig{
 				LibraryPath: filepath.Join(tempDir, "media"),
+				MediaPath:   filepath.Join(tempDir, "media", "media"),
+				StagingPath: filepath.Join(tempDir, "media", "staging"),
 				TrashPath:   filepath.Join(tempDir, "media", "trash"),
 			},
 			Transcoding: TranscodingConfig{
-				OutputPath: filepath.Join(tempDir, "media", "transcoded"),
+				SegmentDuration: 4,
 			},
 			Database: DatabaseConfig{
 				Path: filepath.Join(tempDir, "vimesrv.db"),
@@ -501,10 +537,12 @@ func TestCreateDirectories_ErrorOnMkdirAll(t *testing.T) {
 		cfg := &Config{
 			Media: MediaConfig{
 				LibraryPath: conflictPath, // This is a file, not a directory
+				MediaPath:   filepath.Join(conflictPath, "media"),
+				StagingPath: filepath.Join(conflictPath, "staging"),
 				TrashPath:   filepath.Join(conflictPath, "trash"),
 			},
 			Transcoding: TranscodingConfig{
-				OutputPath: filepath.Join(conflictPath, "transcoded"),
+				SegmentDuration: 4,
 			},
 			Database: DatabaseConfig{
 				Path: filepath.Join(tempDir, "db.db"),
