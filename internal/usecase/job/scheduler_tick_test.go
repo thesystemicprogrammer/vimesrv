@@ -38,6 +38,11 @@ func (m *MockScheduleRepository) SetNextRunIfNull(ctx context.Context, id int64,
 	return args.Error(0)
 }
 
+func (m *MockScheduleRepository) SetNextRun(ctx context.Context, id int64, next time.Time) error {
+	args := m.Called(ctx, id, next)
+	return args.Error(0)
+}
+
 func (m *MockScheduleRepository) ListDue(ctx context.Context, limit int) ([]*domain.Schedule, error) {
 	args := m.Called(ctx, limit)
 	if args.Get(0) == nil {

@@ -16,12 +16,17 @@ func TestNewRobfigCronParser(t *testing.T) {
 	assert.NotNil(t, parser.parser)
 }
 
-// TestNewSecondBasedCronParser tests second-based parser initialization
-func TestNewSecondBasedCronParser(t *testing.T) {
-	parser := NewSecondBasedCronParser()
+// TestNewRobfigCronParser_SupportsSeconds tests that the parser supports second-level precision
+func TestNewRobfigCronParser_SupportsSeconds(t *testing.T) {
+	parser := NewRobfigCronParser()
 
 	assert.NotNil(t, parser)
 	assert.NotNil(t, parser.parser)
+
+	// Verify it can parse 6-field (second-based) cron expressions
+	schedule, err := parser.Parse("*/5 * * * * *")
+	require.NoError(t, err)
+	assert.NotNil(t, schedule)
 }
 
 // TestRobfigCronParser_Parse_ValidSpecs tests parsing valid cron specs
@@ -34,35 +39,35 @@ func TestRobfigCronParser_Parse_ValidSpecs(t *testing.T) {
 	}{
 		{
 			name: "Every minute",
-			spec: "* * * * *",
+			spec: "0 * * * * *",
 		},
 		{
 			name: "Every 5 minutes",
-			spec: "*/5 * * * *",
+			spec: "0 */5 * * * *",
 		},
 		{
 			name: "Every hour",
-			spec: "0 * * * *",
+			spec: "0 0 * * * *",
 		},
 		{
 			name: "Daily at midnight",
-			spec: "0 0 * * *",
+			spec: "0 0 0 * * *",
 		},
 		{
 			name: "Every Monday at 9am",
-			spec: "0 9 * * 1",
+			spec: "0 0 9 * * 1",
 		},
 		{
 			name: "First day of month",
-			spec: "0 0 1 * *",
+			spec: "0 0 0 1 * *",
 		},
 		{
 			name: "Specific time",
-			spec: "30 15 * * *", // 3:30 PM daily
+			spec: "0 30 15 * * *", // 3:30 PM daily
 		},
 		{
 			name: "Complex schedule",
-			spec: "15,45 */2 * * 1-5", // 15 and 45 minutes past every 2 hours on weekdays
+			spec: "0 15,45 */2 * * 1-5", // 15 and 45 minutes past every 2 hours on weekdays
 		},
 	}
 
@@ -98,24 +103,28 @@ func TestRobfigCronParser_Parse_InvalidSpecs(t *testing.T) {
 			spec: "* * *",
 		},
 		{
+			name: "5-field format (old style)",
+			spec: "* * * * *",
+		},
+		{
 			name: "Too many fields",
 			spec: "* * * * * * *",
 		},
 		{
 			name: "Invalid characters",
-			spec: "abc def ghi jkl mno",
+			spec: "abc def ghi jkl mno pqr",
 		},
 		{
 			name: "Out of range minute",
-			spec: "60 * * * *",
+			spec: "0 60 * * * *",
 		},
 		{
 			name: "Out of range hour",
-			spec: "0 24 * * *",
+			spec: "0 0 24 * * *",
 		},
 		{
 			name: "Invalid range",
-			spec: "0 10-5 * * *",
+			spec: "0 0 10-5 * * *",
 		},
 	}
 
@@ -134,7 +143,7 @@ func TestRobfigCronParser_NextCalculation(t *testing.T) {
 	parser := NewRobfigCronParser()
 
 	// Every hour at minute 30
-	schedule, err := parser.Parse("30 * * * *")
+	schedule, err := parser.Parse("0 30 * * * *")
 	require.NoError(t, err)
 
 	// Current time: 12:00
@@ -157,7 +166,7 @@ func TestRobfigCronParser_DailySchedule(t *testing.T) {
 	parser := NewRobfigCronParser()
 
 	// Daily at 3:00 AM
-	schedule, err := parser.Parse("0 3 * * *")
+	schedule, err := parser.Parse("0 0 3 * * *")
 	require.NoError(t, err)
 
 	// Current time: Jan 1, 2024 at 2:00 AM
@@ -180,7 +189,7 @@ func TestRobfigCronParser_WeeklySchedule(t *testing.T) {
 	parser := NewRobfigCronParser()
 
 	// Every Monday at 9:00 AM
-	schedule, err := parser.Parse("0 9 * * 1")
+	schedule, err := parser.Parse("0 0 9 * * 1")
 	require.NoError(t, err)
 
 	// Current time: Monday, Jan 1, 2024 at 8:00 AM
@@ -203,7 +212,7 @@ func TestRobfigCronParser_MonthlySchedule(t *testing.T) {
 	parser := NewRobfigCronParser()
 
 	// First day of month at midnight
-	schedule, err := parser.Parse("0 0 1 * *")
+	schedule, err := parser.Parse("0 0 0 1 * *")
 	require.NoError(t, err)
 
 	// Current time: Jan 15, 2024
@@ -220,7 +229,7 @@ func TestRobfigCronParser_MultipleExecutions(t *testing.T) {
 	parser := NewRobfigCronParser()
 
 	// Every 15 minutes
-	schedule, err := parser.Parse("*/15 * * * *")
+	schedule, err := parser.Parse("0 */15 * * * *")
 	require.NoError(t, err)
 
 	// Start at 12:00
@@ -242,9 +251,9 @@ func TestRobfigCronParser_MultipleExecutions(t *testing.T) {
 	}
 }
 
-// TestSecondBasedCronParser_Parse tests second-based parsing
-func TestSecondBasedCronParser_Parse(t *testing.T) {
-	parser := NewSecondBasedCronParser()
+// TestRobfigCronParser_SecondPrecision tests second-based parsing
+func TestRobfigCronParser_SecondPrecision(t *testing.T) {
+	parser := NewRobfigCronParser()
 
 	// Every 5 seconds
 	schedule, err := parser.Parse("*/5 * * * * *")
@@ -260,9 +269,9 @@ func TestSecondBasedCronParser_Parse(t *testing.T) {
 	assert.Equal(t, expected, next)
 }
 
-// TestSecondBasedCronParser_NextCalculation tests next calculation with seconds
-func TestSecondBasedCronParser_NextCalculation(t *testing.T) {
-	parser := NewSecondBasedCronParser()
+// TestRobfigCronParser_SecondCalculation tests next calculation with seconds
+func TestRobfigCronParser_SecondCalculation(t *testing.T) {
+	parser := NewRobfigCronParser()
 
 	// Every 10 seconds
 	schedule, err := parser.Parse("*/10 * * * * *")
@@ -297,19 +306,19 @@ func TestRobfigCronParser_EdgeCases(t *testing.T) {
 	}{
 		{
 			name:     "End of month",
-			spec:     "0 0 31 * *",
+			spec:     "0 0 0 31 * *",
 			fromTime: time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
 			expected: time.Date(2024, 1, 31, 0, 0, 0, 0, time.UTC),
 		},
 		{
 			name:     "February 29 (leap year)",
-			spec:     "0 0 29 2 *",
+			spec:     "0 0 0 29 2 *",
 			fromTime: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
 			expected: time.Date(2024, 2, 29, 0, 0, 0, 0, time.UTC),
 		},
 		{
 			name:     "End of year",
-			spec:     "0 0 31 12 *",
+			spec:     "0 0 0 31 12 *",
 			fromTime: time.Date(2024, 12, 30, 0, 0, 0, 0, time.UTC),
 			expected: time.Date(2024, 12, 31, 0, 0, 0, 0, time.UTC),
 		},

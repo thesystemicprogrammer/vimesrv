@@ -35,12 +35,19 @@ type ServerConfig struct {
 }
 
 type MediaConfig struct {
-	LibraryPath           string   `mapstructure:"library_path"`
-	MediaPath             string   `mapstructure:"media_path"`
-	StagingPath           string   `mapstructure:"staging_path"`
-	TrashPath             string   `mapstructure:"trash_path"`
-	SupportedFormats      []string `mapstructure:"supported_formats"`
-	FFProbeTimeoutSeconds int      `mapstructure:"ffprobe_timeout_seconds"`
+	LibraryPath           string            `mapstructure:"library_path"`
+	MediaPath             string            `mapstructure:"media_path"`
+	StagingPath           string            `mapstructure:"staging_path"`
+	TrashPath             string            `mapstructure:"trash_path"`
+	SupportedFormats      []string          `mapstructure:"supported_formats"`
+	FFProbeTimeoutSeconds int               `mapstructure:"ffprobe_timeout_seconds"`
+	LibraryScan           LibraryScanConfig `mapstructure:"library_scan"`
+}
+
+type LibraryScanConfig struct {
+	Enabled  bool   `mapstructure:"enabled"`
+	CronSpec string `mapstructure:"cron_spec"`
+	Priority int    `mapstructure:"priority"`
 }
 
 type TranscodingConfig struct {
@@ -201,6 +208,18 @@ func (m *MediaConfig) Validate() error {
 
 	if m.FFProbeTimeoutSeconds < 1 || m.FFProbeTimeoutSeconds > 300 {
 		return fmt.Errorf("ffprobe_timeout_seconds must be between 1 and 300, got %d", m.FFProbeTimeoutSeconds)
+	}
+
+	if err := m.LibraryScan.Validate(); err != nil {
+		return fmt.Errorf("library_scan: %w", err)
+	}
+
+	return nil
+}
+
+func (l *LibraryScanConfig) Validate() error {
+	if l.Enabled && l.CronSpec == "" {
+		return fmt.Errorf("cron_spec cannot be empty when library scan is enabled")
 	}
 
 	return nil

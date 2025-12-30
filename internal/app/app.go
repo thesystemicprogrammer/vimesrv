@@ -21,6 +21,8 @@ type Application struct {
 	db         *database.DB
 	httpServer *server.HTTPServer
 	jobManager *job.JobManager
+	adapters   *Adapters
+	useCases   *UseCases
 }
 
 func NewApplication(cfg *config.Config) (*Application, error) {
@@ -54,31 +56,30 @@ func (app *Application) initialize() error {
 		}
 	}()
 
-	adapters := initAdapters(app.config, app.db)
+	app.adapters = initAdapters(app.config, app.db)
 
 	// Validate external dependencies are available
-	if err := validateExternalDependencies(adapters); err != nil {
+	if err := validateExternalDependencies(app.adapters); err != nil {
 		return fmt.Errorf("external dependency validation failed: %w", err)
 	}
 
-	useCases := initUseCases(app.config, adapters)
-
+	app.useCases = initUseCases(app.config, app.adapters)
 	app.httpServer = initializeHTTPServer(app.config.Server)
 
-	jobManager, err := initializeJobManager(app.config, adapters, useCases)
+	jobManager, err := initializeJobManager(app.config, app.adapters, app.useCases)
 	if err != nil {
 		return fmt.Errorf("failed to initialize job manager: %w", err)
 	}
 	app.jobManager = jobManager
 
-	registerJobs(useCases, adapters)
+	registerJobs(app.useCases, app.adapters)
 
 	// Validate that all required job handlers are registered
-	if err := validateJobHandlers(adapters.HandlerRegistry); err != nil {
+	if err := validateJobHandlers(app.adapters.HandlerRegistry); err != nil {
 		return fmt.Errorf("job handler validation failed: %w", err)
 	}
 
-	registerHTTPHandlers(useCases, app.httpServer)
+	registerHTTPHandlers(app.useCases, app.httpServer)
 
 	initSuccess = true // Mark initialization as successful
 	return nil
@@ -97,6 +98,15 @@ func (app *Application) Start() error {
 	// Start job manager (returns immediately after launching workers)
 	if err := app.jobManager.Start(); err != nil {
 		return fmt.Errorf("job manager startup error: %w", err)
+	}
+
+	// Initialize startup schedules (library scan, etc.)
+	// This must happen after job manager starts so scheduler can process schedules
+	ctx := context.Background()
+	if err := initStartupSchedules(ctx, app.config, app.useCases, app.adapters); err != nil {
+		// Fatal error - invalid configuration should prevent server from starting
+		logger.Error().Err(err).Msg("failed to initialize startup schedules")
+		return fmt.Errorf("startup schedules initialization failed: %w", err)
 	}
 
 	// Channel to listen for interrupt signal

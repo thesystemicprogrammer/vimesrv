@@ -165,6 +165,11 @@ func TestMediaConfig_Validate(t *testing.T) {
 				TrashPath:             "/media/trash",
 				SupportedFormats:      []string{".mp4", ".mkv", ".avi"},
 				FFProbeTimeoutSeconds: 30,
+				LibraryScan: LibraryScanConfig{
+					Enabled:  true,
+					CronSpec: "0 * * * * *",
+					Priority: 0,
+				},
 			},
 			wantErr: false,
 		},
@@ -177,6 +182,11 @@ func TestMediaConfig_Validate(t *testing.T) {
 				TrashPath:             "/path/to/trash",
 				SupportedFormats:      []string{".mp4", ".mkv", ".avi", ".mov", ".webm", ".flv"},
 				FFProbeTimeoutSeconds: 30,
+				LibraryScan: LibraryScanConfig{
+					Enabled:  false,
+					CronSpec: "",
+					Priority: 0,
+				},
 			},
 			wantErr: false,
 		},
@@ -222,6 +232,62 @@ func TestMediaConfig_Validate(t *testing.T) {
 				LibraryPath:      "/media/library",
 				TrashPath:        "/media/trash",
 				SupportedFormats: []string{".mp4", "mkv", ".avi"},
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.config.Validate()
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestLibraryScanConfig_Validate(t *testing.T) {
+	tests := []struct {
+		name    string
+		config  LibraryScanConfig
+		wantErr bool
+	}{
+		{
+			name: "valid config enabled with cron spec",
+			config: LibraryScanConfig{
+				Enabled:  true,
+				CronSpec: "0 * * * * *",
+				Priority: 0,
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid config disabled with empty cron spec",
+			config: LibraryScanConfig{
+				Enabled:  false,
+				CronSpec: "",
+				Priority: 0,
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid config disabled with cron spec",
+			config: LibraryScanConfig{
+				Enabled:  false,
+				CronSpec: "0 * * * * *",
+				Priority: 5,
+			},
+			wantErr: false,
+		},
+		{
+			name: "enabled with empty cron spec should fail",
+			config: LibraryScanConfig{
+				Enabled:  true,
+				CronSpec: "",
+				Priority: 0,
 			},
 			wantErr: true,
 		},
@@ -1000,6 +1066,11 @@ func TestConfig_Validate(t *testing.T) {
 		TrashPath:             "/media/trash",
 		SupportedFormats:      []string{".mp4", ".mkv"},
 		FFProbeTimeoutSeconds: 30,
+		LibraryScan: LibraryScanConfig{
+			Enabled:  true,
+			CronSpec: "0 * * * * *",
+			Priority: 0,
+		},
 	}
 
 	invalidMediaConfig := MediaConfig{

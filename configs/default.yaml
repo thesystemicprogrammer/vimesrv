@@ -29,6 +29,10 @@ media:
     - ".flv"
     - ".wmv"
     - ".m4v"
+  library_scan:
+    enabled: true
+    cron_spec: "0 * * * * *" # Every minute at second 0 (6-field format: sec min hour day month weekday)
+    priority: 0
 
 transcoding:
   segment_duration: 4

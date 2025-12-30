@@ -84,6 +84,22 @@ func (repo *ScheduleRepository) SetNextRunIfNull(ctx context.Context, id int64, 
 	return err
 }
 
+// SetNextRun unconditionally updates the next_run_at for a schedule.
+// This is used when ForceNextRunNow is true to always reset the schedule to run immediately.
+func (repo *ScheduleRepository) SetNextRun(ctx context.Context, id int64, nextRunAt time.Time) error {
+	const command = `
+	UPDATE schedules
+	SET next_run_at=?, updated_at=CURRENT_TIMESTAMP
+	WHERE id=?
+	`
+	_, err := repo.db.ExecContext(ctx, command, nextRunAt.UTC(), id)
+	if err != nil {
+		logger.Error().Err(err).Int64("ID", id).Msg("sql error while unconditionally setting next run")
+	}
+
+	return err
+}
+
 func (repo *ScheduleRepository) ListDue(ctx context.Context, limit int) ([]*domain.Schedule, error) {
 	const command = `
 	SELECT id, name, cron_spec, job_type, payload, priority, max_attempts, enabled, next_run_at, last_enqueued_at, updated_at

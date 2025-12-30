@@ -11,19 +11,17 @@ type RobfigCronParser struct {
 	parser cron.Parser
 }
 
-func NewRobfigCronParser() *RobfigCronParser {
-	return &RobfigCronParser{
-		parser: cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor),
-	}
-}
-
-// NewSecondBasedCronParser creates a cron parser that supports second-level precision.
-// This is used for testing to allow faster test execution (e.g., "*/2 * * * * *" = every 2 seconds)
-// instead of waiting for minute-based schedules.
+// NewRobfigCronParser creates a cron parser that supports second-level precision.
+// This parser is used for all cron expressions in the system, including production use cases
+// like periodic library scans that need sub-minute intervals.
 //
-// Format: "second minute hour day month weekday"
-// Example: "*/5 * * * * *" = every 5 seconds
-func NewSecondBasedCronParser() *RobfigCronParser {
+// Format: "second minute hour day month weekday" (6 fields required)
+// Examples:
+//   - "*/30 * * * * *" = every 30 seconds
+//   - "0 * * * * *" = every minute (at :00 seconds)
+//   - "0 */5 * * * *" = every 5 minutes
+//   - "0 0 3 * * *" = daily at 3:00 AM
+func NewRobfigCronParser() *RobfigCronParser {
 	return &RobfigCronParser{
 		parser: cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor),
 	}

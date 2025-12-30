@@ -482,3 +482,229 @@ func TestUpsertScheduleUseCase_Execute_PayloadMarshaling(t *testing.T) {
 	assert.Equal(t, float64(42), unmarshaled["number"]) // JSON numbers unmarshal as float64
 	mockRepo.AssertExpectations(t)
 }
+
+// TestUpsertScheduleUseCase_Execute_ForceNextRunNow_True tests that ForceNextRunNow sets next_run_at to NOW
+func TestUpsertScheduleUseCase_Execute_ForceNextRunNow_True(t *testing.T) {
+	ctx := context.Background()
+	mockRepo := new(MockScheduleRepository)
+	mockParser := new(MockCronParser)
+	mockClock := new(MockClock)
+
+	cfg := config.JobConfig{
+		MaxAttempts: 5,
+	}
+
+	now := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	input := UpsertScheduleInput{
+		Name:            "test-schedule",
+		CronSpec:        "0 * * * * *",
+		JobType:         "test-job",
+		Priority:        5,
+		Enabled:         true,
+		ForceNextRunNow: true, // Force immediate execution
+	}
+
+	// Validate cron
+	mockParser.On("Parse", "0 * * * * *").Return(new(MockCronSchedule), nil).Once()
+
+	// Upsert schedule
+	mockRepo.On("Upsert", ctx, mock.Anything).Return(int64(1), nil)
+
+	// GetByName - return schedule with NextRunAt not set
+	mockRepo.On("GetByName", ctx, "test-schedule").Return(&domain.Schedule{
+		ID:          1,
+		Name:        "test-schedule",
+		CronSpec:    "0 * * * * *",
+		JobType:     "test-job",
+		Priority:    5,
+		MaxAttempts: 5,
+		Enabled:     true,
+		NextRunAt:   sql.NullTime{Valid: false}, // Not set yet
+	}, nil)
+
+	// Should set to NOW
+	mockClock.On("Now").Return(now)
+	mockRepo.On("SetNextRun", ctx, int64(1), now).Return(nil)
+
+	uc := NewUpsertScheduleUseCase(cfg, mockRepo, mockParser, mockClock)
+
+	id, err := uc.Execute(ctx, input)
+
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), id)
+	mockRepo.AssertExpectations(t)
+	mockParser.AssertExpectations(t)
+	mockClock.AssertExpectations(t)
+}
+
+// TestUpsertScheduleUseCase_Execute_ForceNextRunNow_UpdatesExisting tests that ForceNextRunNow updates existing schedule to NOW
+func TestUpsertScheduleUseCase_Execute_ForceNextRunNow_UpdatesExisting(t *testing.T) {
+	ctx := context.Background()
+	mockRepo := new(MockScheduleRepository)
+	mockParser := new(MockCronParser)
+	mockClock := new(MockClock)
+
+	cfg := config.JobConfig{
+		MaxAttempts: 5,
+	}
+
+	now := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
+	existingNextRun := time.Date(2024, 1, 1, 13, 0, 0, 0, time.UTC)
+
+	input := UpsertScheduleInput{
+		Name:            "test-schedule",
+		CronSpec:        "0 * * * * *",
+		JobType:         "test-job",
+		Priority:        5,
+		Enabled:         true,
+		ForceNextRunNow: true, // Force immediate execution
+	}
+
+	// Validate cron
+	mockParser.On("Parse", "0 * * * * *").Return(new(MockCronSchedule), nil).Once()
+
+	// Upsert schedule
+	mockRepo.On("Upsert", ctx, mock.Anything).Return(int64(1), nil)
+
+	// GetByName - return schedule with NextRunAt already set to future time
+	mockRepo.On("GetByName", ctx, "test-schedule").Return(&domain.Schedule{
+		ID:          1,
+		Name:        "test-schedule",
+		CronSpec:    "0 * * * * *",
+		JobType:     "test-job",
+		Priority:    5,
+		MaxAttempts: 5,
+		Enabled:     true,
+		NextRunAt:   sql.NullTime{Valid: true, Time: existingNextRun}, // Already set to future
+	}, nil)
+
+	// Should update to NOW regardless of existing value
+	mockClock.On("Now").Return(now)
+	mockRepo.On("SetNextRun", ctx, int64(1), now).Return(nil)
+
+	uc := NewUpsertScheduleUseCase(cfg, mockRepo, mockParser, mockClock)
+
+	id, err := uc.Execute(ctx, input)
+
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), id)
+	mockRepo.AssertExpectations(t)
+	mockParser.AssertExpectations(t)
+	mockClock.AssertExpectations(t)
+}
+
+// TestUpsertScheduleUseCase_Execute_ForceNextRunNow_False tests that ForceNextRunNow=false uses cron next occurrence
+func TestUpsertScheduleUseCase_Execute_ForceNextRunNow_False(t *testing.T) {
+	ctx := context.Background()
+	mockRepo := new(MockScheduleRepository)
+	mockParser := new(MockCronParser)
+	mockClock := new(MockClock)
+	mockCronSchedule := new(MockCronSchedule)
+
+	cfg := config.JobConfig{
+		MaxAttempts: 5,
+	}
+
+	now := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
+	nextRun := now.Add(1 * time.Hour) // Next occurrence
+
+	input := UpsertScheduleInput{
+		Name:            "test-schedule",
+		CronSpec:        "0 * * * * *",
+		JobType:         "test-job",
+		Priority:        5,
+		Enabled:         true,
+		ForceNextRunNow: false, // Use normal cron scheduling
+	}
+
+	// Validate cron
+	mockParser.On("Parse", "0 * * * * *").Return(mockCronSchedule, nil).Once()
+
+	// Upsert schedule
+	mockRepo.On("Upsert", ctx, mock.Anything).Return(int64(1), nil)
+
+	// GetByName - return schedule with NextRunAt not set
+	mockRepo.On("GetByName", ctx, "test-schedule").Return(&domain.Schedule{
+		ID:          1,
+		Name:        "test-schedule",
+		CronSpec:    "0 * * * * *",
+		JobType:     "test-job",
+		Priority:    5,
+		MaxAttempts: 5,
+		Enabled:     true,
+		NextRunAt:   sql.NullTime{Valid: false}, // Not set yet
+	}, nil)
+
+	// Calculate next run time from cron
+	mockClock.On("Now").Return(now)
+	mockParser.On("Parse", "0 * * * * *").Return(mockCronSchedule, nil).Once()
+	mockCronSchedule.On("Next", now).Return(nextRun)
+
+	// Set next run time (only if NULL)
+	mockRepo.On("SetNextRunIfNull", ctx, int64(1), nextRun).Return(nil)
+
+	uc := NewUpsertScheduleUseCase(cfg, mockRepo, mockParser, mockClock)
+
+	id, err := uc.Execute(ctx, input)
+
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), id)
+	mockRepo.AssertExpectations(t)
+	mockParser.AssertExpectations(t)
+	mockClock.AssertExpectations(t)
+	mockCronSchedule.AssertExpectations(t)
+}
+
+// TestUpsertScheduleUseCase_Execute_ForceNextRunNow_False_PreservesExisting tests that existing schedule is preserved when ForceNextRunNow=false
+func TestUpsertScheduleUseCase_Execute_ForceNextRunNow_False_PreservesExisting(t *testing.T) {
+	ctx := context.Background()
+	mockRepo := new(MockScheduleRepository)
+	mockParser := new(MockCronParser)
+	mockClock := new(MockClock)
+
+	cfg := config.JobConfig{
+		MaxAttempts: 5,
+	}
+
+	existingNextRun := time.Date(2024, 1, 1, 13, 0, 0, 0, time.UTC)
+
+	input := UpsertScheduleInput{
+		Name:            "test-schedule",
+		CronSpec:        "0 * * * * *",
+		JobType:         "test-job",
+		Priority:        5,
+		Enabled:         true,
+		ForceNextRunNow: false, // Preserve existing schedule
+	}
+
+	// Validate cron
+	mockParser.On("Parse", "0 * * * * *").Return(new(MockCronSchedule), nil).Once()
+
+	// Upsert schedule
+	mockRepo.On("Upsert", ctx, mock.Anything).Return(int64(1), nil)
+
+	// GetByName - return schedule with NextRunAt already set
+	mockRepo.On("GetByName", ctx, "test-schedule").Return(&domain.Schedule{
+		ID:          1,
+		Name:        "test-schedule",
+		CronSpec:    "0 * * * * *",
+		JobType:     "test-job",
+		Priority:    5,
+		MaxAttempts: 5,
+		Enabled:     true,
+		NextRunAt:   sql.NullTime{Valid: true, Time: existingNextRun}, // Already set
+	}, nil)
+
+	// Should NOT call SetNextRunIfNull since NextRunAt is already valid
+	// Clock and parser should not be called either
+
+	uc := NewUpsertScheduleUseCase(cfg, mockRepo, mockParser, mockClock)
+
+	id, err := uc.Execute(ctx, input)
+
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), id)
+	mockRepo.AssertExpectations(t)
+	mockParser.AssertExpectations(t)
+}

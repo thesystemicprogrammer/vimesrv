@@ -213,9 +213,9 @@ func setupTestJobManagerWithSecondCron(t *testing.T, cfg config.JobConfig, handl
 		handlerRegistry.Register(jobType, handler)
 	}
 
-	// Create components with second-based cron parser
+	// Create components with second-based cron parser for fast tests
 	backoffStrategy := NewExponentialBackoff(1, 60)
-	cronParser := NewSecondBasedCronParser() // Use second-based parser for fast tests
+	cronParser := NewRobfigCronParser() // Supports second-level precision by default
 	clock := ports.RealClock{}
 
 	// Create use cases

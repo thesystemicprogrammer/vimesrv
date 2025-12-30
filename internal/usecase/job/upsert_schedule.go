@@ -12,12 +12,13 @@ import (
 )
 
 type UpsertScheduleInput struct {
-	Name     string
-	CronSpec string
-	JobType  string
-	Payload  any
-	Priority int
-	Enabled  bool
+	Name            string
+	CronSpec        string
+	JobType         string
+	Payload         any
+	Priority        int
+	Enabled         bool
+	ForceNextRunNow bool // If true, always sets next_run_at to NOW (even on restart)
 }
 
 type UpsertScheduleUseCase struct {
@@ -82,13 +83,24 @@ func (uc *UpsertScheduleUseCase) Execute(ctx context.Context, upsertScheduleInpu
 		logger.Error().Err(err).Msg("error get job by name")
 		return 0, err
 	}
-	if !saved.NextRunAt.Valid {
+
+	if upsertScheduleInput.ForceNextRunNow {
+		// Always set to NOW when ForceNextRunNow is true (runs immediately even on restart)
 		now := uc.clock.Now()
-		parsed, _ := uc.cronParser.Parse(saved.CronSpec)
-		next := parsed.Next(now)
-		if err := uc.scheduleRepository.SetNextRunIfNull(ctx, saved.ID, next); err != nil {
-			logger.Error().Err(err).Msg("error setting next run")
+		if err := uc.scheduleRepository.SetNextRun(ctx, saved.ID, now); err != nil {
+			logger.Error().Err(err).Msg("error forcing next run to now")
 			return 0, err
+		}
+	} else {
+		// Only set next_run_at if it's NULL (first time creation)
+		if !saved.NextRunAt.Valid {
+			now := uc.clock.Now()
+			parsed, _ := uc.cronParser.Parse(saved.CronSpec)
+			next := parsed.Next(now)
+			if err := uc.scheduleRepository.SetNextRunIfNull(ctx, saved.ID, next); err != nil {
+				logger.Error().Err(err).Msg("error setting next run")
+				return 0, err
+			}
 		}
 	}
 
