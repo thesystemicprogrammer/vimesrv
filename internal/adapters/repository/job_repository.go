@@ -18,6 +18,36 @@ func NewJobRepository(db *database.DB) *JobRepository {
 	return &JobRepository{db: db.DB}
 }
 
+// scanJobRow scans a row into a Job struct and converts the payload string to json.RawMessage
+func (repo *JobRepository) scanJobRow(s scanner) (*domain.Job, error) {
+	var job domain.Job
+	var payloadStr string
+
+	err := s.Scan(
+		&job.ID,
+		&job.Type,
+		&payloadStr,
+		&job.Status,
+		&job.Priority,
+		&job.RunAt,
+		&job.Attempts,
+		&job.MaxAttempts,
+		&job.LastError,
+		&job.WorkerID,
+		&job.ScheduledID,
+		&job.CreatedAt,
+		&job.StartedAt,
+		&job.FinishedAt,
+		&job.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	job.Payload = []byte(payloadStr)
+	return &job, nil
+}
+
 func (repo *JobRepository) Enqueue(ctx context.Context, j *domain.Job) (int64, error) {
 	const command = `
 	INSERT INTO jobs (type, payload, status, priority, run_at, attempt, max_attempts, created_at, updated_at)
@@ -52,26 +82,7 @@ func (repo *JobRepository) ClaimNextJobDue(ctx context.Context, workerID string)
 	)
 	RETURNING id, type, payload, status, priority, run_at, attempt, max_attempts, last_error, worker_id, scheduled_id, created_at, started_at, finished_at, updated_at
 	`
-	row := repo.db.QueryRowContext(ctx, command, workerID)
-	var job domain.Job
-	var payloadStr string // Scan as string first due to SQLite TEXT type
-	err := row.Scan(
-		&job.ID,
-		&job.Type,
-		&payloadStr, // Scan payload as string
-		&job.Status,
-		&job.Priority,
-		&job.RunAt,
-		&job.Attempts,
-		&job.MaxAttempts,
-		&job.LastError,
-		&job.WorkerID,
-		&job.ScheduledID,
-		&job.CreatedAt,
-		&job.StartedAt,
-		&job.FinishedAt,
-		&job.UpdatedAt,
-	)
+	job, err := repo.scanJobRow(repo.db.QueryRowContext(ctx, command, workerID))
 	if err == sql.ErrNoRows {
 		return nil, false, nil
 	}
@@ -79,9 +90,7 @@ func (repo *JobRepository) ClaimNextJobDue(ctx context.Context, workerID string)
 		logger.Error().Err(err).Msg("sql error claiming next job")
 		return nil, false, err
 	}
-	// Convert string to json.RawMessage
-	job.Payload = []byte(payloadStr)
-	return &job, true, nil
+	return job, true, nil
 }
 
 func (repo *JobRepository) MarkSuccess(ctx context.Context, jobID int64) error {
@@ -152,31 +161,12 @@ func (repo *JobRepository) FindStuckJobs(ctx context.Context, threshold time.Dur
 
 	var jobs []*domain.Job
 	for rows.Next() {
-		var job domain.Job
-		var payloadStr string
-		err := rows.Scan(
-			&job.ID,
-			&job.Type,
-			&payloadStr,
-			&job.Status,
-			&job.Priority,
-			&job.RunAt,
-			&job.Attempts,
-			&job.MaxAttempts,
-			&job.LastError,
-			&job.WorkerID,
-			&job.ScheduledID,
-			&job.CreatedAt,
-			&job.StartedAt,
-			&job.FinishedAt,
-			&job.UpdatedAt,
-		)
+		job, err := repo.scanJobRow(rows)
 		if err != nil {
 			logger.Error().Err(err).Msg("sql error scanning stuck job")
 			return nil, err
 		}
-		job.Payload = []byte(payloadStr)
-		jobs = append(jobs, &job)
+		jobs = append(jobs, job)
 	}
 
 	return jobs, rows.Err()

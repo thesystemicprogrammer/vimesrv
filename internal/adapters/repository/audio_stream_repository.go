@@ -76,21 +76,25 @@ func (r *AudioStreamRepository) GetByMediaID(ctx context.Context, mediaID string
 	var streams []*domain.AudioStream
 	for rows.Next() {
 		var stream domain.AudioStream
+		var language, channelLayout, title sql.NullString
 		err := rows.Scan(
 			&stream.ID,
 			&stream.MediaID,
 			&stream.StreamIndex,
 			&stream.Codec,
-			&stream.Language,
+			&language,
 			&stream.Channels,
-			&stream.ChannelLayout,
+			&channelLayout,
 			&stream.SampleRate,
-			&stream.Title,
+			&title,
 			&stream.CreatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan audio stream: %w", err)
 		}
+		stream.Language = language.String
+		stream.ChannelLayout = channelLayout.String
+		stream.Title = title.String
 		streams = append(streams, &stream)
 	}
 

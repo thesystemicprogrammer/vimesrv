@@ -2,7 +2,7 @@ package http
 
 import (
 	"fmt"
-	"strconv"
+	"sort"
 	"strings"
 
 	"github.com/thesystemicprogrammer/vimesrv/internal/domain"
@@ -106,22 +106,9 @@ func getQualitiesFromGroup(grouped *GroupedTranscodes) []string {
 	}
 
 	// Sort by height descending (1080p, 720p, 480p, 360p)
-	for i := 0; i < len(qualities); i++ {
-		for j := i + 1; j < len(qualities); j++ {
-			if extractHeight(qualities[i]) < extractHeight(qualities[j]) {
-				qualities[i], qualities[j] = qualities[j], qualities[i]
-			}
-		}
-	}
+	sort.Slice(qualities, func(i, j int) bool {
+		return extractHeight(qualities[i]) > extractHeight(qualities[j])
+	})
 
 	return qualities
-}
-
-// parseInt safely parses an integer from a string, returning 0 on error
-func parseInt(s string) int {
-	val, err := strconv.Atoi(s)
-	if err != nil {
-		return 0
-	}
-	return val
 }

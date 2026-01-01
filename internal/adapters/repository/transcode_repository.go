@@ -22,6 +22,32 @@ func NewTranscodeRepository(db *database.DB) ports.TranscodeRepository {
 	}
 }
 
+// scanTranscodeRow scans a row into a Transcode struct and converts string fields to domain types
+func (r *TranscodeRepository) scanTranscodeRow(s scanner) (*domain.Transcode, error) {
+	var transcode domain.Transcode
+	var trackType, status string
+
+	err := s.Scan(
+		&transcode.ID,
+		&transcode.MediaID,
+		&transcode.Quality,
+		&trackType,
+		&transcode.TrackIndex,
+		&status,
+		&transcode.OutputPath,
+		&transcode.CreatedAt,
+		&transcode.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	transcode.TrackType = domain.TrackType(trackType)
+	transcode.Status = domain.TranscodeStatus(status)
+
+	return &transcode, nil
+}
+
 // Create inserts a new transcode record
 func (r *TranscodeRepository) Create(ctx context.Context, transcode *domain.Transcode) error {
 	query := `
@@ -60,33 +86,15 @@ func (r *TranscodeRepository) Get(ctx context.Context, id string) (*domain.Trans
 		WHERE id = ?
 	`
 
-	var transcode domain.Transcode
-	var trackType, status string
-
-	err := r.db.QueryRowContext(ctx, query, id).Scan(
-		&transcode.ID,
-		&transcode.MediaID,
-		&transcode.Quality,
-		&trackType,
-		&transcode.TrackIndex,
-		&status,
-		&transcode.OutputPath,
-		&transcode.CreatedAt,
-		&transcode.UpdatedAt,
-	)
-
+	transcode, err := r.scanTranscodeRow(r.db.QueryRowContext(ctx, query, id))
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("transcode not found with id: %s", id)
 	}
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to query transcode: %w", err)
 	}
 
-	transcode.TrackType = domain.TrackType(trackType)
-	transcode.Status = domain.TranscodeStatus(status)
-
-	return &transcode, nil
+	return transcode, nil
 }
 
 // GetByMediaID retrieves all transcodes for a media file
@@ -108,27 +116,11 @@ func (r *TranscodeRepository) GetByMediaID(ctx context.Context, mediaID string) 
 
 	var transcodes []*domain.Transcode
 	for rows.Next() {
-		var transcode domain.Transcode
-		var trackType, status string
-
-		err := rows.Scan(
-			&transcode.ID,
-			&transcode.MediaID,
-			&transcode.Quality,
-			&trackType,
-			&transcode.TrackIndex,
-			&status,
-			&transcode.OutputPath,
-			&transcode.CreatedAt,
-			&transcode.UpdatedAt,
-		)
+		transcode, err := r.scanTranscodeRow(rows)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan transcode: %w", err)
 		}
-
-		transcode.TrackType = domain.TrackType(trackType)
-		transcode.Status = domain.TranscodeStatus(status)
-		transcodes = append(transcodes, &transcode)
+		transcodes = append(transcodes, transcode)
 	}
 
 	if err = rows.Err(); err != nil {
@@ -285,27 +277,11 @@ func (r *TranscodeRepository) ListPending(ctx context.Context, limit int) ([]*do
 
 	var transcodes []*domain.Transcode
 	for rows.Next() {
-		var transcode domain.Transcode
-		var trackType, status string
-
-		err := rows.Scan(
-			&transcode.ID,
-			&transcode.MediaID,
-			&transcode.Quality,
-			&trackType,
-			&transcode.TrackIndex,
-			&status,
-			&transcode.OutputPath,
-			&transcode.CreatedAt,
-			&transcode.UpdatedAt,
-		)
+		transcode, err := r.scanTranscodeRow(rows)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan transcode: %w", err)
 		}
-
-		transcode.TrackType = domain.TrackType(trackType)
-		transcode.Status = domain.TranscodeStatus(status)
-		transcodes = append(transcodes, &transcode)
+		transcodes = append(transcodes, transcode)
 	}
 
 	if err = rows.Err(); err != nil {

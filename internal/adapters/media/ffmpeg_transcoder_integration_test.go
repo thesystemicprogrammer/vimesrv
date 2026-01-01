@@ -331,7 +331,7 @@ func TestFFmpegTranscoder_RealVideo_ProbeSegments(t *testing.T) {
 	t.Logf("Total duration: %d ms (%d segments)", totalDuration, len(segments))
 
 	// Save segment timings
-	err = SaveSegmentTimings(outputPath, segments)
+	err = saveSegmentTimingsForTest(outputPath, segments)
 	if err != nil {
 		t.Fatalf("Failed to save segment timings: %v", err)
 	}

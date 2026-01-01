@@ -2,6 +2,7 @@ package media
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,6 +11,23 @@ import (
 
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/ports"
 )
+
+// saveSegmentTimingsForTest is a test helper that saves segment timing data to JSON
+func saveSegmentTimingsForTest(outputPath string, segments []ports.SegmentInfo) error {
+	data := struct {
+		Segments []ports.SegmentInfo `json:"segments"`
+	}{
+		Segments: segments,
+	}
+
+	jsonData, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	timingFilePath := filepath.Join(outputPath, "segments.json")
+	return os.WriteFile(timingFilePath, jsonData, 0644)
+}
 
 // TestNewFFmpegTranscoder tests the constructor
 func TestNewFFmpegTranscoder(t *testing.T) {
@@ -456,7 +474,7 @@ func TestSaveSegmentTimings(t *testing.T) {
 		{Number: 2, Duration: 3500},
 	}
 
-	err := SaveSegmentTimings(tempDir, segments)
+	err := saveSegmentTimingsForTest(tempDir, segments)
 	if err != nil {
 		t.Fatalf("Expected successful save, got error: %v", err)
 	}

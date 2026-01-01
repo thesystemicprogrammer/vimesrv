@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/thesystemicprogrammer/vimesrv/internal/domain"
 	"github.com/thesystemicprogrammer/vimesrv/internal/infrastructure/server"
+	"github.com/thesystemicprogrammer/vimesrv/internal/shared"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/config"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/logger"
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/media"
@@ -143,35 +144,8 @@ func (h *DASHHandler) ServeContent(c *gin.Context) {
 	}
 
 	// Parse path to determine content type and build file path
-	// Possible patterns:
-	//   - "{quality}/video/{segment}" -> video segment
-	//   - "audio-{idx}/{segment}" -> audio segment
-	//   - "subtitle-{idx}.vtt" -> subtitle file
-	parts := strings.Split(path, "/")
-
-	var filePath string
-	var contentType string
-	mediaPath := h.config.Media.MediaPath
-
-	if len(parts) == 1 && strings.HasPrefix(parts[0], "subtitle-") && strings.HasSuffix(parts[0], ".vtt") {
-		// Subtitle file: subtitle-{idx}.vtt
-		filePath = filepath.Join(mediaPath, id, "transcoded", parts[0])
-		contentType = "text/vtt"
-	} else if len(parts) == 2 && strings.HasPrefix(parts[0], "audio-") {
-		// Audio segment: audio-{idx}/{segment}
-		filePath = filepath.Join(mediaPath, id, "transcoded", parts[0], parts[1])
-		contentType = "audio/mp4"
-		if strings.HasSuffix(parts[1], ".m4s") {
-			contentType = "audio/iso.segment"
-		}
-	} else if len(parts) == 3 && parts[1] == "video" {
-		// Video segment: {quality}/video/{segment}
-		filePath = filepath.Join(mediaPath, id, "transcoded", parts[0], parts[1], parts[2])
-		contentType = "video/mp4"
-		if strings.HasSuffix(parts[2], ".m4s") {
-			contentType = "video/iso.segment"
-		}
-	} else {
+	pathInfo := parseContentPath(path)
+	if pathInfo == nil {
 		logger.Warn().Str("path", path).Msg("invalid DASH content path")
 		c.JSON(http.StatusBadRequest, server.ErrorResponse(
 			"INVALID_PATH",
@@ -180,6 +154,9 @@ func (h *DASHHandler) ServeContent(c *gin.Context) {
 		))
 		return
 	}
+
+	mediaPath := h.config.Media.MediaPath
+	filePath := filepath.Join(mediaPath, id, pathInfo.FilePath)
 
 	// Security: prevent directory traversal
 	absFilePath, err := filepath.Abs(filePath)
@@ -220,7 +197,7 @@ func (h *DASHHandler) ServeContent(c *gin.Context) {
 
 	logger.Debug().Str("media_id", id).Str("path", absFilePath).Msg("serving content file")
 
-	c.Header("Content-Type", contentType)
+	c.Header("Content-Type", pathInfo.ContentType)
 	c.Header("Cache-Control", "max-age=31536000") // Content is immutable
 	c.File(absFilePath)
 }
@@ -235,12 +212,11 @@ func (h *DASHHandler) generateMPD(
 	subtitleStreams []*domain.SubtitleStream,
 ) (string, error) {
 	qualities := getQualitiesFromGroup(grouped)
-
-	// Calculate media duration in ISO 8601 format (PT{duration}S)
 	durationISO := fmt.Sprintf("PT%dS", mediaFile.Duration)
 
-	// Start MPD
 	var sb strings.Builder
+
+	// Write MPD header
 	sb.WriteString(`<?xml version="1.0" encoding="UTF-8"?>`)
 	sb.WriteString("\n")
 	sb.WriteString(`<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" `)
@@ -248,51 +224,70 @@ func (h *DASHHandler) generateMPD(
 	sb.WriteString(`type="static" `)
 	sb.WriteString(fmt.Sprintf(`mediaPresentationDuration="%s">`, durationISO))
 	sb.WriteString("\n")
-
-	// Period
 	sb.WriteString(fmt.Sprintf(`  <Period duration="%s">`, durationISO))
 	sb.WriteString("\n")
 
-	// Video AdaptationSet
-	if len(qualities) > 0 {
-		sb.WriteString(`    <AdaptationSet mimeType="video/mp4" segmentAlignment="true" startWithSAP="1">`)
-		sb.WriteString("\n")
+	// Build adaptation sets
+	sb.WriteString(h.buildVideoAdaptationSet(mediaID, qualities, grouped))
+	sb.WriteString(h.buildAudioAdaptationSets(mediaID, audioStreams, grouped))
+	sb.WriteString(h.buildSubtitleAdaptationSets(mediaID, subtitleStreams, grouped))
 
-		for _, quality := range qualities {
-			transcode := grouped.VideoTranscodes[quality]
-			if transcode == nil {
-				continue
-			}
+	// Close Period and MPD
+	sb.WriteString(`  </Period>`)
+	sb.WriteString("\n")
+	sb.WriteString(`</MPD>`)
+	sb.WriteString("\n")
 
-			// Load segment info
-			segmentInfo, err := h.loadSegmentInfo(transcode.OutputPath)
-			if err != nil {
-				logger.Warn().Err(err).Str("quality", quality).Msg("failed to load segment info")
-				continue
-			}
+	return sb.String(), nil
+}
 
-			height := extractHeight(quality)
-			sb.WriteString(fmt.Sprintf(`      <Representation id="video_%s" bandwidth="%d" width="%d" height="%d" codecs="avc1.4d401f">`,
-				quality, 5000000, height*16/9, height)) // Estimate width as 16:9
-			sb.WriteString("\n")
-			sb.WriteString(fmt.Sprintf(`        <BaseURL>/stream/dash/content/%s/%s/video/</BaseURL>`, mediaID, quality))
-			sb.WriteString("\n")
+// buildVideoAdaptationSet builds the video adaptation set XML for the MPD
+func (h *DASHHandler) buildVideoAdaptationSet(mediaID string, qualities []string, grouped *GroupedTranscodes) string {
+	if len(qualities) == 0 {
+		return ""
+	}
 
-			// Add segment template with timeline
-			sb.WriteString(`        <SegmentTemplate timescale="1000" initialization="init.mp4" media="chunk-$Number%03d$.m4s" startNumber="0">`)
-			sb.WriteString("\n")
-			sb.WriteString(generateSegmentTimeline(segmentInfo.Segments))
-			sb.WriteString("        </SegmentTemplate>")
-			sb.WriteString("\n")
-			sb.WriteString(`      </Representation>`)
-			sb.WriteString("\n")
+	var sb strings.Builder
+	sb.WriteString(`    <AdaptationSet mimeType="video/mp4" segmentAlignment="true" startWithSAP="1">`)
+	sb.WriteString("\n")
+
+	for _, quality := range qualities {
+		transcode := grouped.VideoTranscodes[quality]
+		if transcode == nil {
+			continue
 		}
 
-		sb.WriteString(`    </AdaptationSet>`)
+		segmentInfo, err := h.loadSegmentInfo(transcode.OutputPath)
+		if err != nil {
+			logger.Warn().Err(err).Str("quality", quality).Msg("failed to load segment info")
+			continue
+		}
+
+		height := extractHeight(quality)
+		sb.WriteString(fmt.Sprintf(`      <Representation id="video_%s" bandwidth="%d" width="%d" height="%d" codecs="avc1.4d401f">`,
+			quality, 5000000, height*16/9, height))
+		sb.WriteString("\n")
+		sb.WriteString(fmt.Sprintf(`        <BaseURL>/stream/dash/content/%s/%s/video/</BaseURL>`, mediaID, quality))
+		sb.WriteString("\n")
+		sb.WriteString(`        <SegmentTemplate timescale="1000" initialization="init.mp4" media="chunk-$Number%03d$.m4s" startNumber="0">`)
+		sb.WriteString("\n")
+		sb.WriteString(generateSegmentTimeline(segmentInfo.Segments))
+		sb.WriteString("        </SegmentTemplate>")
+		sb.WriteString("\n")
+		sb.WriteString(`      </Representation>`)
 		sb.WriteString("\n")
 	}
 
-	// Audio AdaptationSets (one per audio track)
+	sb.WriteString(`    </AdaptationSet>`)
+	sb.WriteString("\n")
+
+	return sb.String()
+}
+
+// buildAudioAdaptationSets builds the audio adaptation sets XML for the MPD
+func (h *DASHHandler) buildAudioAdaptationSets(mediaID string, audioStreams []*domain.AudioStream, grouped *GroupedTranscodes) string {
+	var sb strings.Builder
+
 	for _, audioStream := range audioStreams {
 		streamIdx := audioStream.StreamIndex
 		if _, exists := grouped.AudioTranscodes[streamIdx]; !exists {
@@ -304,56 +299,60 @@ func (h *DASHHandler) generateMPD(
 			lang = "und"
 		}
 
-		sb.WriteString(fmt.Sprintf(`    <AdaptationSet mimeType="audio/mp4" segmentAlignment="true" lang="%s">`, lang))
+		// Build a display label for the audio track
+		label := audioStream.Title
+		if label == "" {
+			if audioStream.Language != "" {
+				label = shared.LanguageCodeToName(audioStream.Language)
+			} else {
+				label = fmt.Sprintf("Audio %d", streamIdx)
+			}
+		}
+
+		sb.WriteString(fmt.Sprintf(`    <AdaptationSet mimeType="audio/mp4" segmentAlignment="true" lang="%s" label="%s">`, lang, label))
 		sb.WriteString("\n")
 
-		// Audio is transcoded once and shared across all video qualities
-		// Look up audio transcode using empty string as quality key
 		qualityMap := grouped.AudioTranscodes[streamIdx]
 		transcode := qualityMap[""] // Audio uses empty quality string
 
 		if transcode == nil {
-			logger.Warn().
-				Int("stream_idx", streamIdx).
-				Msg("audio transcode not found, skipping audio track")
+			logger.Warn().Int("stream_idx", streamIdx).Msg("audio transcode not found, skipping audio track")
 			sb.WriteString(`    </AdaptationSet>`)
 			sb.WriteString("\n")
 			continue
 		}
 
-		// Create single representation for this audio track (shared across all video qualities)
 		sb.WriteString(fmt.Sprintf(`      <Representation id="audio_%d" bandwidth="128000" codecs="mp4a.40.2" audioSamplingRate="48000">`,
 			streamIdx))
 		sb.WriteString("\n")
 		sb.WriteString(fmt.Sprintf(`        <BaseURL>/stream/dash/content/%s/audio-%d/</BaseURL>`, mediaID, streamIdx))
 		sb.WriteString("\n")
 
-		// Load segment info
 		segmentInfo, err := h.loadSegmentInfo(transcode.OutputPath)
 		if err == nil && len(segmentInfo.Segments) > 0 {
-			// Use SegmentTemplate with SegmentTimeline
 			sb.WriteString(`        <SegmentTemplate timescale="1000" initialization="init.mp4" media="chunk-$Number%03d$.m4s" startNumber="0">`)
 			sb.WriteString("\n")
 			sb.WriteString(generateSegmentTimeline(segmentInfo.Segments))
 			sb.WriteString("        </SegmentTemplate>")
 		} else {
-			// Fallback to fixed duration if timing data not available
-			logger.Warn().
-				Err(err).
-				Int("stream_idx", streamIdx).
-				Msg("audio segment timing data not available, using fixed duration")
+			logger.Warn().Err(err).Int("stream_idx", streamIdx).Msg("audio segment timing data not available, using fixed duration")
 			sb.WriteString(`        <SegmentTemplate timescale="1000" duration="4000" initialization="init.mp4" media="chunk-$Number%03d$.m4s" startNumber="0"/>`)
 		}
 
 		sb.WriteString("\n")
 		sb.WriteString(`      </Representation>`)
 		sb.WriteString("\n")
-
 		sb.WriteString(`    </AdaptationSet>`)
 		sb.WriteString("\n")
 	}
 
-	// Subtitle AdaptationSets (WebVTT)
+	return sb.String()
+}
+
+// buildSubtitleAdaptationSets builds the subtitle adaptation sets XML for the MPD
+func (h *DASHHandler) buildSubtitleAdaptationSets(mediaID string, subtitleStreams []*domain.SubtitleStream, grouped *GroupedTranscodes) string {
+	var sb strings.Builder
+
 	for _, subtitleStream := range subtitleStreams {
 		streamIdx := subtitleStream.StreamIndex
 		if _, exists := grouped.SubtitleTranscodes[streamIdx]; !exists {
@@ -365,12 +364,22 @@ func (h *DASHHandler) generateMPD(
 			lang = "und"
 		}
 
-		transcode := grouped.SubtitleTranscodes[streamIdx]
+		// Build a display label for the subtitle track
+		label := subtitleStream.Title
+		if label == "" {
+			if subtitleStream.Language != "" {
+				label = shared.LanguageCodeToName(subtitleStream.Language)
+			} else {
+				label = fmt.Sprintf("Subtitle %d", streamIdx)
+			}
+		}
 
-		// Extract subtitle filename from output path (e.g., "subtitle-3.vtt")
+		transcode := grouped.SubtitleTranscodes[streamIdx]
 		subtitleFilename := filepath.Base(transcode.OutputPath)
 
-		sb.WriteString(fmt.Sprintf(`    <AdaptationSet mimeType="text/vtt" lang="%s">`, lang))
+		sb.WriteString(fmt.Sprintf(`    <AdaptationSet mimeType="text/vtt" lang="%s" label="%s">`, lang, label))
+		sb.WriteString("\n")
+		sb.WriteString(`      <Role schemeIdUri="urn:mpeg:dash:role:2011" value="subtitle"/>`)
 		sb.WriteString("\n")
 		sb.WriteString(fmt.Sprintf(`      <Representation id="subtitle_%d">`, streamIdx))
 		sb.WriteString("\n")
@@ -382,13 +391,7 @@ func (h *DASHHandler) generateMPD(
 		sb.WriteString("\n")
 	}
 
-	// Close Period and MPD
-	sb.WriteString(`  </Period>`)
-	sb.WriteString("\n")
-	sb.WriteString(`</MPD>`)
-	sb.WriteString("\n")
-
-	return sb.String(), nil
+	return sb.String()
 }
 
 // SegmentTiming represents the timing information for a media segment
@@ -416,6 +419,56 @@ func (h *DASHHandler) loadSegmentInfo(outputPath string) (*SegmentInfo, error) {
 	}
 
 	return &info, nil
+}
+
+// contentPathInfo contains the parsed information from a DASH content path
+type contentPathInfo struct {
+	FilePath    string // Relative path to the content file
+	ContentType string // MIME type for the content
+}
+
+// parseContentPath parses a DASH content path and returns the file path and content type.
+// Returns nil if the path is invalid.
+// Supported patterns:
+//   - "{quality}/video/{segment}" -> video segment
+//   - "audio-{idx}/{segment}" -> audio segment
+//   - "subtitle-{idx}.vtt" -> subtitle file
+func parseContentPath(path string) *contentPathInfo {
+	parts := strings.Split(path, "/")
+
+	if len(parts) == 1 && strings.HasPrefix(parts[0], "subtitle-") && strings.HasSuffix(parts[0], ".vtt") {
+		// Subtitle file: subtitle-{idx}.vtt
+		return &contentPathInfo{
+			FilePath:    filepath.Join("transcoded", parts[0]),
+			ContentType: "text/vtt",
+		}
+	}
+
+	if len(parts) == 2 && strings.HasPrefix(parts[0], "audio-") {
+		// Audio segment: audio-{idx}/{segment}
+		contentType := "audio/mp4"
+		if strings.HasSuffix(parts[1], ".m4s") {
+			contentType = "audio/iso.segment"
+		}
+		return &contentPathInfo{
+			FilePath:    filepath.Join("transcoded", parts[0], parts[1]),
+			ContentType: contentType,
+		}
+	}
+
+	if len(parts) == 3 && parts[1] == "video" {
+		// Video segment: {quality}/video/{segment}
+		contentType := "video/mp4"
+		if strings.HasSuffix(parts[2], ".m4s") {
+			contentType = "video/iso.segment"
+		}
+		return &contentPathInfo{
+			FilePath:    filepath.Join("transcoded", parts[0], parts[1], parts[2]),
+			ContentType: contentType,
+		}
+	}
+
+	return nil
 }
 
 // generateSegmentTimeline generates the SegmentTimeline XML from timing data

@@ -78,19 +78,22 @@ func (r *SubtitleStreamRepository) GetByMediaID(ctx context.Context, mediaID str
 	for rows.Next() {
 		var stream domain.SubtitleStream
 		var forced int
+		var language, title sql.NullString
 		err := rows.Scan(
 			&stream.ID,
 			&stream.MediaID,
 			&stream.StreamIndex,
 			&stream.Codec,
-			&stream.Language,
-			&stream.Title,
+			&language,
+			&title,
 			&forced,
 			&stream.CreatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan subtitle stream: %w", err)
 		}
+		stream.Language = language.String
+		stream.Title = title.String
 		stream.Forced = forced == 1
 		streams = append(streams, &stream)
 	}

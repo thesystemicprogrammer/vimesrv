@@ -29,40 +29,22 @@ type JobManagerInput struct {
 }
 
 type JobManager struct {
-	Config                  config.JobConfig
-	ProcessNextJobUseCase   *usecasejob.ProcessNextJobUseCase
-	SchedulerTickUseCase    *usecasejob.SchedulerTickUseCase
-	RecoverStuckJobsUseCase *usecasejob.RecoverStuckJobsUseCase
-	JobRepository           ports.JobRepository
-	ScheduleRepository      ports.ScheduleRepository
-	Handlers                ports.HandlerResolver
-	BackoffStrategy         ports.BackoffStrategy
-	Cron                    ports.CronParser
-	Clock                   ports.Clock
-	stopCh                  chan struct{}
-	cancelFunc              context.CancelFunc
-	started                 int32
-	stopped                 int32
-	wg                      sync.WaitGroup
+	JobManagerInput
+	stopCh     chan struct{}
+	cancelFunc context.CancelFunc
+	started    int32
+	stopped    int32
+	wg         sync.WaitGroup
 }
 
-func NewJobManager(jobManagerInput JobManagerInput) *JobManager {
-	if jobManagerInput.Clock == nil {
-		jobManagerInput.Clock = ports.RealClock{}
+func NewJobManager(input JobManagerInput) *JobManager {
+	if input.Clock == nil {
+		input.Clock = ports.RealClock{}
 	}
 
 	return &JobManager{
-		Config:                  jobManagerInput.Config,
-		ProcessNextJobUseCase:   jobManagerInput.ProcessNextJobUseCase,
-		SchedulerTickUseCase:    jobManagerInput.SchedulerTickUseCase,
-		RecoverStuckJobsUseCase: jobManagerInput.RecoverStuckJobsUseCase,
-		JobRepository:           jobManagerInput.JobRepository,
-		ScheduleRepository:      jobManagerInput.ScheduleRepository,
-		Handlers:                jobManagerInput.Handlers,
-		BackoffStrategy:         jobManagerInput.BackoffStrategy,
-		Cron:                    jobManagerInput.Cron,
-		Clock:                   jobManagerInput.Clock,
-		stopCh:                  make(chan struct{}),
+		JobManagerInput: input,
+		stopCh:          make(chan struct{}),
 	}
 }
 

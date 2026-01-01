@@ -9,6 +9,7 @@ Whenever I discover something odd or something I don't understand, I write it do
 # Smells
 
 - Transcode Path pattern: Why do I have to set a pattern and not only the path where we want to put the transcode directories and files?
+- Setting the language label on the server: What about multi language clients? Should the label not be determined on client side with the client language
 -
 
 # Tasks

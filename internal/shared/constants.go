@@ -17,5 +17,11 @@ const (
 	JobTypeTranscodeVideo = "transcode_video"
 )
 
+// Job priorities (lower value = higher priority)
+const (
+	JobPriorityLibraryScan = 0
+	JobPriorityTranscode   = 5
+)
+
 // ErrorBackoffDuration is the wait time after a job processing error before retrying
 const ErrorBackoffDuration = 500 * time.Millisecond

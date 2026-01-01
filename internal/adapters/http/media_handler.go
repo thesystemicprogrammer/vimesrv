@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/thesystemicprogrammer/vimesrv/internal/domain"
 	"github.com/thesystemicprogrammer/vimesrv/internal/infrastructure/server"
+	"github.com/thesystemicprogrammer/vimesrv/internal/shared"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/config"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/logger"
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/media"
@@ -143,7 +144,7 @@ func (h *MediaHandler) buildMediaDetailResponse(result *media.GetMediaOutput) Me
 		title := as.Title
 		if title == "" {
 			if as.Language != "" {
-				title = as.Language
+				title = shared.LanguageCodeToName(as.Language)
 			} else {
 				title = fmt.Sprintf("Audio %d", as.StreamIndex)
 			}
@@ -162,7 +163,7 @@ func (h *MediaHandler) buildMediaDetailResponse(result *media.GetMediaOutput) Me
 		title := ss.Title
 		if title == "" {
 			if ss.Language != "" {
-				title = ss.Language
+				title = shared.LanguageCodeToName(ss.Language)
 			} else {
 				title = fmt.Sprintf("Subtitle %d", ss.StreamIndex)
 			}

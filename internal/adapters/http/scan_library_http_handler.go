@@ -31,7 +31,7 @@ func (h *ScanLibraryHTTPHandler) Handle(c *gin.Context) {
 	jobInput := usecasejob.EnqueueJobInput{
 		Type:     shared.JobTypeScanLibrary,
 		Payload:  nil,
-		Priority: 0, // Default priority
+		Priority: shared.JobPriorityLibraryScan,
 	}
 
 	// Enqueue the scan job

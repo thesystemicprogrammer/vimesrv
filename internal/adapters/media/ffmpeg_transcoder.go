@@ -3,7 +3,6 @@ package media
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -16,6 +15,14 @@ import (
 	"time"
 
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/ports"
+)
+
+const (
+	// defaultFPS is the baseline framerate used for GOP size calculations
+	defaultFPS = 24
+
+	// bufSizeMultiplier is the multiplier applied to max bitrate for buffer size
+	bufSizeMultiplier = 2
 )
 
 // FFmpegTranscoder implements video transcoding using FFmpeg
@@ -171,8 +178,8 @@ func (t *FFmpegTranscoder) ProbeSegmentDurations(ctx context.Context, outputPath
 	return segments, nil
 }
 
-// validateVideoOptions validates video transcoding options
-func (t *FFmpegTranscoder) validateVideoOptions(opts ports.TranscodeOptions) error {
+// validateCommonOptions validates options common to all transcode types
+func (t *FFmpegTranscoder) validateCommonOptions(opts ports.TranscodeOptions) error {
 	if opts.InputPath == "" {
 		return fmt.Errorf("input path is required")
 	}
@@ -181,6 +188,14 @@ func (t *FFmpegTranscoder) validateVideoOptions(opts ports.TranscodeOptions) err
 	}
 	if _, err := os.Stat(opts.InputPath); err != nil {
 		return fmt.Errorf("input file does not exist: %w", err)
+	}
+	return nil
+}
+
+// validateVideoOptions validates video transcoding options
+func (t *FFmpegTranscoder) validateVideoOptions(opts ports.TranscodeOptions) error {
+	if err := t.validateCommonOptions(opts); err != nil {
+		return err
 	}
 	if opts.Width <= 0 || opts.Height <= 0 {
 		return fmt.Errorf("invalid dimensions: %dx%d", opts.Width, opts.Height)
@@ -193,14 +208,8 @@ func (t *FFmpegTranscoder) validateVideoOptions(opts ports.TranscodeOptions) err
 
 // validateAudioOptions validates audio transcoding options
 func (t *FFmpegTranscoder) validateAudioOptions(opts ports.TranscodeOptions) error {
-	if opts.InputPath == "" {
-		return fmt.Errorf("input path is required")
-	}
-	if opts.OutputPath == "" {
-		return fmt.Errorf("output path is required")
-	}
-	if _, err := os.Stat(opts.InputPath); err != nil {
-		return fmt.Errorf("input file does not exist: %w", err)
+	if err := t.validateCommonOptions(opts); err != nil {
+		return err
 	}
 	if opts.SourceStreamIndex < 0 {
 		return fmt.Errorf("source stream index required for audio track")
@@ -213,14 +222,8 @@ func (t *FFmpegTranscoder) validateAudioOptions(opts ports.TranscodeOptions) err
 
 // validateSubtitleOptions validates subtitle extraction options
 func (t *FFmpegTranscoder) validateSubtitleOptions(opts ports.TranscodeOptions) error {
-	if opts.InputPath == "" {
-		return fmt.Errorf("input path is required")
-	}
-	if opts.OutputPath == "" {
-		return fmt.Errorf("output path is required")
-	}
-	if _, err := os.Stat(opts.InputPath); err != nil {
-		return fmt.Errorf("input file does not exist: %w", err)
+	if err := t.validateCommonOptions(opts); err != nil {
+		return err
 	}
 	if opts.SourceStreamIndex < 0 {
 		return fmt.Errorf("source stream index required for subtitle track")
@@ -244,7 +247,7 @@ func (t *FFmpegTranscoder) buildVideoArgs(opts ports.TranscodeOptions) []string 
 	if segmentTime == 0 {
 		segmentTime = 4
 	}
-	gopSize := segmentTime * 24 // 24fps baseline
+	gopSize := segmentTime * defaultFPS
 
 	// Video codec settings
 	videoCodec := opts.VideoCodec
@@ -270,13 +273,13 @@ func (t *FFmpegTranscoder) buildVideoArgs(opts ports.TranscodeOptions) []string 
 		args = append(args,
 			"-crf", fmt.Sprintf("%d", opts.CRF),
 			"-maxrate", fmt.Sprintf("%dk", opts.MaxBitrate),
-			"-bufsize", fmt.Sprintf("%dk", opts.MaxBitrate*2),
+			"-bufsize", fmt.Sprintf("%dk", opts.MaxBitrate*bufSizeMultiplier),
 		)
 	} else {
 		args = append(args,
 			"-b:v", fmt.Sprintf("%dk", opts.VideoBitrate),
 			"-maxrate", fmt.Sprintf("%dk", opts.MaxBitrate),
-			"-bufsize", fmt.Sprintf("%dk", opts.MaxBitrate*2),
+			"-bufsize", fmt.Sprintf("%dk", opts.MaxBitrate*bufSizeMultiplier),
 		)
 	}
 
@@ -604,25 +607,4 @@ func (t *FFmpegTranscoder) probeSegmentDuration(ctx context.Context, segmentPath
 	durationMs := int64(durationSec*1000 + 0.5)
 
 	return durationMs, nil
-}
-
-// SaveSegmentTimings saves segment timing data to a JSON file
-func SaveSegmentTimings(outputPath string, segments []ports.SegmentInfo) error {
-	data := struct {
-		Segments []ports.SegmentInfo `json:"segments"`
-	}{
-		Segments: segments,
-	}
-
-	jsonData, err := json.MarshalIndent(data, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal segment timings: %w", err)
-	}
-
-	timingFilePath := filepath.Join(outputPath, "segments.json")
-	if err := os.WriteFile(timingFilePath, jsonData, 0644); err != nil {
-		return fmt.Errorf("failed to write segment timings file: %w", err)
-	}
-
-	return nil
 }
