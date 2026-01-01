@@ -35,13 +35,15 @@ type ServerConfig struct {
 }
 
 type MediaConfig struct {
-	LibraryPath           string            `mapstructure:"library_path"`
-	MediaPath             string            `mapstructure:"media_path"`
-	StagingPath           string            `mapstructure:"staging_path"`
-	TrashPath             string            `mapstructure:"trash_path"`
-	SupportedFormats      []string          `mapstructure:"supported_formats"`
-	FFProbeTimeoutSeconds int               `mapstructure:"ffprobe_timeout_seconds"`
-	LibraryScan           LibraryScanConfig `mapstructure:"library_scan"`
+	LibraryPath             string            `mapstructure:"library_path"`
+	MediaPath               string            `mapstructure:"media_path"`
+	StagingPath             string            `mapstructure:"staging_path"`
+	TrashPath               string            `mapstructure:"trash_path"`
+	TranscodeOutputPattern  string            `mapstructure:"transcode_output_pattern"`
+	SupportedFormats        []string          `mapstructure:"supported_formats"`
+	FFProbeTimeoutSeconds   int               `mapstructure:"ffprobe_timeout_seconds"`
+	TranscodeTimeoutSeconds int               `mapstructure:"transcode_timeout_seconds"`
+	LibraryScan             LibraryScanConfig `mapstructure:"library_scan"`
 }
 
 type LibraryScanConfig struct {
@@ -196,6 +198,10 @@ func (m *MediaConfig) Validate() error {
 		return fmt.Errorf("trash_path cannot be empty")
 	}
 
+	if m.TranscodeOutputPattern == "" {
+		return fmt.Errorf("transcode_output_pattern cannot be empty")
+	}
+
 	if len(m.SupportedFormats) == 0 {
 		return fmt.Errorf("supported_formats cannot be empty")
 	}
@@ -208,6 +214,10 @@ func (m *MediaConfig) Validate() error {
 
 	if m.FFProbeTimeoutSeconds < 1 || m.FFProbeTimeoutSeconds > 300 {
 		return fmt.Errorf("ffprobe_timeout_seconds must be between 1 and 300, got %d", m.FFProbeTimeoutSeconds)
+	}
+
+	if m.TranscodeTimeoutSeconds < 60 || m.TranscodeTimeoutSeconds > 36000 {
+		return fmt.Errorf("transcode_timeout_seconds must be between 60 and 36000 (10 hours), got %d", m.TranscodeTimeoutSeconds)
 	}
 
 	if err := m.LibraryScan.Validate(); err != nil {

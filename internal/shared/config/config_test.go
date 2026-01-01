@@ -159,12 +159,14 @@ func TestMediaConfig_Validate(t *testing.T) {
 		{
 			name: "valid config",
 			config: MediaConfig{
-				LibraryPath:           "/media/library",
-				MediaPath:             "/media/library/media",
-				StagingPath:           "/media/library/staging",
-				TrashPath:             "/media/trash",
-				SupportedFormats:      []string{".mp4", ".mkv", ".avi"},
-				FFProbeTimeoutSeconds: 30,
+				LibraryPath:             "/media/library",
+				MediaPath:               "/media/library/media",
+				StagingPath:             "/media/library/staging",
+				TrashPath:               "/media/trash",
+				SupportedFormats:        []string{".mp4", ".mkv", ".avi"},
+				FFProbeTimeoutSeconds:   30,
+				TranscodeTimeoutSeconds: 7200,
+				TranscodeOutputPattern:  "{media_path}/{media_id}/transcoded",
 				LibraryScan: LibraryScanConfig{
 					Enabled:  true,
 					CronSpec: "0 * * * * *",
@@ -176,12 +178,14 @@ func TestMediaConfig_Validate(t *testing.T) {
 		{
 			name: "valid config with many formats",
 			config: MediaConfig{
-				LibraryPath:           "/path/to/media",
-				MediaPath:             "/path/to/media/media",
-				StagingPath:           "/path/to/media/staging",
-				TrashPath:             "/path/to/trash",
-				SupportedFormats:      []string{".mp4", ".mkv", ".avi", ".mov", ".webm", ".flv"},
-				FFProbeTimeoutSeconds: 30,
+				LibraryPath:             "/path/to/media",
+				MediaPath:               "/path/to/media/media",
+				StagingPath:             "/path/to/media/staging",
+				TrashPath:               "/path/to/trash",
+				SupportedFormats:        []string{".mp4", ".mkv", ".avi", ".mov", ".webm", ".flv"},
+				FFProbeTimeoutSeconds:   30,
+				TranscodeTimeoutSeconds: 7200,
+				TranscodeOutputPattern:  "{media_path}/{media_id}/transcoded",
 				LibraryScan: LibraryScanConfig{
 					Enabled:  false,
 					CronSpec: "",
@@ -1060,12 +1064,14 @@ func TestConfig_Validate(t *testing.T) {
 	}
 
 	validMediaConfig := MediaConfig{
-		LibraryPath:           "/media/library",
-		MediaPath:             "/media/library/media",
-		StagingPath:           "/media/library/staging",
-		TrashPath:             "/media/trash",
-		SupportedFormats:      []string{".mp4", ".mkv"},
-		FFProbeTimeoutSeconds: 30,
+		LibraryPath:             "/media/library",
+		MediaPath:               "/media/library/media",
+		StagingPath:             "/media/library/staging",
+		TrashPath:               "/media/trash",
+		SupportedFormats:        []string{".mp4", ".mkv"},
+		FFProbeTimeoutSeconds:   30,
+		TranscodeTimeoutSeconds: 7200,
+		TranscodeOutputPattern:  "{media_path}/{media_id}/transcoded",
 		LibraryScan: LibraryScanConfig{
 			Enabled:  true,
 			CronSpec: "0 * * * * *",

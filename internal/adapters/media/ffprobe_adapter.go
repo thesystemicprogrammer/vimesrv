@@ -147,6 +147,111 @@ func (f *FFProbeAdapter) ExtractMetadata(filePath string) (*ports.VideoMetadata,
 	return metadata, nil
 }
 
+// GetAudioStreams extracts detailed information about all audio streams
+func (f *FFProbeAdapter) GetAudioStreams(filePath string) ([]*ports.AudioStreamInfo, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), f.timeout)
+	defer cancel()
+
+	// Use ffprobe to extract detailed stream information as JSON
+	cmd := exec.CommandContext(ctx, "ffprobe",
+		"-v", "error",
+		"-select_streams", "a", // Select only audio streams
+		"-show_streams",
+		"-of", "json",
+		filePath)
+
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute ffprobe: %w", err)
+	}
+
+	// Parse JSON output
+	var probeData ffprobeOutput
+	if err := json.Unmarshal(output, &probeData); err != nil {
+		return nil, fmt.Errorf("failed to parse ffprobe output: %w", err)
+	}
+
+	// Extract audio stream information
+	var audioStreams []*ports.AudioStreamInfo
+	for _, stream := range probeData.Streams {
+		if stream.CodecType != "audio" {
+			continue
+		}
+
+		audioInfo := &ports.AudioStreamInfo{
+			StreamIndex:   stream.Index,
+			Codec:         stream.CodecName,
+			Language:      stream.Tags.Language,
+			Channels:      stream.Channels,
+			ChannelLayout: stream.ChannelLayout,
+			Title:         stream.Tags.Title,
+		}
+
+		// Parse sample rate
+		if stream.SampleRate != "" {
+			if sampleRate, err := strconv.Atoi(stream.SampleRate); err == nil {
+				audioInfo.SampleRate = sampleRate
+			}
+		}
+
+		// Parse bitrate
+		if stream.BitRate != "" {
+			if bitrate, err := strconv.ParseInt(stream.BitRate, 10, 64); err == nil {
+				audioInfo.Bitrate = int(bitrate)
+			}
+		}
+
+		audioStreams = append(audioStreams, audioInfo)
+	}
+
+	return audioStreams, nil
+}
+
+// GetSubtitleStreams extracts detailed information about all subtitle streams
+func (f *FFProbeAdapter) GetSubtitleStreams(filePath string) ([]*ports.SubtitleStreamInfo, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), f.timeout)
+	defer cancel()
+
+	// Use ffprobe to extract detailed stream information as JSON
+	cmd := exec.CommandContext(ctx, "ffprobe",
+		"-v", "error",
+		"-select_streams", "s", // Select only subtitle streams
+		"-show_streams",
+		"-of", "json",
+		filePath)
+
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute ffprobe: %w", err)
+	}
+
+	// Parse JSON output
+	var probeData ffprobeOutput
+	if err := json.Unmarshal(output, &probeData); err != nil {
+		return nil, fmt.Errorf("failed to parse ffprobe output: %w", err)
+	}
+
+	// Extract subtitle stream information
+	var subtitleStreams []*ports.SubtitleStreamInfo
+	for _, stream := range probeData.Streams {
+		if stream.CodecType != "subtitle" {
+			continue
+		}
+
+		subtitleInfo := &ports.SubtitleStreamInfo{
+			StreamIndex: stream.Index,
+			Codec:       stream.CodecName,
+			Language:    stream.Tags.Language,
+			Title:       stream.Tags.Title,
+			Forced:      false, // FFprobe doesn't reliably expose forced flag
+		}
+
+		subtitleStreams = append(subtitleStreams, subtitleInfo)
+	}
+
+	return subtitleStreams, nil
+}
+
 // ffprobeOutput represents the JSON structure returned by ffprobe
 type ffprobeOutput struct {
 	Streams []ffprobeStream `json:"streams"`
@@ -154,15 +259,21 @@ type ffprobeOutput struct {
 }
 
 type ffprobeStream struct {
-	CodecType string           `json:"codec_type"`
-	CodecName string           `json:"codec_name"`
-	Width     int              `json:"width"`
-	Height    int              `json:"height"`
-	Tags      ffprobeStreamTag `json:"tags"`
+	Index         int              `json:"index"`
+	CodecType     string           `json:"codec_type"`
+	CodecName     string           `json:"codec_name"`
+	Width         int              `json:"width"`
+	Height        int              `json:"height"`
+	Channels      int              `json:"channels"`
+	ChannelLayout string           `json:"channel_layout"`
+	SampleRate    string           `json:"sample_rate"`
+	BitRate       string           `json:"bit_rate"`
+	Tags          ffprobeStreamTag `json:"tags"`
 }
 
 type ffprobeStreamTag struct {
 	Language string `json:"language"`
+	Title    string `json:"title"`
 }
 
 type ffprobeFormat struct {

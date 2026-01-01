@@ -79,6 +79,66 @@ func (r *MediaRepository) Create(ctx context.Context, media *domain.MediaFile) e
 	return nil
 }
 
+// Get retrieves a media file by its ID
+func (r *MediaRepository) Get(ctx context.Context, id string) (*domain.MediaFile, error) {
+	query := `
+		SELECT 
+			id, fingerprint, file_path, original_filename, filename,
+			title, duration, file_size, format, video_codec, audio_codecs,
+			resolution, width, height, bitrate, audio_tracks, subtitle_tracks,
+			subtitle_languages, status, created_at, updated_at, scanned_at
+		FROM media_files
+		WHERE id = ?
+	`
+
+	var media domain.MediaFile
+	var audioCodecsJSON, subtitleLanguagesJSON string
+
+	err := r.db.QueryRowContext(ctx, query, id).Scan(
+		&media.ID,
+		&media.Fingerprint,
+		&media.FilePath,
+		&media.OriginalFilename,
+		&media.Filename,
+		&media.Title,
+		&media.Duration,
+		&media.FileSize,
+		&media.Format,
+		&media.VideoCodec,
+		&audioCodecsJSON,
+		&media.Resolution,
+		&media.Width,
+		&media.Height,
+		&media.Bitrate,
+		&media.AudioTracks,
+		&media.SubtitleTracks,
+		&subtitleLanguagesJSON,
+		&media.Status,
+		&media.CreatedAt,
+		&media.UpdatedAt,
+		&media.ScannedAt,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("media file not found with id: %s", id)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to query media file: %w", err)
+	}
+
+	// Unmarshal JSON array fields
+	if err := json.Unmarshal([]byte(audioCodecsJSON), &media.AudioCodecs); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal audio codecs: %w", err)
+	}
+
+	if err := json.Unmarshal([]byte(subtitleLanguagesJSON), &media.SubtitleLanguages); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal subtitle languages: %w", err)
+	}
+
+	return &media, nil
+}
+
 // FindByFingerprint retrieves a media file by its fingerprint
 func (r *MediaRepository) FindByFingerprint(ctx context.Context, fingerprint string) (*domain.MediaFile, error) {
 	query := `

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>HLS Player (Video.js)</title>
+
+  <!-- Video.js CSS -->
+  <link
+    href="https://vjs.zencdn.net/8.10.0/video-js.css"
+    rel="stylesheet"
+  />
+
+  <!-- Video.js -->
+  <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
+
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      padding: 20px;
+    }
+    .video-js {
+      width: 100%;
+      max-width: 900px;
+      background: black;
+    }
+  </style>
+</head>
+<body>
+
+<h2>HLS Video Player (Video.js)</h2>
+
+<video
+  id="video"
+  class="video-js vjs-default-skin"
+  controls
+  preload="auto"
+>
+  <!-- Hardcoded HLS stream -->
+  <source
+    src="http://localhost:8080/stream/hls/7a8c0dbe80eb915add9c1efe6df47e68/master.m3u8";
+    type="application/x-mpegURL"
+  />
+</video>
+
+<script>
+  // Initialize Video.js
+  const player = videojs("video", {
+    autoplay: false,
+    fluid: true
+  });
+
+  // Optional: error l
+

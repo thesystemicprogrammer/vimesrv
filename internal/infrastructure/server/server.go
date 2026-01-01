@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"time"
 
@@ -94,6 +95,30 @@ func (s *HTTPServer) setupHealthEndpoint() {
 	})
 
 	logger.Debug().Msg("Health endpoint setup conducted")
+}
+
+// RegisterStaticFiles registers static file serving from an embedded filesystem.
+// This serves HTML players and other static assets.
+func (s *HTTPServer) RegisterStaticFiles(embedFS fs.FS) error {
+	webFS, err := fs.Sub(embedFS, ".")
+	if err != nil {
+		return fmt.Errorf("failed to create web filesystem: %w", err)
+	}
+	s.router.StaticFS("/web", http.FS(webFS))
+
+	// Redirect root to web player
+	s.router.GET("/", func(c *gin.Context) {
+		c.Redirect(http.StatusMovedPermanently, "/web/player.html")
+	})
+
+	logger.Debug().Msg("Static files registered at /web")
+	return nil
+}
+
+// Router returns the underlying gin.Engine for route registration
+// This allows handlers to register their own routes
+func (s *HTTPServer) Router() *gin.Engine {
+	return s.router
 }
 
 // RegisterRoutes registers all HTTP routes with their handlers.

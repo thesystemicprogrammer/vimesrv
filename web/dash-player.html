@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>DASH Player</title>
+
+  <!-- dash.js -->
+  <script src="https://cdn.dashjs.org/latest/dash.all.min.js"></script>
+
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      padding: 20px;
+    }
+    video {
+      width: 100%;
+      max-width: 900px;
+      background: black;
+    }
+  </style>
+</head>
+<body>
+
+<h2>DASH Video Player</h2>
+
+<video id="video" controls autoplay></video>
+
+<script>
+  // 🔧 Hardcoded DASH manifest URL
+  const DASH_URL = "http://localhost:8080/stream/dash/7a8c0dbe80eb915add9c1efe6df47e68/manifest.mpd"
+
+  const video = document.getElementById("video");
+
+  // Create and initialize dash.js player
+  const player = dashjs.MediaPlayer().create();
+  player.initialize(video, DASH_URL, true);
+
+  // Optional: basic error logging
+  player.on(dashjs.MediaPlayer.events.ERROR, function (e) {
+    console.error("DASH error:", e);
+  });
+</script>
+
+</body>
+</html>
+

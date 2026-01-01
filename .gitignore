@@ -64,3 +64,6 @@ server
 /cache/
 /transcoded/
 /thumbnails/
+
+# Tmp 
+old_srv/

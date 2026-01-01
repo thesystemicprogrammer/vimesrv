@@ -25,4 +25,8 @@ type FileSystemService interface {
 
 	// GetFileSize returns the size of a file in bytes
 	GetFileSize(path string) (int64, error)
+
+	// WriteFile writes data to a file
+	// Creates parent directories if they don't exist
+	WriteFile(path string, data []byte) error
 }

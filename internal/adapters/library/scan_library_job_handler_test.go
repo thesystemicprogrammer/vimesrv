@@ -28,9 +28,11 @@ func (m *MockFileHasher) HashFile(filePath string) (string, error) {
 
 // MockFFProbeService for testing
 type MockFFProbeService struct {
-	IsAvailableFn     func() error
-	ValidateVideoFn   func(filePath string) (bool, error)
-	ExtractMetadataFn func(filePath string) (*ports.VideoMetadata, error)
+	IsAvailableFn        func() error
+	ValidateVideoFn      func(filePath string) (bool, error)
+	ExtractMetadataFn    func(filePath string) (*ports.VideoMetadata, error)
+	GetAudioStreamsFn    func(filePath string) ([]*ports.AudioStreamInfo, error)
+	GetSubtitleStreamsFn func(filePath string) ([]*ports.SubtitleStreamInfo, error)
 }
 
 func (m *MockFFProbeService) IsAvailable() error {
@@ -57,6 +59,20 @@ func (m *MockFFProbeService) ExtractMetadata(filePath string) (*ports.VideoMetad
 		Format:     "mp4",
 		VideoCodec: "h264",
 	}, nil
+}
+
+func (m *MockFFProbeService) GetAudioStreams(filePath string) ([]*ports.AudioStreamInfo, error) {
+	if m.GetAudioStreamsFn != nil {
+		return m.GetAudioStreamsFn(filePath)
+	}
+	return []*ports.AudioStreamInfo{}, nil
+}
+
+func (m *MockFFProbeService) GetSubtitleStreams(filePath string) ([]*ports.SubtitleStreamInfo, error) {
+	if m.GetSubtitleStreamsFn != nil {
+		return m.GetSubtitleStreamsFn(filePath)
+	}
+	return []*ports.SubtitleStreamInfo{}, nil
 }
 
 // MockFileSystemService for testing
@@ -155,6 +171,10 @@ func (m *MockMediaRepository) Update(ctx context.Context, media *domain.MediaFil
 	return nil
 }
 
+func (m *MockMediaRepository) Get(ctx context.Context, id string) (*domain.MediaFile, error) {
+	return nil, nil
+}
+
 // TestNewScanLibraryJobHandler tests the handler constructor
 func TestNewScanLibraryJobHandler(t *testing.T) {
 	cfg := config.MediaConfig{
@@ -169,6 +189,7 @@ func TestNewScanLibraryJobHandler(t *testing.T) {
 		&MockFFProbeService{},
 		&MockFileSystemService{},
 		&MockMediaRepository{},
+		nil,
 	)
 
 	handler := NewScanLibraryJobHandler(useCase)
@@ -200,6 +221,7 @@ func TestScanLibraryJobHandler_Execute_Success(t *testing.T) {
 		&MockFFProbeService{},
 		mockFS,
 		&MockMediaRepository{},
+		nil,
 	)
 
 	handler := NewScanLibraryJobHandler(useCase)
@@ -239,6 +261,7 @@ func TestScanLibraryJobHandler_Execute_UseCaseError(t *testing.T) {
 		&MockFFProbeService{},
 		mockFS,
 		&MockMediaRepository{},
+		nil,
 	)
 
 	handler := NewScanLibraryJobHandler(useCase)
@@ -281,6 +304,7 @@ func TestScanLibraryJobHandler_Execute_ContextCanceled(t *testing.T) {
 		&MockFFProbeService{},
 		mockFS,
 		&MockMediaRepository{},
+		nil,
 	)
 
 	handler := NewScanLibraryJobHandler(useCase)
@@ -328,6 +352,7 @@ func TestScanLibraryJobHandler_Execute_NoPayloadRequired(t *testing.T) {
 		&MockFFProbeService{},
 		mockFS,
 		&MockMediaRepository{},
+		nil,
 	)
 
 	handler := NewScanLibraryJobHandler(useCase)
@@ -382,6 +407,7 @@ func TestScanLibraryJobHandler_Execute_MultipleJobs(t *testing.T) {
 		&MockFFProbeService{},
 		mockFS,
 		&MockMediaRepository{},
+		nil,
 	)
 
 	handler := NewScanLibraryJobHandler(useCase)
@@ -429,6 +455,7 @@ func TestScanLibraryJobHandler_UsesConfigPaths(t *testing.T) {
 		&MockFFProbeService{},
 		mockFS,
 		&MockMediaRepository{},
+		nil,
 	)
 
 	handler := NewScanLibraryJobHandler(useCase)
@@ -462,6 +489,7 @@ func TestScanLibraryJobHandler_ImplementsJobHandlerInterface(t *testing.T) {
 		&MockFFProbeService{},
 		&MockFileSystemService{},
 		&MockMediaRepository{},
+		nil,
 	)
 
 	handler := NewScanLibraryJobHandler(useCase)

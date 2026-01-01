@@ -24,9 +24,10 @@ func TestNewDatabaseMigration(t *testing.T) {
 	assert.NotNil(t, dm)
 	assert.NotNil(t, dm.db)
 	assert.NotNil(t, dm.migrationJobs)
-	assert.Len(t, dm.migrationJobs, 2)
+	assert.Len(t, dm.migrationJobs, 3)
 	assert.Equal(t, 1, dm.migrationJobs[0].version)
 	assert.Equal(t, 2, dm.migrationJobs[1].version)
+	assert.Equal(t, 3, dm.migrationJobs[2].version)
 }
 
 func TestMigrate_FreshDatabase(t *testing.T) {
@@ -45,7 +46,7 @@ func TestMigrate_FreshDatabase(t *testing.T) {
 	var count int
 	err = db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&count)
 	require.NoError(t, err)
-	assert.Equal(t, 2, count, "both migrations should be applied")
+	assert.Equal(t, 3, count, "all migrations should be applied")
 
 	// Verify media table was created
 	var tableName string
@@ -78,7 +79,7 @@ func TestMigrate_WithInitialSchemaTable(t *testing.T) {
 	var count int
 	err = db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&count)
 	require.NoError(t, err)
-	assert.Equal(t, 2, count)
+	assert.Equal(t, 3, count)
 
 	// Verify media table was created
 	var tableName string
@@ -90,7 +91,7 @@ func TestMigrate_WithInitialSchemaTable(t *testing.T) {
 	var maxVersion int
 	err = db.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&maxVersion)
 	require.NoError(t, err)
-	assert.Equal(t, 2, maxVersion)
+	assert.Equal(t, 3, maxVersion)
 
 	// Verify both migration names are recorded
 	rows, err := db.Query("SELECT version, name FROM schema_migrations ORDER BY version")
@@ -112,11 +113,13 @@ func TestMigrate_WithInitialSchemaTable(t *testing.T) {
 		}{version, name})
 	}
 
-	require.Len(t, migrations, 2)
+	require.Len(t, migrations, 3)
 	assert.Equal(t, 1, migrations[0].version)
 	assert.Equal(t, "create_schema_migrations_table", migrations[0].name)
 	assert.Equal(t, 2, migrations[1].version)
 	assert.Equal(t, "create_media_files_table", migrations[1].name)
+	assert.Equal(t, 3, migrations[2].version)
+	assert.Equal(t, "create_transcoding_tables", migrations[2].name)
 }
 
 func TestMigrate_Idempotency(t *testing.T) {
@@ -146,7 +149,7 @@ func TestMigrate_Idempotency(t *testing.T) {
 	var count int
 	err = db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&count)
 	require.NoError(t, err)
-	assert.Equal(t, 2, count, "migrations should not be duplicated on second run")
+	assert.Equal(t, 3, count, "migrations should not be duplicated on second run")
 }
 
 func TestMigrate_PartiallyMigrated(t *testing.T) {
@@ -175,7 +178,7 @@ func TestMigrate_PartiallyMigrated(t *testing.T) {
 	var count int
 	err = db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&count)
 	require.NoError(t, err)
-	assert.Equal(t, 2, count)
+	assert.Equal(t, 3, count)
 
 	// Verify media table was created
 	var tableName string

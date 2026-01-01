@@ -12,6 +12,7 @@ import (
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/config"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/logger"
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/ports"
+	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/transcode"
 )
 
 // ScanResult contains statistics about the scan operation
@@ -24,11 +25,12 @@ type ScanResult struct {
 }
 
 type ScanLibraryUseCase struct {
-	config            config.MediaConfig
-	fileHasher        ports.FileHasher
-	ffprobeService    ports.FFProbeService
-	fileSystemService ports.FileSystemService
-	mediaRepository   ports.MediaRepository
+	config                     config.MediaConfig
+	fileHasher                 ports.FileHasher
+	ffprobeService             ports.FFProbeService
+	fileSystemService          ports.FileSystemService
+	mediaRepository            ports.MediaRepository
+	createTranscodeJobsUseCase *transcode.CreateTranscodeJobsUseCase
 }
 
 func NewScanLibraryUseCase(
@@ -37,13 +39,15 @@ func NewScanLibraryUseCase(
 	ffprobeService ports.FFProbeService,
 	fileSystemService ports.FileSystemService,
 	mediaRepository ports.MediaRepository,
+	createTranscodeJobsUseCase *transcode.CreateTranscodeJobsUseCase,
 ) *ScanLibraryUseCase {
 	return &ScanLibraryUseCase{
-		config:            config,
-		fileHasher:        fileHasher,
-		ffprobeService:    ffprobeService,
-		fileSystemService: fileSystemService,
-		mediaRepository:   mediaRepository,
+		config:                     config,
+		fileHasher:                 fileHasher,
+		ffprobeService:             ffprobeService,
+		fileSystemService:          fileSystemService,
+		mediaRepository:            mediaRepository,
+		createTranscodeJobsUseCase: createTranscodeJobsUseCase,
 	}
 }
 
@@ -220,6 +224,26 @@ func (uc *ScanLibraryUseCase) processFile(ctx context.Context, filePath string, 
 			logger.Error().Err(deleteErr).Str("file", targetPath).Msg("Failed to delete file during rollback")
 		}
 		return fmt.Errorf("failed to insert into database: %w", err)
+	}
+
+	// Create transcode jobs for the imported media file
+	if uc.createTranscodeJobsUseCase != nil {
+		logger.Info().Str("media_id", id).Msg("Creating transcode jobs for imported media")
+		transcodeOutput, err := uc.createTranscodeJobsUseCase.Execute(ctx, transcode.CreateTranscodeJobsInput{
+			MediaID: id,
+		})
+		if err != nil {
+			logger.Error().Err(err).Str("media_id", id).Msg("Failed to create transcode jobs")
+			// Don't fail the import - just log the error
+		} else {
+			logger.Info().
+				Str("media_id", id).
+				Int("total_jobs", transcodeOutput.TotalJobs).
+				Int("video_jobs", transcodeOutput.VideoJobs).
+				Int("audio_jobs", transcodeOutput.AudioJobs).
+				Int("subtitle_jobs", transcodeOutput.SubtitleJobs).
+				Msg("Transcode jobs created successfully")
+		}
 	}
 
 	// Delete from staging

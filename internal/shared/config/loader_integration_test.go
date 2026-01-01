@@ -35,6 +35,7 @@ media:
   supported_formats:
     - ".mp4"
     - ".mkv"
+  transcode_output_pattern: "{media_path}/{media_id}/transcoded"
 
 transcoding:
   segment_duration: 6

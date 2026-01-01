@@ -11,6 +11,10 @@ type MediaRepository interface {
 	// Create inserts a new media file record
 	Create(ctx context.Context, media *domain.MediaFile) error
 
+	// Get retrieves a media file by its ID
+	// Returns nil if not found
+	Get(ctx context.Context, id string) (*domain.MediaFile, error)
+
 	// FindByFingerprint retrieves a media file by its fingerprint
 	// Returns nil if not found
 	FindByFingerprint(ctx context.Context, fingerprint string) (*domain.MediaFile, error)

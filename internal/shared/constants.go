@@ -13,7 +13,8 @@ const (
 
 // Job types
 const (
-	JobTypeScanLibrary = "scan_library"
+	JobTypeScanLibrary    = "scan_library"
+	JobTypeTranscodeVideo = "transcode_video"
 )
 
 // ErrorBackoffDuration is the wait time after a job processing error before retrying

@@ -119,6 +119,75 @@ DROP INDEX IF EXISTS idx_media_files_fingerprint;
 DROP TABLE IF EXISTS media_files;
 `,
 	},
+	{
+		version: 3,
+		name:    "create_transcoding_tables",
+		up: `
+-- Audio stream metadata (extracted during media scan)
+CREATE TABLE IF NOT EXISTS audio_streams (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    media_id TEXT NOT NULL,
+    stream_index INTEGER NOT NULL,
+    codec TEXT,
+    language TEXT,
+    channels INTEGER DEFAULT 2,
+    channel_layout TEXT,
+    sample_rate INTEGER,
+    title TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (media_id) REFERENCES media_files(id) ON DELETE CASCADE,
+    UNIQUE(media_id, stream_index)
+);
+
+CREATE INDEX IF NOT EXISTS idx_audio_streams_media_id ON audio_streams(media_id);
+
+-- Subtitle stream metadata (extracted during media scan)
+CREATE TABLE IF NOT EXISTS subtitle_streams (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    media_id TEXT NOT NULL,
+    stream_index INTEGER NOT NULL,
+    codec TEXT,
+    language TEXT,
+    title TEXT,
+    forced INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (media_id) REFERENCES media_files(id) ON DELETE CASCADE,
+    UNIQUE(media_id, stream_index)
+);
+
+CREATE INDEX IF NOT EXISTS idx_subtitle_streams_media_id ON subtitle_streams(media_id);
+
+-- Transcode tracking (individual transcode tasks)
+-- Note: Detailed progress, timing, and errors are stored in the jobs table
+-- This table only tracks transcode-specific metadata and status
+CREATE TABLE IF NOT EXISTS transcodes (
+    id TEXT PRIMARY KEY,
+    media_id TEXT NOT NULL,
+    quality TEXT NOT NULL,
+    track_type TEXT NOT NULL CHECK(track_type IN ('video', 'audio', 'subtitle')),
+    track_index INTEGER DEFAULT 0,
+    status TEXT NOT NULL CHECK(status IN ('pending', 'processing', 'completed', 'failed', 'cancelled')),
+    output_path TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (media_id) REFERENCES media_files(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_transcodes_media_id ON transcodes(media_id);
+CREATE INDEX IF NOT EXISTS idx_transcodes_status ON transcodes(status);
+CREATE INDEX IF NOT EXISTS idx_transcodes_media_status ON transcodes(media_id, status);
+`,
+		down: `
+DROP INDEX IF EXISTS idx_transcodes_media_status;
+DROP INDEX IF EXISTS idx_transcodes_status;
+DROP INDEX IF EXISTS idx_transcodes_media_id;
+DROP TABLE IF EXISTS transcodes;
+DROP INDEX IF EXISTS idx_subtitle_streams_media_id;
+DROP TABLE IF EXISTS subtitle_streams;
+DROP INDEX IF EXISTS idx_audio_streams_media_id;
+DROP TABLE IF EXISTS audio_streams;
+`,
+	},
 }
 
 func NewDatabaseMigration(db *sql.DB) *DatabaseMigration {

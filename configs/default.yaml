@@ -19,7 +19,9 @@ media:
   media_path: "./media"
   staging_path: "./staging"
   trash_path: "/trash" # subdirectory under the library_path
+  transcode_output_pattern: "{media_path}/{media_id}/transcoded" # Pattern for transcode output directory
   ffprobe_timeout_seconds: 30
+  transcode_timeout_seconds: 7200 # 2 hours default for video transcoding
   supported_formats:
     - ".mp4"
     - ".mkv"

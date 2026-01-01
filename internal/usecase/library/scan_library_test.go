@@ -48,6 +48,22 @@ func (m *MockFFProbeService) ExtractMetadata(filePath string) (*ports.VideoMetad
 	return args.Get(0).(*ports.VideoMetadata), args.Error(1)
 }
 
+func (m *MockFFProbeService) GetAudioStreams(filePath string) ([]*ports.AudioStreamInfo, error) {
+	args := m.Called(filePath)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*ports.AudioStreamInfo), args.Error(1)
+}
+
+func (m *MockFFProbeService) GetSubtitleStreams(filePath string) ([]*ports.SubtitleStreamInfo, error) {
+	args := m.Called(filePath)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*ports.SubtitleStreamInfo), args.Error(1)
+}
+
 type MockFileSystemService struct {
 	mock.Mock
 }
@@ -114,6 +130,14 @@ func (m *MockMediaRepository) Update(ctx context.Context, media *domain.MediaFil
 	return args.Error(0)
 }
 
+func (m *MockMediaRepository) Get(ctx context.Context, id string) (*domain.MediaFile, error) {
+	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.MediaFile), args.Error(1)
+}
+
 // Helper to create test config
 func testConfig() config.MediaConfig {
 	return config.MediaConfig{
@@ -137,7 +161,7 @@ func TestScanLibraryUseCase_Execute_StagingPathNotExists(t *testing.T) {
 
 	mockFS.On("FileExists", cfg.StagingPath).Return(false)
 
-	uc := NewScanLibraryUseCase(cfg, mockHasher, mockFFProbe, mockFS, mockRepo)
+	uc := NewScanLibraryUseCase(cfg, mockHasher, mockFFProbe, mockFS, mockRepo, nil)
 
 	err := uc.Execute(context.Background())
 
@@ -159,7 +183,7 @@ func TestScanLibraryUseCase_Execute_EmptyDirectory(t *testing.T) {
 	mockFS.On("WalkDir", cfg.StagingPath, mock.Anything).Return(nil)
 	mockFS.On("RemoveEmptyDirs", cfg.StagingPath).Return(nil)
 
-	uc := NewScanLibraryUseCase(cfg, mockHasher, mockFFProbe, mockFS, mockRepo)
+	uc := NewScanLibraryUseCase(cfg, mockHasher, mockFFProbe, mockFS, mockRepo, nil)
 
 	err := uc.Execute(context.Background())
 
@@ -188,7 +212,7 @@ func TestScanLibraryUseCase_Execute_UnsupportedFormat(t *testing.T) {
 
 	mockFS.On("RemoveEmptyDirs", cfg.StagingPath).Return(nil)
 
-	uc := NewScanLibraryUseCase(cfg, mockHasher, mockFFProbe, mockFS, mockRepo)
+	uc := NewScanLibraryUseCase(cfg, mockHasher, mockFFProbe, mockFS, mockRepo, nil)
 
 	err := uc.Execute(ctx)
 
@@ -221,7 +245,7 @@ func TestScanLibraryUseCase_Execute_InvalidVideo(t *testing.T) {
 	mockFS.On("DeleteFile", filePath).Return(nil)
 	mockFS.On("RemoveEmptyDirs", cfg.StagingPath).Return(nil)
 
-	uc := NewScanLibraryUseCase(cfg, mockHasher, mockFFProbe, mockFS, mockRepo)
+	uc := NewScanLibraryUseCase(cfg, mockHasher, mockFFProbe, mockFS, mockRepo, nil)
 
 	err := uc.Execute(ctx)
 
@@ -257,7 +281,7 @@ func TestScanLibraryUseCase_Execute_DuplicateFile(t *testing.T) {
 	mockFS.On("DeleteFile", filePath).Return(nil)
 	mockFS.On("RemoveEmptyDirs", cfg.StagingPath).Return(nil)
 
-	uc := NewScanLibraryUseCase(cfg, mockHasher, mockFFProbe, mockFS, mockRepo)
+	uc := NewScanLibraryUseCase(cfg, mockHasher, mockFFProbe, mockFS, mockRepo, nil)
 
 	err := uc.Execute(ctx)
 
@@ -334,7 +358,7 @@ func TestScanLibraryUseCase_Execute_SuccessfulImport(t *testing.T) {
 	mockFS.On("DeleteFile", filePath).Return(nil)
 	mockFS.On("RemoveEmptyDirs", cfg.StagingPath).Return(nil)
 
-	uc := NewScanLibraryUseCase(cfg, mockHasher, mockFFProbe, mockFS, mockRepo)
+	uc := NewScanLibraryUseCase(cfg, mockHasher, mockFFProbe, mockFS, mockRepo, nil)
 
 	err := uc.Execute(ctx)
 
@@ -400,7 +424,7 @@ func TestScanLibraryUseCase_Execute_DatabaseError_Rollback(t *testing.T) {
 	})).Return(nil)
 	mockFS.On("RemoveEmptyDirs", cfg.StagingPath).Return(nil)
 
-	uc := NewScanLibraryUseCase(cfg, mockHasher, mockFFProbe, mockFS, mockRepo)
+	uc := NewScanLibraryUseCase(cfg, mockHasher, mockFFProbe, mockFS, mockRepo, nil)
 
 	err := uc.Execute(ctx)
 
@@ -432,7 +456,7 @@ func TestScanLibraryUseCase_Execute_ContextCanceled(t *testing.T) {
 		walkFn("/library/staging/video.mp4", &mockFileInfo{name: "video.mp4", isDir: false}, nil)
 	}).Return(context.Canceled)
 
-	uc := NewScanLibraryUseCase(cfg, mockHasher, mockFFProbe, mockFS, mockRepo)
+	uc := NewScanLibraryUseCase(cfg, mockHasher, mockFFProbe, mockFS, mockRepo, nil)
 
 	err := uc.Execute(ctx)
 
