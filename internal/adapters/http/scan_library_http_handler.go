@@ -18,6 +18,12 @@ func NewScanLibraryHTTPHandler(enqueueJobUseCase *usecasejob.EnqueueJobUseCase) 
 	}
 }
 
+// RegisterRoutes registers scan library routes on a router group (typically protected)
+func (h *ScanLibraryHTTPHandler) RegisterRoutes(router *gin.RouterGroup) {
+	router.POST("/scanlib", h.Handle)
+	logger.Debug().Msg("Scan library routes registered")
+}
+
 // Handle processes POST requests to trigger a library scan.
 // It enqueues a scan_library job and returns 201 with the job ID.
 func (h *ScanLibraryHTTPHandler) Handle(c *gin.Context) {

@@ -139,6 +139,93 @@ func (r *MediaRepository) Get(ctx context.Context, id string) (*domain.MediaFile
 	return &media, nil
 }
 
+// List retrieves all media files with pagination
+func (r *MediaRepository) List(ctx context.Context, page, perPage int) ([]*domain.MediaFile, int, error) {
+	// Get total count
+	countQuery := `SELECT COUNT(*) FROM media_files`
+	var total int
+	if err := r.db.QueryRowContext(ctx, countQuery).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("failed to count media files: %w", err)
+	}
+
+	// Calculate offset
+	if page < 1 {
+		page = 1
+	}
+	if perPage < 1 {
+		perPage = 20
+	}
+	offset := (page - 1) * perPage
+
+	// Get paginated media files
+	query := `
+		SELECT 
+			id, fingerprint, file_path, original_filename, filename,
+			title, duration, file_size, format, video_codec, audio_codecs,
+			resolution, width, height, bitrate, audio_tracks, subtitle_tracks,
+			subtitle_languages, status, created_at, updated_at, scanned_at
+		FROM media_files
+		ORDER BY created_at DESC
+		LIMIT ? OFFSET ?
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, perPage, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to query media files: %w", err)
+	}
+	defer rows.Close()
+
+	var mediaFiles []*domain.MediaFile
+	for rows.Next() {
+		var media domain.MediaFile
+		var audioCodecsJSON, subtitleLanguagesJSON string
+
+		if err := rows.Scan(
+			&media.ID,
+			&media.Fingerprint,
+			&media.FilePath,
+			&media.OriginalFilename,
+			&media.Filename,
+			&media.Title,
+			&media.Duration,
+			&media.FileSize,
+			&media.Format,
+			&media.VideoCodec,
+			&audioCodecsJSON,
+			&media.Resolution,
+			&media.Width,
+			&media.Height,
+			&media.Bitrate,
+			&media.AudioTracks,
+			&media.SubtitleTracks,
+			&subtitleLanguagesJSON,
+			&media.Status,
+			&media.CreatedAt,
+			&media.UpdatedAt,
+			&media.ScannedAt,
+		); err != nil {
+			return nil, 0, fmt.Errorf("failed to scan media file: %w", err)
+		}
+
+		// Unmarshal JSON array fields
+		if err := json.Unmarshal([]byte(audioCodecsJSON), &media.AudioCodecs); err != nil {
+			return nil, 0, fmt.Errorf("failed to unmarshal audio codecs: %w", err)
+		}
+
+		if err := json.Unmarshal([]byte(subtitleLanguagesJSON), &media.SubtitleLanguages); err != nil {
+			return nil, 0, fmt.Errorf("failed to unmarshal subtitle languages: %w", err)
+		}
+
+		mediaFiles = append(mediaFiles, &media)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("error iterating media files: %w", err)
+	}
+
+	return mediaFiles, total, nil
+}
+
 // FindByFingerprint retrieves a media file by its fingerprint
 func (r *MediaRepository) FindByFingerprint(ctx context.Context, fingerprint string) (*domain.MediaFile, error) {
 	query := `

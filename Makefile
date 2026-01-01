@@ -1,4 +1,4 @@
-.PHONY: help build build-prod run test test-unit test-integration test-config clean deps setup install lint fmt vet check dev
+.PHONY: help build build-prod build-pwa run test test-unit test-integration test-config clean deps setup install lint fmt vet check dev pwa-install pwa-build pwa-dev
 
 # Variables.1-dev.1-dev
 BINARY_NAME=vimesrv
@@ -43,6 +43,25 @@ build-prod: ## Build the application for production with optimizations
 	@mkdir -p $(BUILD_DIR)
 	@$(GO) build $(GOFLAGS) -ldflags="$(LDFLAGS)" -trimpath -o $(BUILD_DIR)/$(BINARY_NAME) $(CMD_DIR)
 	@echo "Production build complete: $(BUILD_DIR)/$(BINARY_NAME)"
+
+build-pwa: pwa-build ## Build the application with embedded PWA for production
+	@echo "Building $(BINARY_NAME) with PWA for production..."
+	@mkdir -p $(BUILD_DIR)
+	@$(GO) build $(GOFLAGS) -ldflags="$(LDFLAGS)" -trimpath -o $(BUILD_DIR)/$(BINARY_NAME) $(CMD_DIR)
+	@echo "Production build with PWA complete: $(BUILD_DIR)/$(BINARY_NAME)"
+
+# PWA commands
+pwa-install: ## Install PWA dependencies
+	@echo "Installing PWA dependencies..."
+	@cd web/pwa && npm install
+
+pwa-build: ## Build the PWA for production
+	@echo "Building PWA for production..."
+	@cd web/pwa && npm run build
+
+pwa-dev: ## Run PWA development server
+	@echo "Starting PWA dev server..."
+	@cd web/pwa && npm start
 
 # Testing commands
 test: ## Run all tests

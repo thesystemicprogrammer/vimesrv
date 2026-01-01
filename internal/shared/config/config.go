@@ -8,12 +8,23 @@ import (
 // Config holds all application configuration
 type Config struct {
 	Server      ServerConfig      `mapstructure:"server"`
+	Auth        AuthConfig        `mapstructure:"auth"`
 	Job         JobConfig         `mapstructure:"job"`
 	Media       MediaConfig       `mapstructure:"media"`
 	Transcoding TranscodingConfig `mapstructure:"transcoding"`
 	Database    DatabaseConfig    `mapstructure:"database"`
 	Logging     LoggingConfig     `mapstructure:"logging"`
 	TMDB        TMDBConfig        `mapstructure:"tmdb"`
+}
+
+// AuthConfig holds authentication configuration
+type AuthConfig struct {
+	Enabled          bool   `mapstructure:"enabled"`
+	Username         string `mapstructure:"username"`
+	PasswordHash     string `mapstructure:"password_hash"`      // bcrypt hash
+	JWTSecret        string `mapstructure:"jwt_secret"`         // Set via AUTH_JWT_SECRET env var
+	TokenExpiryHours int    `mapstructure:"token_expiry_hours"` // JWT token expiry in hours
+	StreamTokenMins  int    `mapstructure:"stream_token_mins"`  // Stream token expiry in minutes
 }
 
 type JobConfig struct {
@@ -96,6 +107,12 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("server config: %w", err)
 	}
 
+	if c.Auth.Enabled {
+		if err := c.Auth.Validate(); err != nil {
+			return fmt.Errorf("auth config: %w", err)
+		}
+	}
+
 	if err := c.Job.Validate(); err != nil {
 		return fmt.Errorf("job config: %w", err)
 	}
@@ -136,6 +153,34 @@ func (s *ServerConfig) Validate() error {
 
 	if s.ShutdownTimeoutSeconds < 5 || s.ShutdownTimeoutSeconds > 300 {
 		return fmt.Errorf("shutdown_timeout_seconds must be between 5 and 300, got %d", s.ShutdownTimeoutSeconds)
+	}
+
+	return nil
+}
+
+func (a *AuthConfig) Validate() error {
+	if a.Username == "" {
+		return fmt.Errorf("username cannot be empty when auth is enabled")
+	}
+
+	if a.PasswordHash == "" {
+		return fmt.Errorf("password_hash cannot be empty when auth is enabled")
+	}
+
+	if a.JWTSecret == "" {
+		return fmt.Errorf("jwt_secret cannot be empty when auth is enabled (set via AUTH_JWT_SECRET env var)")
+	}
+
+	if len(a.JWTSecret) < 32 {
+		return fmt.Errorf("jwt_secret must be at least 32 characters for security")
+	}
+
+	if a.TokenExpiryHours < 1 || a.TokenExpiryHours > 720 {
+		return fmt.Errorf("token_expiry_hours must be between 1 and 720 (30 days), got %d", a.TokenExpiryHours)
+	}
+
+	if a.StreamTokenMins < 5 || a.StreamTokenMins > 1440 {
+		return fmt.Errorf("stream_token_mins must be between 5 and 1440 (24 hours), got %d", a.StreamTokenMins)
 	}
 
 	return nil

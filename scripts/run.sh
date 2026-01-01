@@ -65,7 +65,7 @@ fi
 echo "Building vimesrv..."
 cd "$PROJECT_ROOT"
 
-if ! make build; then
+if ! make build-pwa; then
     echo "ERROR: Build failed!"
     exit 1
 fi

@@ -3,6 +3,14 @@ server:
   port: 8080
   shutdown_timeout_seconds: 30
 
+auth:
+  enabled: true
+  username: "admin"
+  password_hash: "$2b$10$3zhB4VenQZIilXXF08.mLuoIVirODb9EXEQbyVgKXEGcI2DN.oFmO" # default: admin123
+  jwt_secret: "vimesrv-default-secret-change-in-production" # Override with AUTH_JWT_SECRET env var
+  token_expiry_hours: 24
+  stream_token_mins: 60
+
 job:
   worker_count: 2
   polling_interval_in_seconds: 2

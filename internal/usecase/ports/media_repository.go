@@ -15,6 +15,10 @@ type MediaRepository interface {
 	// Returns nil if not found
 	Get(ctx context.Context, id string) (*domain.MediaFile, error)
 
+	// List retrieves all media files with pagination
+	// Returns a slice of media files, total count, and any error
+	List(ctx context.Context, page, perPage int) ([]*domain.MediaFile, int, error)
+
 	// FindByFingerprint retrieves a media file by its fingerprint
 	// Returns nil if not found
 	FindByFingerprint(ctx context.Context, fingerprint string) (*domain.MediaFile, error)

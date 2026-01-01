@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -97,21 +98,90 @@ func (s *HTTPServer) setupHealthEndpoint() {
 	logger.Debug().Msg("Health endpoint setup conducted")
 }
 
-// RegisterStaticFiles registers static file serving from an embedded filesystem.
-// This serves HTML players and other static assets.
-func (s *HTTPServer) RegisterStaticFiles(embedFS fs.FS) error {
-	webFS, err := fs.Sub(embedFS, ".")
+// RegisterPWA registers the PWA single-page application with SPA fallback routing.
+// All routes that don't match API, stream, or health paths will be
+// served the PWA's index.html for client-side routing.
+func (s *HTTPServer) RegisterPWA(pwaFS fs.FS) error {
+	// Create a sub-filesystem for the PWA dist folder
+	distFS, err := fs.Sub(pwaFS, "pwa/dist/pwa/browser")
 	if err != nil {
-		return fmt.Errorf("failed to create web filesystem: %w", err)
+		return fmt.Errorf("failed to create PWA filesystem: %w", err)
 	}
-	s.router.StaticFS("/web", http.FS(webFS))
 
-	// Redirect root to web player
-	s.router.GET("/", func(c *gin.Context) {
-		c.Redirect(http.StatusMovedPermanently, "/web/player.html")
+	// Pre-load index.html content to avoid redirect issues with http.FS
+	indexHTML, err := fs.ReadFile(distFS, "index.html")
+	if err != nil {
+		return fmt.Errorf("failed to read index.html: %w", err)
+	}
+
+	httpFS := http.FS(distFS)
+
+	// Helper to serve index.html without redirect issues
+	serveIndex := func(c *gin.Context) {
+		c.Data(http.StatusOK, "text/html; charset=utf-8", indexHTML)
+	}
+
+	// Serve PWA at root
+	s.router.GET("/", serveIndex)
+
+	// Serve icons directory
+	iconsFS, err := fs.Sub(distFS, "icons")
+	if err == nil {
+		s.router.StaticFS("/icons", http.FS(iconsFS))
+	}
+
+	// Serve manifest and service worker at root
+	s.router.GET("/manifest.webmanifest", func(c *gin.Context) {
+		c.FileFromFS("manifest.webmanifest", httpFS)
+	})
+	s.router.GET("/ngsw.json", func(c *gin.Context) {
+		c.FileFromFS("ngsw.json", httpFS)
+	})
+	s.router.GET("/ngsw-worker.js", func(c *gin.Context) {
+		c.Header("Service-Worker-Allowed", "/")
+		c.FileFromFS("ngsw-worker.js", httpFS)
+	})
+	s.router.GET("/safety-worker.js", func(c *gin.Context) {
+		c.FileFromFS("safety-worker.js", httpFS)
+	})
+	s.router.GET("/worker-basic.min.js", func(c *gin.Context) {
+		c.FileFromFS("worker-basic.min.js", httpFS)
+	})
+	s.router.GET("/favicon.ico", func(c *gin.Context) {
+		c.FileFromFS("favicon.ico", httpFS)
 	})
 
-	logger.Debug().Msg("Static files registered at /web")
+	// SPA fallback: serve index.html for any unmatched routes
+	// This must be registered AFTER all other routes
+	s.router.NoRoute(func(c *gin.Context) {
+		path := c.Request.URL.Path
+
+		// Return JSON errors for API and stream routes
+		if strings.HasPrefix(path, "/api") {
+			c.JSON(http.StatusNotFound, ErrorResponse("NOT_FOUND", "API endpoint not found", ""))
+			return
+		}
+		if strings.HasPrefix(path, "/stream") {
+			c.JSON(http.StatusNotFound, ErrorResponse("NOT_FOUND", "Stream resource not found", ""))
+			return
+		}
+
+		// Check if this looks like a static file request (has extension)
+		// If so, try to serve it from the PWA files
+		if strings.Contains(path, ".") && !strings.HasPrefix(path, "/login") && !strings.HasPrefix(path, "/play") {
+			// Try to serve as static file
+			filePath := path[1:] // Remove leading slash
+			if _, err := fs.Stat(distFS, filePath); err == nil {
+				c.FileFromFS(filePath, httpFS)
+				return
+			}
+		}
+
+		// For all other paths, serve index.html (SPA routing)
+		serveIndex(c)
+	})
+
+	logger.Info().Msg("PWA registered with SPA fallback routing")
 	return nil
 }
 
@@ -119,15 +189,4 @@ func (s *HTTPServer) RegisterStaticFiles(embedFS fs.FS) error {
 // This allows handlers to register their own routes
 func (s *HTTPServer) Router() *gin.Engine {
 	return s.router
-}
-
-// RegisterRoutes registers all HTTP routes with their handlers.
-// This should be called after the server is created but before it starts.
-func (s *HTTPServer) RegisterRoutes(scanLibraryHandler interface{ Handle(*gin.Context) }) {
-	api := s.router.Group("/api/v1")
-	{
-		api.POST("/scanlib", scanLibraryHandler.Handle)
-	}
-
-	logger.Debug().Msg("API routes registered")
 }

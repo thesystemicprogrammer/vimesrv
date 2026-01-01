@@ -19,6 +19,7 @@ type UseCases struct {
 	CreateTranscodeJobsUseCase *transcode.CreateTranscodeJobsUseCase
 	ProcessTranscodeUseCase    *transcode.ProcessTranscodeUseCase
 	GetMediaUseCase            *media.GetMediaUseCase
+	ListMediaUseCase           *media.ListMediaUseCase
 }
 
 func initUseCases(config *config.Config, adapters *Adapters) *UseCases {
@@ -61,5 +62,6 @@ func initUseCases(config *config.Config, adapters *Adapters) *UseCases {
 			adapters.AudioStreamRepository,
 			adapters.SubtitleStreamRepository,
 		),
+		ListMediaUseCase: media.NewListMediaUseCase(adapters.MediaRepository),
 	}
 }
