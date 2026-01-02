@@ -302,6 +302,38 @@ export interface LinkSearchRequest {
   episode_number?: number;
 }
 
+// User management types
+export type UserRole = 'admin' | 'manager' | 'user';
+
+export interface User {
+  id: string;
+  username: string;
+  role: UserRole;
+  must_change_password: boolean;
+  created_at: string;
+  updated_at: string;
+  created_by?: string;
+}
+
+export interface CreateUserRequest {
+  username: string;
+  password: string;
+  role: UserRole;
+}
+
+export interface UpdateUserRequest {
+  role: UserRole;
+}
+
+export interface ResetPasswordRequest {
+  new_password: string;
+}
+
+export interface ChangePasswordRequest {
+  current_password: string;
+  new_password: string;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -482,6 +514,46 @@ export class ApiService {
     return this.http.post<ApiResponse<{ message: string; job_id?: number; queued: boolean }>>(
       `${this.baseUrl}/translations/fetch`,
       { language }
+    );
+  }
+
+  // User management endpoints
+  listUsers(): Observable<ApiResponse<User[]>> {
+    return this.http.get<ApiResponse<User[]>>(`${this.baseUrl}/users`);
+  }
+
+  getUser(id: string): Observable<ApiResponse<User>> {
+    return this.http.get<ApiResponse<User>>(`${this.baseUrl}/users/${id}`);
+  }
+
+  createUser(request: CreateUserRequest): Observable<ApiResponse<User>> {
+    return this.http.post<ApiResponse<User>>(`${this.baseUrl}/users`, request);
+  }
+
+  updateUser(id: string, request: UpdateUserRequest): Observable<ApiResponse<User>> {
+    return this.http.put<ApiResponse<User>>(`${this.baseUrl}/users/${id}`, request);
+  }
+
+  deleteUser(id: string): Observable<ApiResponse<{ message: string }>> {
+    return this.http.delete<ApiResponse<{ message: string }>>(`${this.baseUrl}/users/${id}`);
+  }
+
+  resetUserPassword(id: string, request: ResetPasswordRequest): Observable<ApiResponse<{ message: string }>> {
+    return this.http.post<ApiResponse<{ message: string }>>(
+      `${this.baseUrl}/users/${id}/reset-password`,
+      request
+    );
+  }
+
+  changePassword(request: ChangePasswordRequest): Observable<ApiResponse<{ message: string; token: string }>> {
+    return this.http.post<ApiResponse<{ message: string; token: string }>>(
+      `${this.baseUrl}/auth/change-password`,
+      request
+    ).pipe(
+      tap(response => {
+        // Update the token with the new one (must_change_password will be false)
+        this.auth.setToken(response.data.token);
+      })
     );
   }
 

@@ -629,6 +629,31 @@ DROP INDEX IF EXISTS idx_similar_movie_translations_movie_id;
 DROP TABLE IF EXISTS similar_movie_translations;
 `,
 	},
+	{
+		version: 9,
+		name:    "create_users_table",
+		up: `
+-- Users table for authentication and authorization
+CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    password_hash TEXT NOT NULL,
+    role TEXT NOT NULL CHECK(role IN ('admin', 'manager', 'user')),
+    must_change_password INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_by TEXT
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username);
+CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+`,
+		down: `
+DROP INDEX IF EXISTS idx_users_role;
+DROP INDEX IF EXISTS idx_users_username;
+DROP TABLE IF EXISTS users;
+`,
+	},
 }
 
 func NewDatabaseMigration(db *sql.DB) *DatabaseMigration {

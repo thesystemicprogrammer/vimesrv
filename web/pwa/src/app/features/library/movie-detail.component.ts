@@ -1,16 +1,17 @@
-import { Component, inject, OnInit, OnDestroy, signal } from '@angular/core';
+import { Component, inject, OnInit, OnDestroy, signal, ViewChild } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { toObservable } from '@angular/core/rxjs-interop';
 import { Subscription, skip } from 'rxjs';
-import { ApiService, MovieDetail, CreditPerson, SimilarMovieItem, CollectionMovieItem, MovieCollectionInfo } from '../../core/services/api.service';
+import { ApiService, MovieDetail, CreditPerson, SimilarMovieItem, CollectionMovieItem, MovieCollectionInfo, UnmatchedMediaSummary } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
+import { MetadataMatchModalComponent } from './metadata-match-modal.component';
 
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
 
 @Component({
   selector: 'app-movie-detail',
   standalone: true,
-  imports: [RouterLink],
+  imports: [RouterLink, MetadataMatchModalComponent],
   template: `
     @if (loading()) {
       <div class="flex justify-center items-center h-screen">
@@ -128,25 +129,44 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
                 <p class="text-slate-400 italic mb-4">"{{ movie()!.tagline }}"</p>
               }
 
-              <!-- Play button -->
-              @if (canPlay()) {
+              <!-- Action buttons -->
+              <div class="flex flex-wrap gap-3">
+                <!-- Play button -->
+                @if (canPlay()) {
+                  <button
+                    (click)="playMovie()"
+                    class="flex items-center gap-3 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition shadow-lg"
+                  >
+                    <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M8 5v14l11-7z"/>
+                    </svg>
+                    Play
+                  </button>
+                } @else {
+                  <div class="flex items-center gap-2 text-yellow-500">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    <span>Transcoding in progress...</span>
+                  </div>
+                }
+
+                <!-- Change Metadata button -->
                 <button
-                  (click)="playMovie()"
-                  class="flex items-center gap-3 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition shadow-lg"
+                  (click)="openChangeMetadata()"
+                  [disabled]="resettingMetadata()"
+                  class="flex items-center gap-2 px-4 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition disabled:opacity-50"
                 >
-                  <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M8 5v14l11-7z"/>
-                  </svg>
-                  Play
+                  @if (resettingMetadata()) {
+                    <div class="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full"></div>
+                  } @else {
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                    </svg>
+                  }
+                  <span>Change Metadata</span>
                 </button>
-              } @else {
-                <div class="flex items-center gap-2 text-yellow-500">
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                  </svg>
-                  <span>Transcoding in progress...</span>
-                </div>
-              }
+              </div>
             </div>
           </div>
         </div>
@@ -506,6 +526,14 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
         </div>
       </div>
     }
+
+    <!-- Metadata Match Modal -->
+    <app-metadata-match-modal
+      #matchModal
+      [media]="selectedMedia()"
+      (matched)="onMetadataChanged()"
+      (skipped)="onMetadataChanged()"
+    />
   `
 })
 export class MovieDetailComponent implements OnInit, OnDestroy {
@@ -517,12 +545,18 @@ export class MovieDetailComponent implements OnInit, OnDestroy {
   private mediaId: string | null = null;
   private languageSubscription: Subscription | null = null;
 
+  @ViewChild('matchModal') matchModal!: MetadataMatchModalComponent;
+
   movie = signal<MovieDetail | null>(null);
   loading = signal(true);
   error = signal<string | null>(null);
 
   posterUrl = signal<string | null>(null);
   backdropUrl = signal<string | null>(null);
+
+  // Metadata change state
+  selectedMedia = signal<UnmatchedMediaSummary | null>(null);
+  resettingMetadata = signal(false);
 
   constructor() {
     // Re-fetch movie details when language changes (skip initial emission)
@@ -637,6 +671,50 @@ export class MovieDetailComponent implements OnInit, OnDestroy {
       case 'failed': return 'Metadata lookup failed';
       case 'skipped': return 'Metadata skipped';
       default: return status;
+    }
+  }
+
+  openChangeMetadata(): void {
+    const m = this.movie();
+    if (!m) return;
+
+    this.resettingMetadata.set(true);
+
+    // First reset the enrichment status, then open the modal
+    this.api.resetEnrichment(m.media_id).subscribe({
+      next: () => {
+        // Create an UnmatchedMediaSummary from the movie data
+        const mediaSummary: UnmatchedMediaSummary = {
+          media_id: m.media_id,
+          filename: m.title, // Use title as filename display
+          title: m.title,
+          duration: m.duration,
+          resolution: m.resolution,
+          enrichment_status: 'pending',
+          created_at: m.created_at
+        };
+
+        this.selectedMedia.set(mediaSummary);
+        this.resettingMetadata.set(false);
+
+        // Open the modal
+        setTimeout(() => {
+          this.matchModal.open();
+        }, 0);
+      },
+      error: (err) => {
+        console.error('Failed to reset enrichment:', err);
+        this.resettingMetadata.set(false);
+        // Show error to user via the existing error signal
+        this.error.set(err.error?.error?.message || 'Failed to reset metadata');
+      }
+    });
+  }
+
+  onMetadataChanged(): void {
+    // Reload the movie to reflect the new metadata
+    if (this.mediaId) {
+      this.loadMovie(this.mediaId);
     }
   }
 }

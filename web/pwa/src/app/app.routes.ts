@@ -1,10 +1,17 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
+import { adminGuard } from './core/guards/admin.guard';
+import { passwordChangeGuard } from './core/guards/password-change.guard';
 
 export const routes: Routes = [
   {
     path: 'login',
     loadComponent: () => import('./features/auth/login.component').then(m => m.LoginComponent)
+  },
+  {
+    path: 'change-password',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/auth/change-password.component').then(m => m.ChangePasswordComponent)
   },
   {
     path: '',
@@ -13,28 +20,33 @@ export const routes: Routes = [
   },
   {
     path: 'library',
-    canActivate: [authGuard],
+    canActivate: [authGuard, passwordChangeGuard],
     loadComponent: () => import('./features/library/library.component').then(m => m.LibraryComponent)
   },
   {
     path: 'movie/:id',
-    canActivate: [authGuard],
+    canActivate: [authGuard, passwordChangeGuard],
     loadComponent: () => import('./features/library/movie-detail.component').then(m => m.MovieDetailComponent)
   },
   {
     path: 'movie/:id/cast',
-    canActivate: [authGuard],
+    canActivate: [authGuard, passwordChangeGuard],
     loadComponent: () => import('./features/library/movie-cast.component').then(m => m.MovieCastComponent)
   },
   {
     path: 'series/:id',
-    canActivate: [authGuard],
+    canActivate: [authGuard, passwordChangeGuard],
     loadComponent: () => import('./features/library/series-detail.component').then(m => m.SeriesDetailComponent)
   },
   {
     path: 'play/:id',
-    canActivate: [authGuard],
+    canActivate: [authGuard, passwordChangeGuard],
     loadComponent: () => import('./features/player/player.component').then(m => m.PlayerComponent)
+  },
+  {
+    path: 'admin',
+    canActivate: [adminGuard, passwordChangeGuard],
+    loadComponent: () => import('./features/admin/admin.component').then(m => m.AdminComponent)
   },
   {
     path: '**',

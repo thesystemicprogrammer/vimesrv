@@ -11,6 +11,30 @@ const (
 	StatusDead      JobStatus = "dead"
 )
 
+// User roles
+type UserRole string
+
+const (
+	RoleAdmin   UserRole = "admin"
+	RoleManager UserRole = "manager"
+	RoleUser    UserRole = "user"
+)
+
+// ValidUserRoles returns all valid user roles
+func ValidUserRoles() []UserRole {
+	return []UserRole{RoleAdmin, RoleManager, RoleUser}
+}
+
+// IsValidRole checks if the given role is valid
+func (r UserRole) IsValid() bool {
+	switch r {
+	case RoleAdmin, RoleManager, RoleUser:
+		return true
+	default:
+		return false
+	}
+}
+
 // Job types
 const (
 	JobTypeScanLibrary       = "scan_library"

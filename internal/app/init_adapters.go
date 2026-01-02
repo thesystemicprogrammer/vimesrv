@@ -37,6 +37,7 @@ type Adapters struct {
 	SimilarContentRepository     ports.SimilarContentRepository
 	CollectionRepository         ports.CollectionRepository
 	LibraryRepository            ports.LibraryRepository
+	UserRepository               ports.UserRepository
 }
 
 func initAdapters(cfg *config.Config, db *database.DB) *Adapters {
@@ -65,6 +66,7 @@ func initAdapters(cfg *config.Config, db *database.DB) *Adapters {
 		SimilarContentRepository:     repository.NewSQLiteSimilarContentRepository(db.DB),
 		CollectionRepository:         repository.NewSQLiteCollectionRepository(db.DB),
 		LibraryRepository:            repository.NewLibraryRepository(db),
+		UserRepository:               repository.NewSQLiteUserRepository(db),
 	}
 
 	// Initialize TMDB-related adapters only if TMDB is enabled

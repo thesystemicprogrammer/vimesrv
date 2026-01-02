@@ -8,6 +8,7 @@ import (
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/metadata"
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/ports"
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/transcode"
+	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/user"
 )
 
 type UseCases struct {
@@ -39,6 +40,14 @@ type UseCases struct {
 	GetSimilarMoviesUseCase   *library.GetSimilarMoviesUseCase
 	GetSimilarSeriesUseCase   *library.GetSimilarSeriesUseCase
 	GetMovieCollectionUseCase *library.GetMovieCollectionUseCase
+	// User management use cases
+	CreateUserUseCase     *user.CreateUserUseCase
+	ListUsersUseCase      *user.ListUsersUseCase
+	GetUserUseCase        *user.GetUserUseCase
+	UpdateUserUseCase     *user.UpdateUserUseCase
+	DeleteUserUseCase     *user.DeleteUserUseCase
+	ResetPasswordUseCase  *user.ResetPasswordUseCase
+	ChangePasswordUseCase *user.ChangePasswordUseCase
 }
 
 func initUseCases(cfg *config.Config, adapters *Adapters) *UseCases {
@@ -209,5 +218,13 @@ func initUseCases(cfg *config.Config, adapters *Adapters) *UseCases {
 		GetSimilarMoviesUseCase:   getSimilarMoviesUseCase,
 		GetSimilarSeriesUseCase:   getSimilarSeriesUseCase,
 		GetMovieCollectionUseCase: getMovieCollectionUseCase,
+		// User management use cases
+		CreateUserUseCase:     user.NewCreateUserUseCase(adapters.UserRepository),
+		ListUsersUseCase:      user.NewListUsersUseCase(adapters.UserRepository),
+		GetUserUseCase:        user.NewGetUserUseCase(adapters.UserRepository),
+		UpdateUserUseCase:     user.NewUpdateUserUseCase(adapters.UserRepository),
+		DeleteUserUseCase:     user.NewDeleteUserUseCase(adapters.UserRepository),
+		ResetPasswordUseCase:  user.NewResetPasswordUseCase(adapters.UserRepository),
+		ChangePasswordUseCase: user.NewChangePasswordUseCase(adapters.UserRepository),
 	}
 }

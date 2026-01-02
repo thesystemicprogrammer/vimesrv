@@ -14,6 +14,7 @@ import (
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/config"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/logger"
+	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/user"
 )
 
 type Application struct {
@@ -89,6 +90,13 @@ func (app *Application) Start() error {
 	// Channel to listen for errors from HTTP server
 	serverErrors := make(chan error, 1)
 
+	// Seed initial admin user if no users exist
+	ctx := context.Background()
+	if err := seedInitialAdmin(ctx, app.useCases, app.adapters); err != nil {
+		logger.Warn().Err(err).Msg("failed to seed initial admin user")
+		// Don't fail startup, just log the warning
+	}
+
 	// Start HTTP server in goroutine
 	go func() {
 		logger.Info().Str("address", app.httpServer.Addr()).Msg("HTTP server listening")
@@ -102,7 +110,6 @@ func (app *Application) Start() error {
 
 	// Initialize startup schedules (library scan, etc.)
 	// This must happen after job manager starts so scheduler can process schedules
-	ctx := context.Background()
 	if err := initStartupSchedules(ctx, app.config, app.useCases, app.adapters); err != nil {
 		// Fatal error - invalid configuration should prevent server from starting
 		logger.Error().Err(err).Msg("failed to initialize startup schedules")
@@ -204,6 +211,40 @@ func validateExternalDependencies(adapters *Adapters) error {
 	logger.Info().Msg("ffprobe is available")
 
 	// Add more external dependency checks here as needed
+
+	return nil
+}
+
+// seedInitialAdmin creates the initial admin user if no users exist in the database
+func seedInitialAdmin(ctx context.Context, useCases *UseCases, adapters *Adapters) error {
+	// Check if any users exist
+	userCount, err := adapters.UserRepository.Count(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to count users: %w", err)
+	}
+
+	// If users already exist, no need to seed
+	if userCount > 0 {
+		logger.Debug().Int("userCount", userCount).Msg("users exist, skipping admin seed")
+		return nil
+	}
+
+	// Create default admin user with must_change_password flag
+	// Default credentials: admin / admin123
+	input := user.CreateUserInput{
+		Username: "admin",
+		Password: "admin123",
+		Role:     shared.RoleAdmin,
+	}
+
+	_, err = useCases.CreateUserUseCase.Execute(ctx, input)
+	if err != nil {
+		return fmt.Errorf("failed to create initial admin: %w", err)
+	}
+
+	logger.Warn().
+		Str("username", input.Username).
+		Msg("created initial admin user with default password - CHANGE IT IMMEDIATELY")
 
 	return nil
 }

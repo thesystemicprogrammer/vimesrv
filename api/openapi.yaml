@@ -14,6 +14,8 @@ servers:
 tags:
   - name: Auth
     description: Authentication endpoints
+  - name: Users
+    description: User management (admin only)
   - name: Media
     description: Media file management
   - name: Metadata
@@ -78,6 +80,9 @@ components:
               type: integer
               description: Token expiry time in seconds
               example: 86400
+            must_change_password:
+              type: boolean
+              description: If true, user must change password before accessing other endpoints
 
     UserResponse:
       type: object
@@ -88,6 +93,109 @@ components:
             username:
               type: string
               example: "admin"
+            user_id:
+              type: string
+              description: User ID (only for database users)
+            role:
+              type: string
+              enum: [admin, manager, user]
+              description: User role
+            must_change_password:
+              type: boolean
+              description: If true, user must change password
+
+    ChangePasswordRequest:
+      type: object
+      required:
+        - current_password
+        - new_password
+      properties:
+        current_password:
+          type: string
+        new_password:
+          type: string
+          minLength: 6
+
+    CreateUserRequest:
+      type: object
+      required:
+        - username
+        - password
+        - role
+      properties:
+        username:
+          type: string
+          example: "newuser"
+        password:
+          type: string
+          minLength: 6
+        role:
+          type: string
+          enum: [admin, manager, user]
+
+    UpdateUserRequest:
+      type: object
+      required:
+        - role
+      properties:
+        role:
+          type: string
+          enum: [admin, manager, user]
+
+    ResetPasswordRequest:
+      type: object
+      required:
+        - new_password
+      properties:
+        new_password:
+          type: string
+          minLength: 6
+
+    UserDetailResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            id:
+              type: string
+            username:
+              type: string
+            role:
+              type: string
+              enum: [admin, manager, user]
+            must_change_password:
+              type: boolean
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+
+    UsersListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              username:
+                type: string
+              role:
+                type: string
+                enum: [admin, manager, user]
+              must_change_password:
+                type: boolean
+              created_at:
+                type: string
+                format: date-time
+              updated_at:
+                type: string
+                format: date-time
 
     StreamTokenResponse:
       type: object
@@ -758,6 +866,261 @@ paths:
                 $ref: '#/components/schemas/StreamTokenResponse'
         '401':
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/auth/change-password:
+    post:
+      tags: [Auth]
+      summary: Change password
+      description: Change the current user's password
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '200':
+          description: Password changed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Invalid request or password too short
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Current password incorrect
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/users:
+    get:
+      tags: [Users]
+      summary: List users
+      description: Returns all users (admin only)
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsersListResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden (admin access required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags: [Users]
+      summary: Create user
+      description: Create a new user (admin only)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserDetailResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden (admin access required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Username already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/users/{id}:
+    get:
+      tags: [Users]
+      summary: Get user
+      description: Get a specific user by ID (admin only)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserDetailResponse'
+        '403':
+          description: Forbidden (admin access required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      tags: [Users]
+      summary: Update user
+      description: Update a user's role (admin only)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+      responses:
+        '200':
+          description: User updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserDetailResponse'
+        '400':
+          description: Invalid role or cannot demote last admin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden (admin access required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags: [Users]
+      summary: Delete user
+      description: Delete a user (admin only, cannot delete self or last admin)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Cannot delete self or last admin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden (admin access required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/users/{id}/reset-password:
+    post:
+      tags: [Users]
+      summary: Reset user password
+      description: Reset a user's password (admin only). User will be required to change password on next login.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequest'
+      responses:
+        '200':
+          description: Password reset
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserDetailResponse'
+        '400':
+          description: Invalid request or password too short
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden (admin access required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
           content:
             application/json:
               schema:

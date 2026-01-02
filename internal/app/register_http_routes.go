@@ -19,7 +19,7 @@ func registerHTTPHandlers(useCases *UseCases, adapters *Adapters, httpServer *se
 	// === Public Routes (no auth required) ===
 
 	// Auth handler - login is public
-	authHandler := http.NewAuthHandler(&cfg.Auth)
+	authHandler := http.NewAuthHandler(&cfg.Auth, adapters.UserRepository, useCases.ChangePasswordUseCase)
 	authHandler.RegisterRoutes(router)
 
 	// === Protected API Routes ===
@@ -28,8 +28,19 @@ func registerHTTPHandlers(useCases *UseCases, adapters *Adapters, httpServer *se
 	apiGroup := router.Group("/api/v1")
 	apiGroup.Use(server.AuthMiddleware(&cfg.Auth))
 	{
-		// Protected auth routes (me, stream-token)
+		// Protected auth routes (me, stream-token, change-password)
 		authHandler.RegisterProtectedRoutes(apiGroup)
+
+		// User management routes (admin only)
+		userHandler := http.NewUserHandler(
+			useCases.CreateUserUseCase,
+			useCases.ListUsersUseCase,
+			useCases.GetUserUseCase,
+			useCases.UpdateUserUseCase,
+			useCases.DeleteUserUseCase,
+			useCases.ResetPasswordUseCase,
+		)
+		userHandler.RegisterProtectedRoutes(apiGroup)
 
 		// Scan Library API
 		scanLibraryHttpHandler := http.NewScanLibraryHTTPHandler(useCases.EnqueueJobUseCase)

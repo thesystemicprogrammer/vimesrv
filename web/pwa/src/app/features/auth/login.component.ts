@@ -2,6 +2,7 @@ import { Component, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/services/api.service';
+import { AuthService } from '../../core/services/auth.service';
 
 @Component({
   selector: 'app-login',
@@ -72,6 +73,7 @@ import { ApiService } from '../../core/services/api.service';
 })
 export class LoginComponent {
   private readonly api = inject(ApiService);
+  private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
 
   username = '';
@@ -90,7 +92,12 @@ export class LoginComponent {
 
     this.api.login({ username: this.username, password: this.password }).subscribe({
       next: () => {
-        this.router.navigate(['/']);
+        // Check if user needs to change password
+        if (this.auth.mustChangePassword()) {
+          this.router.navigate(['/change-password']);
+        } else {
+          this.router.navigate(['/']);
+        }
       },
       error: (err) => {
         this.loading.set(false);
