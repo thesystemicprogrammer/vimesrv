@@ -435,5 +435,90 @@ func (c *TMDBHTTPClient) GetSimilarMovies(ctx context.Context, movieID int, lang
 	return &response, nil
 }
 
+// GetSimilarSeries retrieves similar series for a given TV series
+func (c *TMDBHTTPClient) GetSimilarSeries(ctx context.Context, seriesID int, language string) (*ports.TMDBSimilarSeriesResponse, error) {
+	params := url.Values{}
+	if language != "" {
+		params.Set("language", language)
+	}
+
+	body, err := c.doRequest(ctx, fmt.Sprintf("/tv/%d/similar", seriesID), params)
+	if err != nil {
+		return nil, err
+	}
+
+	var response ports.TMDBSimilarSeriesResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+
+	return &response, nil
+}
+
+// GetCollectionDetails retrieves collection details including all movies
+func (c *TMDBHTTPClient) GetCollectionDetails(ctx context.Context, collectionID int, language string) (*ports.TMDBCollectionDetails, error) {
+	params := url.Values{}
+	if language != "" {
+		params.Set("language", language)
+	}
+
+	body, err := c.doRequest(ctx, fmt.Sprintf("/collection/%d", collectionID), params)
+	if err != nil {
+		return nil, err
+	}
+
+	var details ports.TMDBCollectionDetails
+	if err := json.Unmarshal(body, &details); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+
+	return &details, nil
+}
+
+// GetCollectionTranslations retrieves translations for a collection
+func (c *TMDBHTTPClient) GetCollectionTranslations(ctx context.Context, collectionID int) (*ports.TMDBCollectionTranslationsResponse, error) {
+	body, err := c.doRequest(ctx, fmt.Sprintf("/collection/%d/translations", collectionID), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var response ports.TMDBCollectionTranslationsResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+
+	return &response, nil
+}
+
+// GetMovieTranslations retrieves all translations for a movie
+func (c *TMDBHTTPClient) GetMovieTranslations(ctx context.Context, movieID int) (*ports.TMDBMovieTranslationsResponse, error) {
+	body, err := c.doRequest(ctx, fmt.Sprintf("/movie/%d/translations", movieID), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var response ports.TMDBMovieTranslationsResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+
+	return &response, nil
+}
+
+// GetSeriesTranslations retrieves all translations for a TV series
+func (c *TMDBHTTPClient) GetSeriesTranslations(ctx context.Context, seriesID int) (*ports.TMDBSeriesTranslationsResponse, error) {
+	body, err := c.doRequest(ctx, fmt.Sprintf("/tv/%d/translations", seriesID), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var response ports.TMDBSeriesTranslationsResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+
+	return &response, nil
+}
+
 // Ensure TMDBHTTPClient implements TMDBClient
 var _ ports.TMDBClient = (*TMDBHTTPClient)(nil)

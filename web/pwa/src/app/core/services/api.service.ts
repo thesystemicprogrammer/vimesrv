@@ -116,6 +116,8 @@ export interface MovieDetail extends MovieSummary {
   cast?: CreditPerson[];
   directors?: CreditPerson[];
   crew?: CreditPerson[];
+  similar_movies?: SimilarMovieItem[];
+  collection?: MovieCollectionInfo;
 }
 
 export interface SeriesSummary {
@@ -158,9 +160,55 @@ export interface SeasonSummary {
   episodes?: EpisodeSummary[];
 }
 
+export interface SimilarMovieItem {
+  tmdb_id: number;
+  title: string;
+  poster_path?: string;
+  release_date?: string;
+  year?: string;
+  vote_average: number;
+  in_library: boolean;
+  media_id?: string;
+}
+
+export interface CollectionMovieItem {
+  tmdb_id: number;
+  title: string;
+  poster_path?: string;
+  release_date?: string;
+  year?: string;
+  vote_average: number;
+  in_library: boolean;
+  media_id?: string;
+  is_current: boolean;
+}
+
+export interface MovieCollectionInfo {
+  collection_id: number;
+  name: string;
+  overview?: string;
+  poster_path?: string;
+  backdrop_path?: string;
+  movies: CollectionMovieItem[];
+  position: number;
+  total_movies: number;
+}
+
+export interface SimilarSeriesItem {
+  tmdb_id: number;
+  name: string;
+  poster_path?: string;
+  first_air_date?: string;
+  year?: string;
+  vote_average: number;
+  in_library: boolean;
+  series_metadata_id?: number;
+}
+
 export interface SeriesDetail extends SeriesSummary {
   overview?: string;
   seasons?: SeasonSummary[];
+  similar_series?: SimilarSeriesItem[];
 }
 
 export interface UnmatchedMediaSummary {

@@ -12,6 +12,9 @@ Whenever I discover something odd or something I don't understand, I write it do
 - Setting the language label on the server: What about multi language clients? Should the label not be determined on client side with the client language
 - How do we update series metadata? When there is a new season, the metadata changes so we need an update
 - While transcoding, the media is already visible in the frontend, but there are no streams. Can we somehow ensure that we cannot try to start playing a stream as long as transcoding is still running
+- Translation of fixed front end texts: We can switch language but only for TMDB metadata. But we need to translate the whole frontend
+- Translation fetching in TMDB: Is it consistent or could it be improved simpliyfied?
+- Translation fetching in TMDB: Is it consistent or could it be improved simpliyfied?
 -
 
 # Tasks

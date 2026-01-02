@@ -247,7 +247,8 @@ func (r *LibraryRepository) GetMovieDetail(ctx context.Context, mediaID string, 
 			mm.runtime,
 			COALESCE(mm.status, '') as movie_status,
 			COALESCE(mm.imdb_id, '') as imdb_id,
-			mm.tmdb_id
+			mm.tmdb_id,
+			mm.collection_id
 		FROM media_files mf
 		LEFT JOIN movie_metadata mm ON mf.movie_metadata_id = mm.id
 		LEFT JOIN (
@@ -280,6 +281,7 @@ func (r *LibraryRepository) GetMovieDetail(ctx context.Context, mediaID string, 
 	var genresJSON string
 	var runtime sql.NullInt64
 	var tmdbID sql.NullInt64
+	var collectionID sql.NullInt64
 	var mediaStatus, movieStatus string
 
 	err := r.db.QueryRowContext(ctx, query, exactLang, baseLang, exactLang, baseLang, mediaID).Scan(
@@ -305,6 +307,7 @@ func (r *LibraryRepository) GetMovieDetail(ctx context.Context, mediaID string, 
 		&movieStatus,
 		&detail.IMDbID,
 		&tmdbID,
+		&collectionID,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -321,6 +324,10 @@ func (r *LibraryRepository) GetMovieDetail(ctx context.Context, mediaID string, 
 	}
 	if tmdbID.Valid {
 		detail.TMDBID = int(tmdbID.Int64)
+	}
+	if collectionID.Valid {
+		cid := int(collectionID.Int64)
+		detail.CollectionID = &cid
 	}
 	detail.MovieSummary.Status = mediaStatus
 	detail.MovieStatus = movieStatus

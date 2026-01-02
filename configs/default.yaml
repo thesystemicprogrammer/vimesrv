@@ -125,7 +125,8 @@ tmdb:
   profile_size: "w185" # Profile photo size for cast/crew
   requests_per_10s: 35
   max_cast_members: 10 # Number of top cast members to store (1-50)
-  similar_movies_count: 6 # Number of similar movies to show (1-20)
+  similar_content_count: 5 # Number of similar movies/series to show (2-12)
+  cache_ttl_hours: 168 # TTL for cached data like similar content (1 week)
 
 library:
   recently_added_count: 20 # Number of items to show in "Recently Added" section

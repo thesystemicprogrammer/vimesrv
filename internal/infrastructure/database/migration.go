@@ -455,6 +455,180 @@ DROP INDEX IF EXISTS idx_movie_credits_movie_id;
 DROP TABLE IF EXISTS movie_credits;
 `,
 	},
+	{
+		version: 6,
+		name:    "create_similar_content_tables",
+		up: `
+-- Similar movies cache
+CREATE TABLE IF NOT EXISTS similar_movies (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    movie_metadata_id INTEGER NOT NULL REFERENCES movie_metadata(id) ON DELETE CASCADE,
+    similar_tmdb_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    poster_path TEXT,
+    release_date TEXT,
+    vote_average REAL DEFAULT 0,
+    display_order INTEGER NOT NULL,
+    fetched_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(movie_metadata_id, similar_tmdb_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_similar_movies_metadata_id ON similar_movies(movie_metadata_id);
+CREATE INDEX IF NOT EXISTS idx_similar_movies_fetched_at ON similar_movies(fetched_at);
+
+-- Similar series cache
+CREATE TABLE IF NOT EXISTS similar_series (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    series_metadata_id INTEGER NOT NULL REFERENCES series_metadata(id) ON DELETE CASCADE,
+    similar_tmdb_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    poster_path TEXT,
+    first_air_date TEXT,
+    vote_average REAL DEFAULT 0,
+    display_order INTEGER NOT NULL,
+    fetched_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(series_metadata_id, similar_tmdb_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_similar_series_metadata_id ON similar_series(series_metadata_id);
+CREATE INDEX IF NOT EXISTS idx_similar_series_fetched_at ON similar_series(fetched_at);
+`,
+		down: `
+DROP INDEX IF EXISTS idx_similar_series_fetched_at;
+DROP INDEX IF EXISTS idx_similar_series_metadata_id;
+DROP TABLE IF EXISTS similar_series;
+
+DROP INDEX IF EXISTS idx_similar_movies_fetched_at;
+DROP INDEX IF EXISTS idx_similar_movies_metadata_id;
+DROP TABLE IF EXISTS similar_movies;
+`,
+	},
+	{
+		version: 7,
+		name:    "create_movie_collections_tables",
+		up: `
+-- Add collection_id to movie_metadata
+ALTER TABLE movie_metadata ADD COLUMN collection_id INTEGER;
+
+-- Collection metadata cache
+CREATE TABLE IF NOT EXISTS collection_metadata (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    collection_id INTEGER NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    overview TEXT,
+    poster_path TEXT,
+    backdrop_path TEXT,
+    fetched_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_collection_metadata_collection_id ON collection_metadata(collection_id);
+CREATE INDEX IF NOT EXISTS idx_collection_metadata_fetched_at ON collection_metadata(fetched_at);
+
+-- Collection translations cache
+CREATE TABLE IF NOT EXISTS collection_translations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    collection_id INTEGER NOT NULL,
+    language TEXT NOT NULL,
+    name TEXT,
+    overview TEXT,
+    fetched_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(collection_id, language)
+);
+
+CREATE INDEX IF NOT EXISTS idx_collection_translations_collection_id ON collection_translations(collection_id);
+CREATE INDEX IF NOT EXISTS idx_collection_translations_fetched_at ON collection_translations(fetched_at);
+
+-- Collection movies cache (movies within a collection)
+CREATE TABLE IF NOT EXISTS collection_movies (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    collection_id INTEGER NOT NULL,
+    tmdb_movie_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    original_title TEXT NOT NULL,
+    poster_path TEXT,
+    release_date TEXT,
+    vote_average REAL DEFAULT 0,
+    display_order INTEGER NOT NULL,
+    fetched_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(collection_id, tmdb_movie_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_collection_movies_collection_id ON collection_movies(collection_id);
+CREATE INDEX IF NOT EXISTS idx_collection_movies_fetched_at ON collection_movies(fetched_at);
+`,
+		down: `
+DROP INDEX IF EXISTS idx_collection_movies_fetched_at;
+DROP INDEX IF EXISTS idx_collection_movies_collection_id;
+DROP TABLE IF EXISTS collection_movies;
+
+DROP INDEX IF EXISTS idx_collection_translations_fetched_at;
+DROP INDEX IF EXISTS idx_collection_translations_collection_id;
+DROP TABLE IF EXISTS collection_translations;
+
+DROP INDEX IF EXISTS idx_collection_metadata_fetched_at;
+DROP INDEX IF EXISTS idx_collection_metadata_collection_id;
+DROP TABLE IF EXISTS collection_metadata;
+
+-- SQLite doesn't support DROP COLUMN
+`,
+	},
+	{
+		version: 8,
+		name:    "create_similar_and_collection_movie_translations",
+		up: `
+-- Similar movie translations cache
+CREATE TABLE IF NOT EXISTS similar_movie_translations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    similar_movie_id INTEGER NOT NULL REFERENCES similar_movies(id) ON DELETE CASCADE,
+    language TEXT NOT NULL,
+    title TEXT NOT NULL,
+    fetched_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(similar_movie_id, language)
+);
+
+CREATE INDEX IF NOT EXISTS idx_similar_movie_translations_movie_id ON similar_movie_translations(similar_movie_id);
+CREATE INDEX IF NOT EXISTS idx_similar_movie_translations_language ON similar_movie_translations(language);
+
+-- Similar series translations cache
+CREATE TABLE IF NOT EXISTS similar_series_translations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    similar_series_id INTEGER NOT NULL REFERENCES similar_series(id) ON DELETE CASCADE,
+    language TEXT NOT NULL,
+    name TEXT NOT NULL,
+    fetched_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(similar_series_id, language)
+);
+
+CREATE INDEX IF NOT EXISTS idx_similar_series_translations_series_id ON similar_series_translations(similar_series_id);
+CREATE INDEX IF NOT EXISTS idx_similar_series_translations_language ON similar_series_translations(language);
+
+-- Collection movie translations cache
+CREATE TABLE IF NOT EXISTS collection_movie_translations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    collection_movie_id INTEGER NOT NULL REFERENCES collection_movies(id) ON DELETE CASCADE,
+    language TEXT NOT NULL,
+    title TEXT NOT NULL,
+    fetched_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(collection_movie_id, language)
+);
+
+CREATE INDEX IF NOT EXISTS idx_collection_movie_translations_movie_id ON collection_movie_translations(collection_movie_id);
+CREATE INDEX IF NOT EXISTS idx_collection_movie_translations_language ON collection_movie_translations(language);
+`,
+		down: `
+DROP INDEX IF EXISTS idx_collection_movie_translations_language;
+DROP INDEX IF EXISTS idx_collection_movie_translations_movie_id;
+DROP TABLE IF EXISTS collection_movie_translations;
+
+DROP INDEX IF EXISTS idx_similar_series_translations_language;
+DROP INDEX IF EXISTS idx_similar_series_translations_series_id;
+DROP TABLE IF EXISTS similar_series_translations;
+
+DROP INDEX IF EXISTS idx_similar_movie_translations_language;
+DROP INDEX IF EXISTS idx_similar_movie_translations_movie_id;
+DROP TABLE IF EXISTS similar_movie_translations;
+`,
+	},
 }
 
 func NewDatabaseMigration(db *sql.DB) *DatabaseMigration {

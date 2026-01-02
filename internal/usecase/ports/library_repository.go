@@ -37,6 +37,55 @@ type CreditPerson struct {
 	ProfilePath  string `json:"profile_path,omitempty"`
 }
 
+// SimilarMovieItem represents a similar movie for display
+type SimilarMovieItem struct {
+	TMDBID      int     `json:"tmdb_id"`
+	Title       string  `json:"title"`
+	PosterPath  string  `json:"poster_path,omitempty"`
+	ReleaseDate string  `json:"release_date,omitempty"`
+	Year        string  `json:"year,omitempty"`
+	VoteAverage float64 `json:"vote_average"`
+	InLibrary   bool    `json:"in_library"`
+	MediaID     string  `json:"media_id,omitempty"` // Set if InLibrary is true
+}
+
+// SimilarSeriesItem represents a similar series for display
+type SimilarSeriesItem struct {
+	TMDBID           int     `json:"tmdb_id"`
+	Name             string  `json:"name"`
+	PosterPath       string  `json:"poster_path,omitempty"`
+	FirstAirDate     string  `json:"first_air_date,omitempty"`
+	Year             string  `json:"year,omitempty"`
+	VoteAverage      float64 `json:"vote_average"`
+	InLibrary        bool    `json:"in_library"`
+	SeriesMetadataID int64   `json:"series_metadata_id,omitempty"` // Set if InLibrary is true
+}
+
+// CollectionMovieDisplay represents a movie within a collection for display
+type CollectionMovieDisplay struct {
+	TMDBID      int     `json:"tmdb_id"`
+	Title       string  `json:"title"`
+	PosterPath  string  `json:"poster_path,omitempty"`
+	ReleaseDate string  `json:"release_date,omitempty"`
+	Year        string  `json:"year,omitempty"`
+	VoteAverage float64 `json:"vote_average"`
+	InLibrary   bool    `json:"in_library"`
+	MediaID     string  `json:"media_id,omitempty"` // Set if InLibrary is true
+	IsCurrent   bool    `json:"is_current"`         // True if this is the movie being viewed
+}
+
+// MovieCollectionInfo represents collection information for a movie
+type MovieCollectionInfo struct {
+	CollectionID int                      `json:"collection_id"`
+	Name         string                   `json:"name"`
+	Overview     string                   `json:"overview,omitempty"`
+	PosterPath   string                   `json:"poster_path,omitempty"`
+	BackdropPath string                   `json:"backdrop_path,omitempty"`
+	Movies       []CollectionMovieDisplay `json:"movies"`
+	Position     int                      `json:"position"` // 1-based position of current movie
+	TotalMovies  int                      `json:"total_movies"`
+}
+
 // MovieDetail represents a movie with full details including credits and certifications
 type MovieDetail struct {
 	MovieSummary
@@ -50,6 +99,7 @@ type MovieDetail struct {
 	MovieStatus   string `json:"movie_status,omitempty"` // Released, Post Production, etc.
 	IMDbID        string `json:"imdb_id,omitempty"`
 	TMDBID        int    `json:"tmdb_id,omitempty"`
+	CollectionID  *int   `json:"-"` // Used internally to fetch collection, not exposed to API
 
 	// Certification for user's locale
 	Certification string `json:"certification,omitempty"`
@@ -58,6 +108,12 @@ type MovieDetail struct {
 	Cast      []CreditPerson `json:"cast,omitempty"`
 	Directors []CreditPerson `json:"directors,omitempty"`
 	Crew      []CreditPerson `json:"crew,omitempty"` // Other notable crew
+
+	// Similar movies
+	SimilarMovies []SimilarMovieItem `json:"similar_movies,omitempty"`
+
+	// Collection info (if movie belongs to a collection)
+	Collection *MovieCollectionInfo `json:"collection,omitempty"`
 }
 
 // SeriesSummary represents a series with summary info for library display
@@ -111,6 +167,9 @@ type SeriesDetail struct {
 	SeriesSummary
 	Overview string          `json:"overview,omitempty"`
 	Seasons  []SeasonSummary `json:"seasons,omitempty"`
+
+	// Similar series
+	SimilarSeries []SimilarSeriesItem `json:"similar_series,omitempty"`
 }
 
 // UnmatchedMediaSummary represents a media file without metadata

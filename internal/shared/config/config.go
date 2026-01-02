@@ -90,20 +90,21 @@ type LoggingConfig struct {
 }
 
 type TMDBConfig struct {
-	Enabled            bool   `mapstructure:"enabled"`
-	APIKey             string `mapstructure:"api_key"`
-	Language           string `mapstructure:"language"`
-	AutoSearch         bool   `mapstructure:"auto_search"`
-	AutoLinkThreshold  int    `mapstructure:"auto_link_threshold"`
-	MaxCandidates      int    `mapstructure:"max_candidates"`
-	ImageCachePath     string `mapstructure:"image_cache_path"`
-	DownloadImages     bool   `mapstructure:"download_images"`
-	PosterSize         string `mapstructure:"poster_size"`
-	BackdropSize       string `mapstructure:"backdrop_size"`
-	ProfileSize        string `mapstructure:"profile_size"`
-	RequestsPer10s     int    `mapstructure:"requests_per_10s"`
-	MaxCastMembers     int    `mapstructure:"max_cast_members"`
-	SimilarMoviesCount int    `mapstructure:"similar_movies_count"`
+	Enabled             bool   `mapstructure:"enabled"`
+	APIKey              string `mapstructure:"api_key"`
+	Language            string `mapstructure:"language"`
+	AutoSearch          bool   `mapstructure:"auto_search"`
+	AutoLinkThreshold   int    `mapstructure:"auto_link_threshold"`
+	MaxCandidates       int    `mapstructure:"max_candidates"`
+	ImageCachePath      string `mapstructure:"image_cache_path"`
+	DownloadImages      bool   `mapstructure:"download_images"`
+	PosterSize          string `mapstructure:"poster_size"`
+	BackdropSize        string `mapstructure:"backdrop_size"`
+	ProfileSize         string `mapstructure:"profile_size"`
+	RequestsPer10s      int    `mapstructure:"requests_per_10s"`
+	MaxCastMembers      int    `mapstructure:"max_cast_members"`
+	SimilarContentCount int    `mapstructure:"similar_content_count"`
+	CacheTTLHours       int    `mapstructure:"cache_ttl_hours"`
 }
 
 type LibraryConfig struct {
@@ -446,8 +447,12 @@ func (t *TMDBConfig) Validate() error {
 		return fmt.Errorf("max_cast_members must be between 1 and 50, got %d", t.MaxCastMembers)
 	}
 
-	if t.SimilarMoviesCount < 1 || t.SimilarMoviesCount > 20 {
-		return fmt.Errorf("similar_movies_count must be between 1 and 20, got %d", t.SimilarMoviesCount)
+	if t.SimilarContentCount < 2 || t.SimilarContentCount > 12 {
+		return fmt.Errorf("similar_content_count must be between 2 and 12, got %d", t.SimilarContentCount)
+	}
+
+	if t.CacheTTLHours < 1 || t.CacheTTLHours > 8760 {
+		return fmt.Errorf("cache_ttl_hours must be between 1 and 8760 (1 year), got %d", t.CacheTTLHours)
 	}
 
 	return nil

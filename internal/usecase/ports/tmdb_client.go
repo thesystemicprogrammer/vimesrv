@@ -33,22 +33,23 @@ type TMDBSearchResult struct {
 
 // TMDBMovieDetails represents detailed movie information from TMDB
 type TMDBMovieDetails struct {
-	ID            int         `json:"id"`
-	IMDbID        string      `json:"imdb_id"`
-	Title         string      `json:"title"`
-	OriginalTitle string      `json:"original_title"`
-	Tagline       string      `json:"tagline"`
-	Overview      string      `json:"overview"`
-	ReleaseDate   string      `json:"release_date"`
-	Runtime       int         `json:"runtime"`
-	PosterPath    string      `json:"poster_path"`
-	BackdropPath  string      `json:"backdrop_path"`
-	Genres        []TMDBGenre `json:"genres"`
-	VoteAverage   float64     `json:"vote_average"`
-	VoteCount     int         `json:"vote_count"`
-	Popularity    float64     `json:"popularity"`
-	Status        string      `json:"status"`
-	OriginalLang  string      `json:"original_language"`
+	ID                  int                `json:"id"`
+	IMDbID              string             `json:"imdb_id"`
+	Title               string             `json:"title"`
+	OriginalTitle       string             `json:"original_title"`
+	Tagline             string             `json:"tagline"`
+	Overview            string             `json:"overview"`
+	ReleaseDate         string             `json:"release_date"`
+	Runtime             int                `json:"runtime"`
+	PosterPath          string             `json:"poster_path"`
+	BackdropPath        string             `json:"backdrop_path"`
+	Genres              []TMDBGenre        `json:"genres"`
+	VoteAverage         float64            `json:"vote_average"`
+	VoteCount           int                `json:"vote_count"`
+	Popularity          float64            `json:"popularity"`
+	Status              string             `json:"status"`
+	OriginalLang        string             `json:"original_language"`
+	BelongsToCollection *TMDBCollectionRef `json:"belongs_to_collection"`
 }
 
 // TMDBSeasonSummary represents basic season info returned with series details
@@ -185,6 +186,117 @@ type TMDBSimilarMoviesResponse struct {
 	Results      []TMDBSimilarMovie `json:"results"`
 }
 
+// TMDBSimilarSeries represents a similar series from TMDB
+type TMDBSimilarSeries struct {
+	ID           int     `json:"id"`
+	Name         string  `json:"name"`
+	OriginalName string  `json:"original_name"`
+	PosterPath   string  `json:"poster_path"`
+	FirstAirDate string  `json:"first_air_date"`
+	VoteAverage  float64 `json:"vote_average"`
+	Overview     string  `json:"overview"`
+}
+
+// TMDBSimilarSeriesResponse represents the similar series API response
+type TMDBSimilarSeriesResponse struct {
+	Page         int                 `json:"page"`
+	TotalPages   int                 `json:"total_pages"`
+	TotalResults int                 `json:"total_results"`
+	Results      []TMDBSimilarSeries `json:"results"`
+}
+
+// TMDBCollectionRef represents the collection reference returned with movie details
+type TMDBCollectionRef struct {
+	ID           int    `json:"id"`
+	Name         string `json:"name"`
+	PosterPath   string `json:"poster_path"`
+	BackdropPath string `json:"backdrop_path"`
+}
+
+// TMDBCollectionPart represents a movie within a collection
+type TMDBCollectionPart struct {
+	ID            int     `json:"id"`
+	Title         string  `json:"title"`
+	OriginalTitle string  `json:"original_title"`
+	PosterPath    string  `json:"poster_path"`
+	BackdropPath  string  `json:"backdrop_path"`
+	ReleaseDate   string  `json:"release_date"`
+	Overview      string  `json:"overview"`
+	VoteAverage   float64 `json:"vote_average"`
+}
+
+// TMDBCollectionDetails represents full collection details from TMDB
+type TMDBCollectionDetails struct {
+	ID           int                  `json:"id"`
+	Name         string               `json:"name"`
+	Overview     string               `json:"overview"`
+	PosterPath   string               `json:"poster_path"`
+	BackdropPath string               `json:"backdrop_path"`
+	Parts        []TMDBCollectionPart `json:"parts"`
+}
+
+// TMDBCollectionTranslationData contains the translatable fields
+type TMDBCollectionTranslationData struct {
+	Title    string `json:"title"`
+	Overview string `json:"overview"`
+}
+
+// TMDBCollectionTranslation represents a single translation entry
+type TMDBCollectionTranslation struct {
+	ISO639_1  string                        `json:"iso_639_1"`
+	ISO3166_1 string                        `json:"iso_3166_1"`
+	Name      string                        `json:"name"`
+	Data      TMDBCollectionTranslationData `json:"data"`
+}
+
+// TMDBCollectionTranslationsResponse represents the translations API response
+type TMDBCollectionTranslationsResponse struct {
+	ID           int                         `json:"id"`
+	Translations []TMDBCollectionTranslation `json:"translations"`
+}
+
+// TMDBMovieTranslationData contains the translatable movie fields
+type TMDBMovieTranslationData struct {
+	Title    string `json:"title"`
+	Overview string `json:"overview"`
+	Tagline  string `json:"tagline"`
+}
+
+// TMDBMovieTranslation represents a single movie translation entry
+type TMDBMovieTranslation struct {
+	ISO639_1  string                   `json:"iso_639_1"`
+	ISO3166_1 string                   `json:"iso_3166_1"`
+	Name      string                   `json:"name"`
+	Data      TMDBMovieTranslationData `json:"data"`
+}
+
+// TMDBMovieTranslationsResponse represents the movie translations API response
+type TMDBMovieTranslationsResponse struct {
+	ID           int                    `json:"id"`
+	Translations []TMDBMovieTranslation `json:"translations"`
+}
+
+// TMDBSeriesTranslationData contains the translatable series fields
+type TMDBSeriesTranslationData struct {
+	Name     string `json:"name"`
+	Overview string `json:"overview"`
+	Tagline  string `json:"tagline"`
+}
+
+// TMDBSeriesTranslation represents a single series translation entry
+type TMDBSeriesTranslation struct {
+	ISO639_1  string                    `json:"iso_639_1"`
+	ISO3166_1 string                    `json:"iso_3166_1"`
+	Name      string                    `json:"name"`
+	Data      TMDBSeriesTranslationData `json:"data"`
+}
+
+// TMDBSeriesTranslationsResponse represents the series translations API response
+type TMDBSeriesTranslationsResponse struct {
+	ID           int                     `json:"id"`
+	Translations []TMDBSeriesTranslation `json:"translations"`
+}
+
 // TMDBClient defines the interface for interacting with the TMDB API
 type TMDBClient interface {
 	// SearchMovie searches for movies by title, optionally filtering by year
@@ -219,4 +331,19 @@ type TMDBClient interface {
 
 	// GetSimilarMovies retrieves similar movies for a given movie
 	GetSimilarMovies(ctx context.Context, movieID int, language string) (*TMDBSimilarMoviesResponse, error)
+
+	// GetSimilarSeries retrieves similar series for a given TV series
+	GetSimilarSeries(ctx context.Context, seriesID int, language string) (*TMDBSimilarSeriesResponse, error)
+
+	// GetCollectionDetails retrieves collection details including all movies
+	GetCollectionDetails(ctx context.Context, collectionID int, language string) (*TMDBCollectionDetails, error)
+
+	// GetCollectionTranslations retrieves translations for a collection
+	GetCollectionTranslations(ctx context.Context, collectionID int) (*TMDBCollectionTranslationsResponse, error)
+
+	// GetMovieTranslations retrieves all translations for a movie
+	GetMovieTranslations(ctx context.Context, movieID int) (*TMDBMovieTranslationsResponse, error)
+
+	// GetSeriesTranslations retrieves all translations for a TV series
+	GetSeriesTranslations(ctx context.Context, seriesID int) (*TMDBSeriesTranslationsResponse, error)
 }

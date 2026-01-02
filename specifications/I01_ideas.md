@@ -1,3 +1,7 @@
+# Dedicated collections page
+
+- Show a dedicated collection page with all movies that are part of a collection
+
 # Media Management API (Optional)
 
 ## Endpoints:

@@ -449,6 +449,165 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/SeasonSummary'
+            similar_series:
+              type: array
+              items:
+                $ref: '#/components/schemas/SimilarSeriesItem'
+
+    SimilarMovieItem:
+      type: object
+      properties:
+        tmdb_id:
+          type: integer
+        title:
+          type: string
+        poster_path:
+          type: string
+        release_date:
+          type: string
+        year:
+          type: string
+        vote_average:
+          type: number
+        in_library:
+          type: boolean
+        media_id:
+          type: string
+          description: Set if in_library is true
+
+    SimilarSeriesItem:
+      type: object
+      properties:
+        tmdb_id:
+          type: integer
+        name:
+          type: string
+        poster_path:
+          type: string
+        first_air_date:
+          type: string
+        year:
+          type: string
+        vote_average:
+          type: number
+        in_library:
+          type: boolean
+        series_metadata_id:
+          type: integer
+          format: int64
+          description: Set if in_library is true
+
+    CollectionMovieItem:
+      type: object
+      properties:
+        tmdb_id:
+          type: integer
+        title:
+          type: string
+        poster_path:
+          type: string
+        release_date:
+          type: string
+        year:
+          type: string
+        vote_average:
+          type: number
+        in_library:
+          type: boolean
+        media_id:
+          type: string
+          description: Set if in_library is true
+        is_current:
+          type: boolean
+          description: True if this is the movie being viewed
+
+    MovieCollectionInfo:
+      type: object
+      properties:
+        collection_id:
+          type: integer
+        name:
+          type: string
+        overview:
+          type: string
+        poster_path:
+          type: string
+        backdrop_path:
+          type: string
+        movies:
+          type: array
+          items:
+            $ref: '#/components/schemas/CollectionMovieItem'
+        position:
+          type: integer
+          description: 1-based position of current movie in collection
+        total_movies:
+          type: integer
+
+    CreditPerson:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        tmdb_person_id:
+          type: integer
+        name:
+          type: string
+        character:
+          type: string
+        job:
+          type: string
+        profile_path:
+          type: string
+
+    MovieDetail:
+      allOf:
+        - $ref: '#/components/schemas/MovieSummary'
+        - type: object
+          properties:
+            original_title:
+              type: string
+            tagline:
+              type: string
+            overview:
+              type: string
+            release_date:
+              type: string
+            runtime:
+              type: integer
+            movie_status:
+              type: string
+            imdb_id:
+              type: string
+            tmdb_id:
+              type: integer
+            certification:
+              type: string
+            cast:
+              type: array
+              items:
+                $ref: '#/components/schemas/CreditPerson'
+            directors:
+              type: array
+              items:
+                $ref: '#/components/schemas/CreditPerson'
+            crew:
+              type: array
+              items:
+                $ref: '#/components/schemas/CreditPerson'
+            similar_movies:
+              type: array
+              items:
+                $ref: '#/components/schemas/SimilarMovieItem'
+            collection:
+              $ref: '#/components/schemas/MovieCollectionInfo'
+
+    MovieDetailResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/MovieDetail'
 
     UnmatchedMediaSummary:
       type: object
@@ -948,10 +1107,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    $ref: '#/components/schemas/MovieSummary'
+                $ref: '#/components/schemas/MovieDetailResponse'
         '404':
           description: Movie not found
           content:

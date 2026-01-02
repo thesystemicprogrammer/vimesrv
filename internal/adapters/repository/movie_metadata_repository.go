@@ -35,8 +35,8 @@ func (r *SQLiteMovieMetadataRepository) Create(ctx context.Context, metadata *do
 		INSERT INTO movie_metadata (
 			tmdb_id, imdb_id, original_title, release_date, runtime,
 			poster_path, backdrop_path, vote_average, vote_count,
-			popularity, status, original_lang, genres, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			popularity, status, original_lang, genres, collection_id, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	now := time.Now()
@@ -54,6 +54,7 @@ func (r *SQLiteMovieMetadataRepository) Create(ctx context.Context, metadata *do
 		metadata.Status,
 		metadata.OriginalLang,
 		string(genresJSON),
+		metadata.CollectionID,
 		now,
 		now,
 	)
@@ -78,13 +79,14 @@ func (r *SQLiteMovieMetadataRepository) Get(ctx context.Context, id int64) (*dom
 	query := `
 		SELECT id, tmdb_id, imdb_id, original_title, release_date, runtime,
 			   poster_path, backdrop_path, vote_average, vote_count,
-			   popularity, status, original_lang, genres, created_at, updated_at
+			   popularity, status, original_lang, genres, collection_id, created_at, updated_at
 		FROM movie_metadata
 		WHERE id = ?
 	`
 
 	metadata := &domain.MovieMetadata{}
 	var genresJSON string
+	var collectionID sql.NullInt64
 
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&metadata.ID,
@@ -101,6 +103,7 @@ func (r *SQLiteMovieMetadataRepository) Get(ctx context.Context, id int64) (*dom
 		&metadata.Status,
 		&metadata.OriginalLang,
 		&genresJSON,
+		&collectionID,
 		&metadata.CreatedAt,
 		&metadata.UpdatedAt,
 	)
@@ -115,6 +118,11 @@ func (r *SQLiteMovieMetadataRepository) Get(ctx context.Context, id int64) (*dom
 		metadata.Genres = []string{}
 	}
 
+	if collectionID.Valid {
+		cid := int(collectionID.Int64)
+		metadata.CollectionID = &cid
+	}
+
 	return metadata, nil
 }
 
@@ -123,13 +131,14 @@ func (r *SQLiteMovieMetadataRepository) GetByTMDBID(ctx context.Context, tmdbID 
 	query := `
 		SELECT id, tmdb_id, imdb_id, original_title, release_date, runtime,
 			   poster_path, backdrop_path, vote_average, vote_count,
-			   popularity, status, original_lang, genres, created_at, updated_at
+			   popularity, status, original_lang, genres, collection_id, created_at, updated_at
 		FROM movie_metadata
 		WHERE tmdb_id = ?
 	`
 
 	metadata := &domain.MovieMetadata{}
 	var genresJSON string
+	var collectionID sql.NullInt64
 
 	err := r.db.QueryRowContext(ctx, query, tmdbID).Scan(
 		&metadata.ID,
@@ -146,6 +155,7 @@ func (r *SQLiteMovieMetadataRepository) GetByTMDBID(ctx context.Context, tmdbID 
 		&metadata.Status,
 		&metadata.OriginalLang,
 		&genresJSON,
+		&collectionID,
 		&metadata.CreatedAt,
 		&metadata.UpdatedAt,
 	)
@@ -158,6 +168,11 @@ func (r *SQLiteMovieMetadataRepository) GetByTMDBID(ctx context.Context, tmdbID 
 
 	if err := json.Unmarshal([]byte(genresJSON), &metadata.Genres); err != nil {
 		metadata.Genres = []string{}
+	}
+
+	if collectionID.Valid {
+		cid := int(collectionID.Int64)
+		metadata.CollectionID = &cid
 	}
 
 	return metadata, nil
@@ -175,7 +190,7 @@ func (r *SQLiteMovieMetadataRepository) Update(ctx context.Context, metadata *do
 			tmdb_id = ?, imdb_id = ?, original_title = ?, release_date = ?,
 			runtime = ?, poster_path = ?, backdrop_path = ?, vote_average = ?,
 			vote_count = ?, popularity = ?, status = ?, original_lang = ?,
-			genres = ?, updated_at = ?
+			genres = ?, collection_id = ?, updated_at = ?
 		WHERE id = ?
 	`
 
@@ -194,6 +209,7 @@ func (r *SQLiteMovieMetadataRepository) Update(ctx context.Context, metadata *do
 		metadata.Status,
 		metadata.OriginalLang,
 		string(genresJSON),
+		metadata.CollectionID,
 		now,
 		metadata.ID,
 	)

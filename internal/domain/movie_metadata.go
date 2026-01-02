@@ -18,6 +18,7 @@ type MovieMetadata struct {
 	Status        string    `json:"status,omitempty"`
 	OriginalLang  string    `json:"original_language,omitempty"`
 	Genres        []string  `json:"genres,omitempty"`
+	CollectionID  *int      `json:"collection_id,omitempty"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
 

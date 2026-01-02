@@ -597,6 +597,12 @@ func (uc *EnrichMediaFileUseCase) createMovieMetadata(details *ports.TMDBMovieDe
 	}
 	movie.Genres = genres
 
+	// Store collection ID if the movie belongs to a collection
+	if details.BelongsToCollection != nil {
+		collectionID := details.BelongsToCollection.ID
+		movie.CollectionID = &collectionID
+	}
+
 	return movie
 }
 

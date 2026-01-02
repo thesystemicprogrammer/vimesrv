@@ -30,12 +30,15 @@ type UseCases struct {
 	SkipEnrichmentUseCase  *metadata.SkipEnrichmentUseCase
 	ResetEnrichmentUseCase *metadata.ResetEnrichmentUseCase
 	// Library browsing use cases
-	ListMoviesUseCase    *library.ListMoviesUseCase
-	GetMovieUseCase      *library.GetMovieUseCase
-	ListSeriesUseCase    *library.ListSeriesUseCase
-	GetSeriesUseCase     *library.GetSeriesUseCase
-	ListRecentUseCase    *library.ListRecentUseCase
-	ListUnmatchedUseCase *library.ListUnmatchedUseCase
+	ListMoviesUseCase         *library.ListMoviesUseCase
+	GetMovieUseCase           *library.GetMovieUseCase
+	ListSeriesUseCase         *library.ListSeriesUseCase
+	GetSeriesUseCase          *library.GetSeriesUseCase
+	ListRecentUseCase         *library.ListRecentUseCase
+	ListUnmatchedUseCase      *library.ListUnmatchedUseCase
+	GetSimilarMoviesUseCase   *library.GetSimilarMoviesUseCase
+	GetSimilarSeriesUseCase   *library.GetSimilarSeriesUseCase
+	GetMovieCollectionUseCase *library.GetMovieCollectionUseCase
 }
 
 func initUseCases(cfg *config.Config, adapters *Adapters) *UseCases {
@@ -136,6 +139,37 @@ func initUseCases(cfg *config.Config, adapters *Adapters) *UseCases {
 		scanLibraryUseCase.WithEnrichment(cfg.TMDB, adapters.JobRepository)
 	}
 
+	// Initialize similar content use cases if TMDB is enabled
+	var getSimilarMoviesUseCase *library.GetSimilarMoviesUseCase
+	var getSimilarSeriesUseCase *library.GetSimilarSeriesUseCase
+	var getMovieCollectionUseCase *library.GetMovieCollectionUseCase
+
+	if cfg.TMDB.Enabled {
+		getSimilarMoviesUseCase = library.NewGetSimilarMoviesUseCase(
+			adapters.SimilarContentRepository,
+			adapters.MovieMetadataRepository,
+			adapters.LibraryRepository,
+			adapters.TMDBClient,
+			cfg.TMDB,
+		)
+
+		getSimilarSeriesUseCase = library.NewGetSimilarSeriesUseCase(
+			adapters.SimilarContentRepository,
+			adapters.SeriesMetadataRepository,
+			adapters.LibraryRepository,
+			adapters.TMDBClient,
+			cfg.TMDB,
+		)
+
+		getMovieCollectionUseCase = library.NewGetMovieCollectionUseCase(
+			adapters.CollectionRepository,
+			adapters.MovieMetadataRepository,
+			adapters.LibraryRepository,
+			adapters.TMDBClient,
+			cfg.TMDB,
+		)
+	}
+
 	return &UseCases{
 		EnqueueJobUseCase:          job.NewEnqueueJobUseCase(cfg.Job, adapters.JobRepository, ports.RealClock{}),
 		ProcessNextJobUseCase:      job.NewProcessNextJobUseCase(adapters.JobRepository, adapters.HandlerRegistry, adapters.BackoffStrategy, ports.RealClock{}),
@@ -166,11 +200,14 @@ func initUseCases(cfg *config.Config, adapters *Adapters) *UseCases {
 		SkipEnrichmentUseCase:  skipEnrichmentUseCase,
 		ResetEnrichmentUseCase: resetEnrichmentUseCase,
 		// Library browsing use cases
-		ListMoviesUseCase:    library.NewListMoviesUseCase(adapters.LibraryRepository),
-		GetMovieUseCase:      library.NewGetMovieUseCase(adapters.LibraryRepository, cfg.TMDB.MaxCastMembers),
-		ListSeriesUseCase:    library.NewListSeriesUseCase(adapters.LibraryRepository),
-		GetSeriesUseCase:     library.NewGetSeriesUseCase(adapters.LibraryRepository),
-		ListRecentUseCase:    library.NewListRecentUseCase(adapters.LibraryRepository, cfg.Library),
-		ListUnmatchedUseCase: library.NewListUnmatchedUseCase(adapters.LibraryRepository),
+		ListMoviesUseCase:         library.NewListMoviesUseCase(adapters.LibraryRepository),
+		GetMovieUseCase:           library.NewGetMovieUseCase(adapters.LibraryRepository, getSimilarMoviesUseCase, getMovieCollectionUseCase, cfg.TMDB.MaxCastMembers),
+		ListSeriesUseCase:         library.NewListSeriesUseCase(adapters.LibraryRepository),
+		GetSeriesUseCase:          library.NewGetSeriesUseCase(adapters.LibraryRepository, getSimilarSeriesUseCase),
+		ListRecentUseCase:         library.NewListRecentUseCase(adapters.LibraryRepository, cfg.Library),
+		ListUnmatchedUseCase:      library.NewListUnmatchedUseCase(adapters.LibraryRepository),
+		GetSimilarMoviesUseCase:   getSimilarMoviesUseCase,
+		GetSimilarSeriesUseCase:   getSimilarSeriesUseCase,
+		GetMovieCollectionUseCase: getMovieCollectionUseCase,
 	}
 }

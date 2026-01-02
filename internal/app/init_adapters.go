@@ -34,6 +34,8 @@ type Adapters struct {
 	MetadataCandidateRepository  ports.MetadataCandidateRepository
 	MovieCreditRepository        ports.MovieCreditRepository
 	MovieCertificationRepository ports.MovieCertificationRepository
+	SimilarContentRepository     ports.SimilarContentRepository
+	CollectionRepository         ports.CollectionRepository
 	LibraryRepository            ports.LibraryRepository
 }
 
@@ -60,6 +62,8 @@ func initAdapters(cfg *config.Config, db *database.DB) *Adapters {
 		MetadataCandidateRepository:  repository.NewSQLiteMetadataCandidateRepository(db.DB),
 		MovieCreditRepository:        repository.NewSQLiteMovieCreditRepository(db.DB),
 		MovieCertificationRepository: repository.NewSQLiteMovieCertificationRepository(db.DB),
+		SimilarContentRepository:     repository.NewSQLiteSimilarContentRepository(db.DB),
+		CollectionRepository:         repository.NewSQLiteCollectionRepository(db.DB),
 		LibraryRepository:            repository.NewLibraryRepository(db),
 	}
 
