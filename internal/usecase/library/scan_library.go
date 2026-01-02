@@ -2,13 +2,16 @@ package library
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/thesystemicprogrammer/vimesrv/internal/domain"
+	"github.com/thesystemicprogrammer/vimesrv/internal/shared"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/config"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/logger"
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/ports"
@@ -24,12 +27,19 @@ type ScanResult struct {
 	Failed     int // Failed to process
 }
 
+// EnrichMetadataJobPayload is the payload for enrich_metadata jobs
+type EnrichMetadataJobPayload struct {
+	MediaID string `json:"media_id"`
+}
+
 type ScanLibraryUseCase struct {
 	config                     config.MediaConfig
+	tmdbConfig                 config.TMDBConfig
 	fileHasher                 ports.FileHasher
 	ffprobeService             ports.FFProbeService
 	fileSystemService          ports.FileSystemService
 	mediaRepository            ports.MediaRepository
+	jobRepository              ports.JobRepository
 	createTranscodeJobsUseCase *transcode.CreateTranscodeJobsUseCase
 }
 
@@ -49,6 +59,13 @@ func NewScanLibraryUseCase(
 		mediaRepository:            mediaRepository,
 		createTranscodeJobsUseCase: createTranscodeJobsUseCase,
 	}
+}
+
+// WithEnrichment adds enrichment job capability to the use case
+func (uc *ScanLibraryUseCase) WithEnrichment(tmdbConfig config.TMDBConfig, jobRepository ports.JobRepository) *ScanLibraryUseCase {
+	uc.tmdbConfig = tmdbConfig
+	uc.jobRepository = jobRepository
+	return uc
 }
 
 // Execute scans the staging directory and imports video files into the library
@@ -246,6 +263,16 @@ func (uc *ScanLibraryUseCase) processFile(ctx context.Context, filePath string, 
 		}
 	}
 
+	// Enqueue metadata enrichment job if TMDB is enabled
+	if uc.tmdbConfig.Enabled && uc.tmdbConfig.AutoSearch && uc.jobRepository != nil {
+		if err := uc.enqueueEnrichmentJob(ctx, id); err != nil {
+			logger.Error().Err(err).Str("media_id", id).Msg("Failed to enqueue enrichment job")
+			// Don't fail the import - just log the error
+		} else {
+			logger.Info().Str("media_id", id).Msg("Enrichment job enqueued")
+		}
+	}
+
 	// Delete from staging
 	if err := uc.fileSystemService.DeleteFile(filePath); err != nil {
 		logger.Warn().Err(err).Str("file", filePath).Msg("Failed to delete file from staging")
@@ -280,4 +307,30 @@ func (uc *ScanLibraryUseCase) deleteFile(filePath string) {
 	} else {
 		logger.Debug().Str("file", filePath).Msg("Deleted file from staging")
 	}
+}
+
+// enqueueEnrichmentJob enqueues a metadata enrichment job for the given media file
+func (uc *ScanLibraryUseCase) enqueueEnrichmentJob(ctx context.Context, mediaID string) error {
+	payload := EnrichMetadataJobPayload{MediaID: mediaID}
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal enrichment job payload: %w", err)
+	}
+
+	job := &domain.Job{
+		Type:        shared.JobTypeEnrichMetadata,
+		Payload:     payloadBytes,
+		Status:      shared.StatusQueued,
+		Priority:    shared.JobPriorityEnrichMetadata,
+		RunAt:       time.Now(),
+		Attempts:    0,
+		MaxAttempts: 3, // Enrichment jobs can retry a few times
+	}
+
+	_, err = uc.jobRepository.Enqueue(ctx, job)
+	if err != nil {
+		return fmt.Errorf("failed to enqueue enrichment job: %w", err)
+	}
+
+	return nil
 }

@@ -25,6 +25,8 @@ type MediaRepository struct {
 func (r *MediaRepository) scanMediaRow(s scanner) (*domain.MediaFile, error) {
 	var media domain.MediaFile
 	var audioCodecsJSON, subtitleLanguagesJSON string
+	var enrichmentStatus, metadataType, edition sql.NullString
+	var movieMetadataID, episodeMetadataID sql.NullInt64
 
 	err := s.Scan(
 		&media.ID,
@@ -49,6 +51,11 @@ func (r *MediaRepository) scanMediaRow(s scanner) (*domain.MediaFile, error) {
 		&media.CreatedAt,
 		&media.UpdatedAt,
 		&media.ScannedAt,
+		&enrichmentStatus,
+		&metadataType,
+		&movieMetadataID,
+		&episodeMetadataID,
+		&edition,
 	)
 	if err != nil {
 		return nil, err
@@ -61,6 +68,31 @@ func (r *MediaRepository) scanMediaRow(s scanner) (*domain.MediaFile, error) {
 
 	if err := json.Unmarshal([]byte(subtitleLanguagesJSON), &media.SubtitleLanguages); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal subtitle languages: %w", err)
+	}
+
+	// Handle nullable enrichment fields
+	if enrichmentStatus.Valid {
+		media.EnrichmentStatus = enrichmentStatus.String
+	} else {
+		media.EnrichmentStatus = domain.EnrichmentStatusPending
+	}
+
+	if metadataType.Valid {
+		media.MetadataType = metadataType.String
+	} else {
+		media.MetadataType = domain.MetadataTypeNone
+	}
+
+	if movieMetadataID.Valid {
+		media.MovieMetadataID = &movieMetadataID.Int64
+	}
+
+	if episodeMetadataID.Valid {
+		media.EpisodeMetadataID = &episodeMetadataID.Int64
+	}
+
+	if edition.Valid {
+		media.Edition = edition.String
 	}
 
 	return &media, nil
@@ -100,9 +132,10 @@ func (r *MediaRepository) Create(ctx context.Context, media *domain.MediaFile) e
 			id, fingerprint, file_path, original_filename, filename,
 			title, duration, file_size, format, video_codec, audio_codecs,
 			resolution, width, height, bitrate, audio_tracks, subtitle_tracks,
-			subtitle_languages, status, created_at, updated_at, scanned_at
+			subtitle_languages, status, created_at, updated_at, scanned_at,
+			enrichment_status, metadata_type, movie_metadata_id, episode_metadata_id, edition
 		) VALUES (
-			?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+			?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 		)
 	`
 
@@ -129,6 +162,11 @@ func (r *MediaRepository) Create(ctx context.Context, media *domain.MediaFile) e
 		media.CreatedAt,
 		media.UpdatedAt,
 		media.ScannedAt,
+		media.EnrichmentStatus,
+		media.MetadataType,
+		media.MovieMetadataID,
+		media.EpisodeMetadataID,
+		media.Edition,
 	)
 
 	if err != nil {
@@ -145,7 +183,8 @@ func (r *MediaRepository) Get(ctx context.Context, id string) (*domain.MediaFile
 			id, fingerprint, file_path, original_filename, filename,
 			title, duration, file_size, format, video_codec, audio_codecs,
 			resolution, width, height, bitrate, audio_tracks, subtitle_tracks,
-			subtitle_languages, status, created_at, updated_at, scanned_at
+			subtitle_languages, status, created_at, updated_at, scanned_at,
+			enrichment_status, metadata_type, movie_metadata_id, episode_metadata_id, edition
 		FROM media_files
 		WHERE id = ?
 	`
@@ -185,7 +224,8 @@ func (r *MediaRepository) List(ctx context.Context, page, perPage int) ([]*domai
 			id, fingerprint, file_path, original_filename, filename,
 			title, duration, file_size, format, video_codec, audio_codecs,
 			resolution, width, height, bitrate, audio_tracks, subtitle_tracks,
-			subtitle_languages, status, created_at, updated_at, scanned_at
+			subtitle_languages, status, created_at, updated_at, scanned_at,
+			enrichment_status, metadata_type, movie_metadata_id, episode_metadata_id, edition
 		FROM media_files
 		ORDER BY created_at DESC
 		LIMIT ? OFFSET ?
@@ -220,7 +260,8 @@ func (r *MediaRepository) FindByFingerprint(ctx context.Context, fingerprint str
 			id, fingerprint, file_path, original_filename, filename,
 			title, duration, file_size, format, video_codec, audio_codecs,
 			resolution, width, height, bitrate, audio_tracks, subtitle_tracks,
-			subtitle_languages, status, created_at, updated_at, scanned_at
+			subtitle_languages, status, created_at, updated_at, scanned_at,
+			enrichment_status, metadata_type, movie_metadata_id, episode_metadata_id, edition
 		FROM media_files
 		WHERE fingerprint = ?
 	`
@@ -277,7 +318,12 @@ func (r *MediaRepository) Update(ctx context.Context, media *domain.MediaFile) e
 			subtitle_languages = ?,
 			status = ?,
 			updated_at = ?,
-			scanned_at = ?
+			scanned_at = ?,
+			enrichment_status = ?,
+			metadata_type = ?,
+			movie_metadata_id = ?,
+			episode_metadata_id = ?,
+			edition = ?
 		WHERE id = ?
 	`
 
@@ -302,6 +348,11 @@ func (r *MediaRepository) Update(ctx context.Context, media *domain.MediaFile) e
 		media.Status,
 		media.UpdatedAt,
 		media.ScannedAt,
+		media.EnrichmentStatus,
+		media.MetadataType,
+		media.MovieMetadataID,
+		media.EpisodeMetadataID,
+		media.Edition,
 		media.ID,
 	)
 

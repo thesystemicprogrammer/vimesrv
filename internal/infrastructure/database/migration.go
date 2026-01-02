@@ -188,6 +188,226 @@ DROP INDEX IF EXISTS idx_audio_streams_media_id;
 DROP TABLE IF EXISTS audio_streams;
 `,
 	},
+	{
+		version: 4,
+		name:    "create_tmdb_metadata_tables",
+		up: `
+-- Add enrichment fields to media_files
+ALTER TABLE media_files ADD COLUMN enrichment_status TEXT DEFAULT 'pending'
+    CHECK(enrichment_status IN ('pending', 'auto_linked', 'candidates_found', 
+                                 'manual_required', 'linked', 'skipped'));
+ALTER TABLE media_files ADD COLUMN metadata_type TEXT DEFAULT ''
+    CHECK(metadata_type IN ('', 'movie', 'episode'));
+ALTER TABLE media_files ADD COLUMN movie_metadata_id INTEGER;
+ALTER TABLE media_files ADD COLUMN episode_metadata_id INTEGER;
+ALTER TABLE media_files ADD COLUMN edition TEXT DEFAULT '';
+
+CREATE INDEX IF NOT EXISTS idx_media_files_enrichment_status ON media_files(enrichment_status);
+CREATE INDEX IF NOT EXISTS idx_media_files_metadata_type ON media_files(metadata_type);
+
+-- Movie metadata table (language-independent fields)
+CREATE TABLE IF NOT EXISTS movie_metadata (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tmdb_id INTEGER NOT NULL UNIQUE,
+    imdb_id TEXT,
+    original_title TEXT NOT NULL,
+    release_date TEXT,
+    runtime INTEGER DEFAULT 0,
+    poster_path TEXT,
+    backdrop_path TEXT,
+    genres TEXT,
+    vote_average REAL DEFAULT 0,
+    vote_count INTEGER DEFAULT 0,
+    popularity REAL DEFAULT 0,
+    status TEXT,
+    original_lang TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_movie_metadata_tmdb_id ON movie_metadata(tmdb_id);
+
+-- Movie metadata translations
+CREATE TABLE IF NOT EXISTS movie_metadata_translations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    movie_metadata_id INTEGER NOT NULL REFERENCES movie_metadata(id) ON DELETE CASCADE,
+    language TEXT NOT NULL,
+    title TEXT NOT NULL,
+    tagline TEXT,
+    overview TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(movie_metadata_id, language)
+);
+
+CREATE INDEX IF NOT EXISTS idx_movie_translations_movie_id ON movie_metadata_translations(movie_metadata_id);
+CREATE INDEX IF NOT EXISTS idx_movie_translations_language ON movie_metadata_translations(language);
+
+-- Series metadata table (language-independent fields)
+CREATE TABLE IF NOT EXISTS series_metadata (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tmdb_id INTEGER NOT NULL UNIQUE,
+    original_name TEXT NOT NULL,
+    first_air_date TEXT,
+    last_air_date TEXT,
+    status TEXT,
+    poster_path TEXT,
+    backdrop_path TEXT,
+    genres TEXT,
+    networks TEXT,
+    vote_average REAL DEFAULT 0,
+    vote_count INTEGER DEFAULT 0,
+    popularity REAL DEFAULT 0,
+    number_of_seasons INTEGER DEFAULT 0,
+    number_of_episodes INTEGER DEFAULT 0,
+original_lang TEXT,
+	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_series_metadata_tmdb_id ON series_metadata(tmdb_id);
+
+-- Series metadata translations
+CREATE TABLE IF NOT EXISTS series_metadata_translations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    series_metadata_id INTEGER NOT NULL REFERENCES series_metadata(id) ON DELETE CASCADE,
+    language TEXT NOT NULL,
+    name TEXT NOT NULL,
+    overview TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(series_metadata_id, language)
+);
+
+CREATE INDEX IF NOT EXISTS idx_series_translations_series_id ON series_metadata_translations(series_metadata_id);
+CREATE INDEX IF NOT EXISTS idx_series_translations_language ON series_metadata_translations(language);
+
+-- Season metadata table
+CREATE TABLE IF NOT EXISTS season_metadata (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    series_id INTEGER NOT NULL REFERENCES series_metadata(id) ON DELETE CASCADE,
+    tmdb_id INTEGER NOT NULL,
+    season_number INTEGER NOT NULL,
+    air_date TEXT,
+    poster_path TEXT,
+    episode_count INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(series_id, season_number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_season_metadata_series_id ON season_metadata(series_id);
+
+-- Season metadata translations
+CREATE TABLE IF NOT EXISTS season_metadata_translations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    season_metadata_id INTEGER NOT NULL REFERENCES season_metadata(id) ON DELETE CASCADE,
+    language TEXT NOT NULL,
+    name TEXT,
+    overview TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(season_metadata_id, language)
+);
+
+CREATE INDEX IF NOT EXISTS idx_season_translations_season_id ON season_metadata_translations(season_metadata_id);
+CREATE INDEX IF NOT EXISTS idx_season_translations_language ON season_metadata_translations(language);
+
+-- Episode metadata table
+CREATE TABLE IF NOT EXISTS episode_metadata (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    season_id INTEGER NOT NULL REFERENCES season_metadata(id) ON DELETE CASCADE,
+    tmdb_id INTEGER NOT NULL,
+    episode_number INTEGER NOT NULL,
+    air_date TEXT,
+    still_path TEXT,
+    runtime INTEGER DEFAULT 0,
+    vote_average REAL DEFAULT 0,
+    vote_count INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(season_id, episode_number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_episode_metadata_season_id ON episode_metadata(season_id);
+
+-- Episode metadata translations
+CREATE TABLE IF NOT EXISTS episode_metadata_translations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    episode_metadata_id INTEGER NOT NULL REFERENCES episode_metadata(id) ON DELETE CASCADE,
+    language TEXT NOT NULL,
+    name TEXT,
+    overview TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(episode_metadata_id, language)
+);
+
+CREATE INDEX IF NOT EXISTS idx_episode_translations_episode_id ON episode_metadata_translations(episode_metadata_id);
+CREATE INDEX IF NOT EXISTS idx_episode_translations_language ON episode_metadata_translations(language);
+
+-- Metadata candidates for user selection
+CREATE TABLE IF NOT EXISTS metadata_candidates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    media_file_id TEXT NOT NULL REFERENCES media_files(id) ON DELETE CASCADE,
+    candidate_type TEXT NOT NULL CHECK(candidate_type IN ('movie', 'series')),
+    tmdb_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    release_date TEXT,
+    overview TEXT,
+    poster_path TEXT,
+    confidence_score INTEGER NOT NULL,
+    season_number INTEGER,
+    episode_number INTEGER,
+    status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'selected', 'rejected')),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(media_file_id, candidate_type, tmdb_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_metadata_candidates_media_file_id ON metadata_candidates(media_file_id);
+CREATE INDEX IF NOT EXISTS idx_metadata_candidates_status ON metadata_candidates(status);
+
+-- Add foreign key constraints to media_files (SQLite doesn't enforce these via ALTER, but they're documented)
+-- movie_metadata_id REFERENCES movie_metadata(id)
+-- episode_metadata_id REFERENCES episode_metadata(id)
+`,
+		down: `
+DROP INDEX IF EXISTS idx_metadata_candidates_status;
+DROP INDEX IF EXISTS idx_metadata_candidates_media_file_id;
+DROP TABLE IF EXISTS metadata_candidates;
+
+DROP INDEX IF EXISTS idx_episode_translations_language;
+DROP INDEX IF EXISTS idx_episode_translations_episode_id;
+DROP TABLE IF EXISTS episode_metadata_translations;
+
+DROP INDEX IF EXISTS idx_episode_metadata_season_id;
+DROP TABLE IF EXISTS episode_metadata;
+
+DROP INDEX IF EXISTS idx_season_translations_language;
+DROP INDEX IF EXISTS idx_season_translations_season_id;
+DROP TABLE IF EXISTS season_metadata_translations;
+
+DROP INDEX IF EXISTS idx_season_metadata_series_id;
+DROP TABLE IF EXISTS season_metadata;
+
+DROP INDEX IF EXISTS idx_series_translations_language;
+DROP INDEX IF EXISTS idx_series_translations_series_id;
+DROP TABLE IF EXISTS series_metadata_translations;
+
+DROP INDEX IF EXISTS idx_series_metadata_tmdb_id;
+DROP TABLE IF EXISTS series_metadata;
+
+DROP INDEX IF EXISTS idx_movie_translations_language;
+DROP INDEX IF EXISTS idx_movie_translations_movie_id;
+DROP TABLE IF EXISTS movie_metadata_translations;
+
+DROP INDEX IF EXISTS idx_movie_metadata_tmdb_id;
+DROP TABLE IF EXISTS movie_metadata;
+
+-- SQLite doesn't support DROP COLUMN, would need to recreate table
+-- For development, we can just leave the columns
+`,
+	},
 }
 
 func NewDatabaseMigration(db *sql.DB) *DatabaseMigration {

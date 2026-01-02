@@ -15,12 +15,14 @@ const (
 const (
 	JobTypeScanLibrary    = "scan_library"
 	JobTypeTranscodeVideo = "transcode_video"
+	JobTypeEnrichMetadata = "enrich_metadata"
 )
 
 // Job priorities (lower value = higher priority)
 const (
-	JobPriorityLibraryScan = 0
-	JobPriorityTranscode   = 5
+	JobPriorityLibraryScan    = 0
+	JobPriorityTranscode      = 5
+	JobPriorityEnrichMetadata = 3
 )
 
 // ErrorBackoffDuration is the wait time after a job processing error before retrying

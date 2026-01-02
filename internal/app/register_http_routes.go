@@ -38,6 +38,17 @@ func registerHTTPHandlers(useCases *UseCases, httpServer *server.HTTPServer, cfg
 		// Media API
 		mediaHandler := http.NewMediaHandler(useCases.ListMediaUseCase, useCases.GetMediaUseCase, cfg)
 		mediaHandler.RegisterRoutes(apiGroup)
+
+		// Metadata Enrichment API (if TMDB is enabled)
+		metadataHandler := http.NewMetadataHandler(
+			useCases.GetCandidatesUseCase,
+			useCases.LinkMetadataUseCase,
+			useCases.SearchMetadataUseCase,
+			useCases.LinkFromSearchUseCase,
+			useCases.SkipEnrichmentUseCase,
+			useCases.ResetEnrichmentUseCase,
+		)
+		metadataHandler.RegisterRoutes(apiGroup)
 	}
 
 	// === Protected Streaming Routes ===

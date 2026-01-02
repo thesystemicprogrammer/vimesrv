@@ -2,6 +2,7 @@ package app
 
 import (
 	"github.com/thesystemicprogrammer/vimesrv/internal/adapters/library"
+	"github.com/thesystemicprogrammer/vimesrv/internal/adapters/metadata"
 	"github.com/thesystemicprogrammer/vimesrv/internal/adapters/transcode"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared"
 )
@@ -14,4 +15,10 @@ func registerJobs(useCases *UseCases, adapters *Adapters) {
 	// Transcode Video
 	transcodeVideoJobHandler := transcode.NewTranscodeVideoJobHandler(useCases.ProcessTranscodeUseCase)
 	adapters.HandlerRegistry.Register(shared.JobTypeTranscodeVideo, transcodeVideoJobHandler)
+
+	// Enrich Metadata (only if TMDB is enabled)
+	if useCases.EnrichMediaFileUseCase != nil {
+		enrichMetadataJobHandler := metadata.NewEnrichMetadataJobHandler(useCases.EnrichMediaFileUseCase)
+		adapters.HandlerRegistry.Register(shared.JobTypeEnrichMetadata, enrichMetadataJobHandler)
+	}
 }

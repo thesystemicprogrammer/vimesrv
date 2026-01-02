@@ -64,6 +64,7 @@ Additional feature which will have an impact on this feature will be implemented
 - Check them for contradictions
 - Check them for completeness
 - Create a comprehensive design how this feature will be implemented
+- Analzye the additionally required endpoints and adaptions in the server part
 - Break the feature down in reasonable tasks to conduct
 - Implement the feature including tests
 - Always ask missing information
