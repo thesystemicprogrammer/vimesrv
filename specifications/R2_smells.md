@@ -11,6 +11,7 @@ Whenever I discover something odd or something I don't understand, I write it do
 - Transcode Path pattern: Why do I have to set a pattern and not only the path where we want to put the transcode directories and files?
 - Setting the language label on the server: What about multi language clients? Should the label not be determined on client side with the client language
 - How do we update series metadata? When there is a new season, the metadata changes so we need an update
+- While transcoding, the media is already visible in the frontend, but there are no streams. Can we somehow ensure that we cannot try to start playing a stream as long as transcoding is still running
 -
 
 # Tasks

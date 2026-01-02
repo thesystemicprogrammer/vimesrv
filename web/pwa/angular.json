@@ -6,7 +6,7 @@
   },
   "newProjectRoot": "projects",
   "projects": {
-    "pwa": {
+    "vimesrv-client": {
       "projectType": "application",
       "schematics": {
         "@schematics/angular:class": {
@@ -41,7 +41,7 @@
         "build": {
           "builder": "@angular-devkit/build-angular:application",
           "options": {
-            "outputPath": "dist/pwa",
+            "outputPath": "dist/vimesrv-client",
             "index": "src/index.html",
             "browser": "src/main.ts",
             "polyfills": [
@@ -88,10 +88,10 @@
           "builder": "@angular-devkit/build-angular:dev-server",
           "configurations": {
             "production": {
-              "buildTarget": "pwa:build:production"
+              "buildTarget": "vimesrv-client:build:production"
             },
             "development": {
-              "buildTarget": "pwa:build:development"
+              "buildTarget": "vimesrv-client:build:development"
             }
           },
           "defaultConfiguration": "development"

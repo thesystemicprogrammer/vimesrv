@@ -3,7 +3,7 @@ package web
 import "embed"
 
 // PWAFiles embeds the Angular PWA application
-// The PWA is built to web/pwa/dist/pwa/browser/ by Angular
+// The PWA is built to web/pwa/dist/vimesrv-client/browser/ by Angular
 //
-//go:embed pwa/dist/pwa/browser
+//go:embed pwa/dist/vimesrv-client/browser
 var PWAFiles embed.FS

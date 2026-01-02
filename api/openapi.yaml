@@ -1,0 +1,796 @@
+openapi: 3.0.3
+info:
+  title: VimeSrv API
+  description: REST API for VimeSrv - Home network video media server with DASH/HLS transcoding
+  version: 0.1.0
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+tags:
+  - name: Auth
+    description: Authentication endpoints
+  - name: Media
+    description: Media file management
+  - name: Metadata
+    description: TMDB metadata enrichment
+  - name: Library
+    description: Library scanning
+  - name: Streaming
+    description: DASH streaming endpoints
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: API token obtained from /api/v1/auth/login
+    StreamAuth:
+      type: apiKey
+      in: query
+      name: token
+      description: Short-lived stream token obtained from /api/v1/auth/stream-token
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: "INVALID_REQUEST"
+            message:
+              type: string
+              example: "Invalid request body"
+            details:
+              type: object
+
+    LoginRequest:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          example: "admin"
+        password:
+          type: string
+          example: "admin123"
+
+    LoginResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            token:
+              type: string
+              description: JWT token for API authentication
+            expires_in:
+              type: integer
+              description: Token expiry time in seconds
+              example: 86400
+
+    UserResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            username:
+              type: string
+              example: "admin"
+
+    StreamTokenResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            token:
+              type: string
+              description: Short-lived JWT token for streaming URLs
+            expires_in:
+              type: integer
+              description: Token expiry time in seconds
+              example: 3600
+
+    MediaListResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/MediaSummary'
+            total:
+              type: integer
+            page:
+              type: integer
+            per_page:
+              type: integer
+
+    MediaSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        filename:
+          type: string
+        status:
+          type: string
+          enum: [pending, processing, ready, failed]
+        duration:
+          type: number
+          description: Duration in seconds
+
+    MediaDetailResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/MediaDetail'
+
+    MediaDetail:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        filename:
+          type: string
+        duration:
+          type: number
+        resolution:
+          type: string
+          example: "1080p"
+        width:
+          type: integer
+        height:
+          type: integer
+        status:
+          type: string
+        dash_manifest_url:
+          type: string
+          example: "/stream/dash/{id}/manifest.mpd"
+        audio_streams:
+          type: array
+          items:
+            $ref: '#/components/schemas/AudioStream'
+        subtitle_streams:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubtitleStream'
+        available_qualities:
+          type: array
+          items:
+            type: string
+          example: ["1080p", "720p", "480p"]
+
+    AudioStream:
+      type: object
+      properties:
+        index:
+          type: integer
+        language:
+          type: string
+          example: "eng"
+        title:
+          type: string
+          example: "English"
+        channels:
+          type: integer
+          example: 2
+
+    SubtitleStream:
+      type: object
+      properties:
+        index:
+          type: integer
+        language:
+          type: string
+          example: "eng"
+        title:
+          type: string
+          example: "English"
+
+    CandidatesResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/MetadataCandidate'
+
+    MetadataCandidate:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        tmdb_id:
+          type: integer
+        media_type:
+          type: string
+          enum: [movie, tv]
+        title:
+          type: string
+        release_date:
+          type: string
+        confidence:
+          type: number
+          description: Match confidence score (0-100)
+        poster_url:
+          type: string
+
+    LinkRequest:
+      type: object
+      required:
+        - candidate_id
+      properties:
+        candidate_id:
+          type: integer
+          format: int64
+
+    SearchRequest:
+      type: object
+      required:
+        - query
+      properties:
+        query:
+          type: string
+          example: "The Matrix"
+        year:
+          type: integer
+          example: 1999
+        media_type:
+          type: string
+          enum: [movie, tv]
+          description: Filter by media type (optional)
+        max_results:
+          type: integer
+          default: 10
+
+    SearchResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/SearchResult'
+
+    SearchResult:
+      type: object
+      properties:
+        tmdb_id:
+          type: integer
+        media_type:
+          type: string
+          enum: [movie, tv]
+        title:
+          type: string
+        original_title:
+          type: string
+        release_date:
+          type: string
+        overview:
+          type: string
+        poster_url:
+          type: string
+
+    LinkSearchRequest:
+      type: object
+      required:
+        - tmdb_id
+        - media_type
+      properties:
+        tmdb_id:
+          type: integer
+        media_type:
+          type: string
+          enum: [movie, tv]
+        season_number:
+          type: integer
+          description: For TV episodes
+        episode_number:
+          type: integer
+          description: For TV episodes
+
+    ScanJobResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            job_id:
+              type: integer
+              format: int64
+
+    SuccessResponse:
+      type: object
+      properties:
+        data:
+          type: object
+
+paths:
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: Authenticate user
+      description: Login with username and password to obtain a JWT token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          description: Invalid request or auth disabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/auth/me:
+    get:
+      tags: [Auth]
+      summary: Get current user
+      description: Returns information about the authenticated user
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: User info
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/auth/stream-token:
+    post:
+      tags: [Auth]
+      summary: Get stream token
+      description: Generate a short-lived token for streaming URLs
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Stream token generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StreamTokenResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/media:
+    get:
+      tags: [Media]
+      summary: List media files
+      description: Returns a paginated list of all media files
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Media list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MediaListResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/media/{id}:
+    get:
+      tags: [Media]
+      summary: Get media details
+      description: Returns detailed information about a specific media file
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Media details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MediaDetailResponse'
+        '404':
+          description: Media not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/media/{id}/candidates:
+    get:
+      tags: [Metadata]
+      summary: Get metadata candidates
+      description: Returns TMDB metadata candidates for a media file
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: pending_only
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Metadata candidates
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CandidatesResponse'
+        '404':
+          description: Media not found or no candidates
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: TMDB integration disabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/media/{id}/link:
+    post:
+      tags: [Metadata]
+      summary: Link to metadata candidate
+      description: Link a media file to a specific metadata candidate
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LinkRequest'
+      responses:
+        '200':
+          description: Metadata linked successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Invalid request or link failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: TMDB integration disabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/media/{id}/search:
+    post:
+      tags: [Metadata]
+      summary: Search TMDB
+      description: Manually search TMDB for metadata
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchRequest'
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: TMDB integration disabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/media/{id}/link-search:
+    post:
+      tags: [Metadata]
+      summary: Link from search result
+      description: Link a media file directly from a TMDB search result
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LinkSearchRequest'
+      responses:
+        '200':
+          description: Metadata linked successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Invalid request or link failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: TMDB integration disabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/media/{id}/skip:
+    post:
+      tags: [Metadata]
+      summary: Skip metadata enrichment
+      description: Mark a media file to skip metadata enrichment
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Enrichment skipped
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Skip failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: TMDB integration disabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/media/{id}/reset:
+    post:
+      tags: [Metadata]
+      summary: Reset metadata enrichment
+      description: Reset metadata enrichment status for a media file
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Enrichment reset
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Reset failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: TMDB integration disabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/scanlib:
+    post:
+      tags: [Library]
+      summary: Trigger library scan
+      description: Enqueue a library scan job
+      security:
+        - BearerAuth: []
+      responses:
+        '201':
+          description: Scan job enqueued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanJobResponse'
+        '500':
+          description: Failed to enqueue job
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /stream/dash/{id}/manifest.mpd:
+    get:
+      tags: [Streaming]
+      summary: Get DASH manifest
+      description: Returns the DASH MPD manifest for streaming
+      security:
+        - StreamAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: quality
+          in: query
+          description: Filter manifest by quality (e.g., 1080p, 720p)
+          schema:
+            type: string
+        - name: token
+          in: query
+          required: true
+          description: Stream token
+          schema:
+            type: string
+      responses:
+        '200':
+          description: DASH manifest
+          content:
+            application/dash+xml:
+              schema:
+                type: string
+        '404':
+          description: Media not found or no transcodes available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /stream/dash/content/{id}/{path}:
+    get:
+      tags: [Streaming]
+      summary: Serve DASH content
+      description: |
+        Serves DASH content segments including:
+        - Video segments: `{quality}/video/{segment}` (e.g., `1080p/video/init.mp4`)
+        - Audio segments: `audio-{idx}/{segment}` (e.g., `audio-0/chunk-001.m4s`)
+        - Subtitles: `subtitle-{idx}.vtt`
+      security:
+        - StreamAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: path
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: token
+          in: query
+          required: true
+          description: Stream token
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Content segment
+          content:
+            video/mp4:
+              schema:
+                type: string
+                format: binary
+            video/iso.segment:
+              schema:
+                type: string
+                format: binary
+            audio/mp4:
+              schema:
+                type: string
+                format: binary
+            audio/iso.segment:
+              schema:
+                type: string
+                format: binary
+            text/vtt:
+              schema:
+                type: string
+        '404':
+          description: Content not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'

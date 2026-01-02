@@ -1,6 +1,6 @@
 {
-  "name": "pwa",
-  "short_name": "pwa",
+  "name": "VimeSrv Client",
+  "short_name": "VimeSrv",
   "display": "standalone",
   "scope": "./",
   "start_url": "./",

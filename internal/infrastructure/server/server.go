@@ -103,7 +103,7 @@ func (s *HTTPServer) setupHealthEndpoint() {
 // served the PWA's index.html for client-side routing.
 func (s *HTTPServer) RegisterPWA(pwaFS fs.FS) error {
 	// Create a sub-filesystem for the PWA dist folder
-	distFS, err := fs.Sub(pwaFS, "pwa/dist/pwa/browser")
+	distFS, err := fs.Sub(pwaFS, "pwa/dist/vimesrv-client/browser")
 	if err != nil {
 		return fmt.Errorf("failed to create PWA filesystem: %w", err)
 	}
