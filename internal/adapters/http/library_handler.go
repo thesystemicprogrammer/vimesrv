@@ -13,30 +13,36 @@ import (
 
 // LibraryHandler handles library browsing API endpoints
 type LibraryHandler struct {
-	listMoviesUC    *library.ListMoviesUseCase
-	getMovieUC      *library.GetMovieUseCase
-	listSeriesUC    *library.ListSeriesUseCase
-	getSeriesUC     *library.GetSeriesUseCase
-	listRecentUC    *library.ListRecentUseCase
-	listUnmatchedUC *library.ListUnmatchedUseCase
+	listMoviesUC       *library.ListMoviesUseCase
+	getMovieUC         *library.GetMovieUseCase
+	getMovieCreditsUC  *library.GetMovieCreditsUseCase
+	listSeriesUC       *library.ListSeriesUseCase
+	getSeriesUC        *library.GetSeriesUseCase
+	getSeriesCreditsUC *library.GetSeriesCreditsUseCase
+	listRecentUC       *library.ListRecentUseCase
+	listUnmatchedUC    *library.ListUnmatchedUseCase
 }
 
 // NewLibraryHandler creates a new library handler
 func NewLibraryHandler(
 	listMoviesUC *library.ListMoviesUseCase,
 	getMovieUC *library.GetMovieUseCase,
+	getMovieCreditsUC *library.GetMovieCreditsUseCase,
 	listSeriesUC *library.ListSeriesUseCase,
 	getSeriesUC *library.GetSeriesUseCase,
+	getSeriesCreditsUC *library.GetSeriesCreditsUseCase,
 	listRecentUC *library.ListRecentUseCase,
 	listUnmatchedUC *library.ListUnmatchedUseCase,
 ) *LibraryHandler {
 	return &LibraryHandler{
-		listMoviesUC:    listMoviesUC,
-		getMovieUC:      getMovieUC,
-		listSeriesUC:    listSeriesUC,
-		getSeriesUC:     getSeriesUC,
-		listRecentUC:    listRecentUC,
-		listUnmatchedUC: listUnmatchedUC,
+		listMoviesUC:       listMoviesUC,
+		getMovieUC:         getMovieUC,
+		getMovieCreditsUC:  getMovieCreditsUC,
+		listSeriesUC:       listSeriesUC,
+		getSeriesUC:        getSeriesUC,
+		getSeriesCreditsUC: getSeriesCreditsUC,
+		listRecentUC:       listRecentUC,
+		listUnmatchedUC:    listUnmatchedUC,
 	}
 }
 
@@ -46,8 +52,10 @@ func (h *LibraryHandler) RegisterRoutes(router *gin.RouterGroup) {
 	{
 		libraryGroup.GET("/movies", h.ListMovies)
 		libraryGroup.GET("/movies/:id", h.GetMovie)
+		libraryGroup.GET("/movies/:id/credits", h.GetMovieCredits)
 		libraryGroup.GET("/series", h.ListSeries)
 		libraryGroup.GET("/series/:id", h.GetSeries)
+		libraryGroup.GET("/series/:id/credits", h.GetSeriesCredits)
 		libraryGroup.GET("/recent", h.ListRecent)
 		libraryGroup.GET("/unmatched", h.ListUnmatched)
 	}
@@ -232,6 +240,86 @@ func (h *LibraryHandler) ListUnmatched(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, server.ErrorResponse(
 			"LIST_FAILED",
 			"Failed to list unmatched media",
+			err.Error(),
+		))
+		return
+	}
+
+	c.JSON(http.StatusOK, server.SuccessResponse(result))
+}
+
+// GetMovieCredits handles GET /api/v1/library/movies/:id/credits
+func (h *LibraryHandler) GetMovieCredits(c *gin.Context) {
+	movieMetadataID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, server.ErrorResponse(
+			"INVALID_ID",
+			"Invalid movie metadata ID",
+			"Movie metadata ID must be a valid integer",
+		))
+		return
+	}
+
+	logger.Debug().
+		Int64("movie_metadata_id", movieMetadataID).
+		Msg("getting movie credits")
+
+	result, err := h.getMovieCreditsUC.Execute(c.Request.Context(), library.GetMovieCreditsInput{
+		MovieMetadataID: movieMetadataID,
+	})
+	if err != nil {
+		if err == shared.ErrNotFound {
+			c.JSON(http.StatusNotFound, server.ErrorResponse(
+				"MOVIE_NOT_FOUND",
+				"Movie not found",
+				"The requested movie was not found",
+			))
+			return
+		}
+		logger.Error().Err(err).Int64("movie_metadata_id", movieMetadataID).Msg("failed to get movie credits")
+		c.JSON(http.StatusInternalServerError, server.ErrorResponse(
+			"GET_FAILED",
+			"Failed to get movie credits",
+			err.Error(),
+		))
+		return
+	}
+
+	c.JSON(http.StatusOK, server.SuccessResponse(result))
+}
+
+// GetSeriesCredits handles GET /api/v1/library/series/:id/credits
+func (h *LibraryHandler) GetSeriesCredits(c *gin.Context) {
+	seriesMetadataID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, server.ErrorResponse(
+			"INVALID_ID",
+			"Invalid series metadata ID",
+			"Series metadata ID must be a valid integer",
+		))
+		return
+	}
+
+	logger.Debug().
+		Int64("series_metadata_id", seriesMetadataID).
+		Msg("getting series credits")
+
+	result, err := h.getSeriesCreditsUC.Execute(c.Request.Context(), library.GetSeriesCreditsInput{
+		SeriesMetadataID: seriesMetadataID,
+	})
+	if err != nil {
+		if err == shared.ErrNotFound {
+			c.JSON(http.StatusNotFound, server.ErrorResponse(
+				"SERIES_NOT_FOUND",
+				"Series not found",
+				"The requested series was not found",
+			))
+			return
+		}
+		logger.Error().Err(err).Int64("series_metadata_id", seriesMetadataID).Msg("failed to get series credits")
+		c.JSON(http.StatusInternalServerError, server.ErrorResponse(
+			"GET_FAILED",
+			"Failed to get series credits",
 			err.Error(),
 		))
 		return

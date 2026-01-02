@@ -6,6 +6,7 @@ import {
   SearchResult,
   UnmatchedMediaSummary
 } from '../../core/services/api.service';
+import { AuthService } from '../../core/services/auth.service';
 
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w185';
 
@@ -259,6 +260,7 @@ type MediaType = 'movie' | 'tv';
 })
 export class MetadataMatchModalComponent implements OnInit {
   private readonly api = inject(ApiService);
+  private readonly auth = inject(AuthService);
 
   @Input() media: UnmatchedMediaSummary | null = null;
   @Output() matched = new EventEmitter<void>();
@@ -346,12 +348,13 @@ export class MetadataMatchModalComponent implements OnInit {
     const request = {
       query: this.searchQuery.trim(),
       media_type: this.searchType || undefined,
-      max_results: 10
+      max_results: 10,
+      language: this.auth.language()
     };
 
     this.api.searchMetadata(this.media.media_id, request).subscribe({
       next: (response) => {
-        this.searchResults.set(response.data || []);
+        this.searchResults.set(response.data?.results || []);
         this.hasSearched.set(true);
         this.searching.set(false);
       },

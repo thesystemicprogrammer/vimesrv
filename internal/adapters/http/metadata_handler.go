@@ -165,6 +165,7 @@ type SearchMetadataRequest struct {
 	Year       int    `json:"year"`
 	MediaType  string `json:"media_type"` // "movie", "tv", or empty for both
 	MaxResults int    `json:"max_results"`
+	Language   string `json:"language"` // Optional language code (e.g., "en", "de")
 }
 
 // SearchMetadata handles POST /api/v1/media/:id/search
@@ -203,6 +204,7 @@ func (h *MetadataHandler) SearchMetadata(c *gin.Context) {
 		Year:       req.Year,
 		MediaType:  req.MediaType,
 		MaxResults: req.MaxResults,
+		Language:   req.Language,
 	})
 	if err != nil {
 		logger.Error().Err(err).Str("media_id", id).Msg("failed to search metadata")

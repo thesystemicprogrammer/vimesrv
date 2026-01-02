@@ -148,6 +148,47 @@ type TMDBMovieCredits struct {
 	Crew []TMDBCrewMember `json:"crew"`
 }
 
+// TMDBSeriesRole represents a role played by a cast member in a series
+type TMDBSeriesRole struct {
+	CreditID     string `json:"credit_id"`
+	Character    string `json:"character"`
+	EpisodeCount int    `json:"episode_count"`
+}
+
+// TMDBSeriesJob represents a job performed by a crew member in a series
+type TMDBSeriesJob struct {
+	CreditID     string `json:"credit_id"`
+	Job          string `json:"job"`
+	EpisodeCount int    `json:"episode_count"`
+}
+
+// TMDBSeriesCastMember represents a cast member from TMDB aggregate credits
+type TMDBSeriesCastMember struct {
+	ID                int              `json:"id"`
+	Name              string           `json:"name"`
+	ProfilePath       string           `json:"profile_path"`
+	Roles             []TMDBSeriesRole `json:"roles"`
+	TotalEpisodeCount int              `json:"total_episode_count"`
+	Order             int              `json:"order"`
+}
+
+// TMDBSeriesCrewMember represents a crew member from TMDB aggregate credits
+type TMDBSeriesCrewMember struct {
+	ID                int             `json:"id"`
+	Name              string          `json:"name"`
+	ProfilePath       string          `json:"profile_path"`
+	Department        string          `json:"department"`
+	Jobs              []TMDBSeriesJob `json:"jobs"`
+	TotalEpisodeCount int             `json:"total_episode_count"`
+}
+
+// TMDBSeriesAggregateCredits represents the aggregate credits response from TMDB
+type TMDBSeriesAggregateCredits struct {
+	ID   int                    `json:"id"`
+	Cast []TMDBSeriesCastMember `json:"cast"`
+	Crew []TMDBSeriesCrewMember `json:"crew"`
+}
+
 // TMDBReleaseDate represents a release date entry within a country
 type TMDBReleaseDate struct {
 	Certification string `json:"certification"`
@@ -325,6 +366,9 @@ type TMDBClient interface {
 
 	// GetMovieCredits retrieves cast and crew for a movie
 	GetMovieCredits(ctx context.Context, movieID int) (*TMDBMovieCredits, error)
+
+	// GetSeriesAggregateCredits retrieves aggregate cast and crew for a TV series
+	GetSeriesAggregateCredits(ctx context.Context, seriesID int) (*TMDBSeriesAggregateCredits, error)
 
 	// GetMovieReleaseDates retrieves release dates and certifications for a movie
 	GetMovieReleaseDates(ctx context.Context, movieID int) (*TMDBReleaseDatesResponse, error)

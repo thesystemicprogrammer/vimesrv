@@ -19,6 +19,7 @@ type SearchMetadataInput struct {
 	Year       int    // Optional year filter
 	MediaType  string // "movie", "tv", or "" for both
 	MaxResults int    // Max results to return (default 10)
+	Language   string // Optional language code (e.g., "en", "de"). Falls back to config if empty
 }
 
 // SearchMetadataResult represents a single search result
@@ -80,16 +81,22 @@ func (uc *SearchMetadataUseCase) Execute(ctx context.Context, input SearchMetada
 
 	var results []SearchMetadataResult
 
+	// Use input language if provided, otherwise fall back to config
+	language := input.Language
+	if language == "" {
+		language = uc.config.Language
+	}
+
 	switch input.MediaType {
 	case "movie":
-		movieResults, err := uc.tmdbClient.SearchMovie(ctx, input.Query, input.Year, uc.config.Language)
+		movieResults, err := uc.tmdbClient.SearchMovie(ctx, input.Query, input.Year, language)
 		if err != nil {
 			return nil, fmt.Errorf("failed to search movies: %w", err)
 		}
 		results = uc.convertResults(movieResults, "movie")
 
 	case "tv":
-		tvResults, err := uc.tmdbClient.SearchTV(ctx, input.Query, input.Year, uc.config.Language)
+		tvResults, err := uc.tmdbClient.SearchTV(ctx, input.Query, input.Year, language)
 		if err != nil {
 			return nil, fmt.Errorf("failed to search TV: %w", err)
 		}
@@ -97,7 +104,7 @@ func (uc *SearchMetadataUseCase) Execute(ctx context.Context, input SearchMetada
 
 	default:
 		// Search both movies and TV
-		multiResults, err := uc.tmdbClient.SearchMulti(ctx, input.Query, uc.config.Language)
+		multiResults, err := uc.tmdbClient.SearchMulti(ctx, input.Query, language)
 		if err != nil {
 			return nil, fmt.Errorf("failed to search: %w", err)
 		}

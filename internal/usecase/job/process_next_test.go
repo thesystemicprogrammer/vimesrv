@@ -48,7 +48,7 @@ func TestProcessNextJobUseCase_Execute_NoJobAvailable(t *testing.T) {
 
 	mockRepo.On("ClaimNextJobDue", ctx, "worker-1").Return(nil, false, nil)
 
-	uc := NewProcessNextJobUseCase(mockRepo, mockResolver, mockBackoff, mockClock)
+	uc := NewProcessNextJobUseCase(mockRepo, mockResolver, mockBackoff, mockClock, &ports.NoOpJobNotifier{})
 
 	found, err := uc.Execute(ctx, "worker-1")
 
@@ -68,7 +68,7 @@ func TestProcessNextJobUseCase_Execute_ClaimError(t *testing.T) {
 	expectedErr := errors.New("database error")
 	mockRepo.On("ClaimNextJobDue", ctx, "worker-1").Return(nil, false, expectedErr)
 
-	uc := NewProcessNextJobUseCase(mockRepo, mockResolver, mockBackoff, mockClock)
+	uc := NewProcessNextJobUseCase(mockRepo, mockResolver, mockBackoff, mockClock, &ports.NoOpJobNotifier{})
 
 	found, err := uc.Execute(ctx, "worker-1")
 
@@ -107,7 +107,7 @@ func TestProcessNextJobUseCase_Execute_SuccessfulJob(t *testing.T) {
 	mockResolver.On("Get", "test-job").Return(handler, true)
 	mockRepo.On("MarkSuccess", mock.Anything, int64(1)).Return(nil)
 
-	uc := NewProcessNextJobUseCase(mockRepo, mockResolver, mockBackoff, mockClock)
+	uc := NewProcessNextJobUseCase(mockRepo, mockResolver, mockBackoff, mockClock, &ports.NoOpJobNotifier{})
 
 	found, err := uc.Execute(ctx, "worker-1")
 
@@ -138,7 +138,7 @@ func TestProcessNextJobUseCase_Execute_HandlerNotFound(t *testing.T) {
 	mockResolver.On("Get", "unknown-job").Return(nil, false)
 	mockRepo.On("MarkDead", mock.Anything, int64(1), "no handler registered").Return(nil)
 
-	uc := NewProcessNextJobUseCase(mockRepo, mockResolver, mockBackoff, mockClock)
+	uc := NewProcessNextJobUseCase(mockRepo, mockResolver, mockBackoff, mockClock, &ports.NoOpJobNotifier{})
 
 	found, err := uc.Execute(ctx, "worker-1")
 
@@ -179,7 +179,7 @@ func TestProcessNextJobUseCase_Execute_JobFailsButCanRetry(t *testing.T) {
 	expectedRunAt := now.Add(5 * time.Second)
 	mockRepo.On("Reschedule", mock.Anything, int64(1), expectedRunAt, "temporary failure").Return(nil)
 
-	uc := NewProcessNextJobUseCase(mockRepo, mockResolver, mockBackoff, mockClock)
+	uc := NewProcessNextJobUseCase(mockRepo, mockResolver, mockBackoff, mockClock, &ports.NoOpJobNotifier{})
 
 	found, err := uc.Execute(ctx, "worker-1")
 
@@ -219,7 +219,7 @@ func TestProcessNextJobUseCase_Execute_MaxAttemptsExceeded(t *testing.T) {
 	mockResolver.On("Get", "failing-job").Return(handler, true)
 	mockRepo.On("MarkDead", mock.Anything, int64(1), "permanent failure").Return(nil)
 
-	uc := NewProcessNextJobUseCase(mockRepo, mockResolver, mockBackoff, mockClock)
+	uc := NewProcessNextJobUseCase(mockRepo, mockResolver, mockBackoff, mockClock, &ports.NoOpJobNotifier{})
 
 	found, err := uc.Execute(ctx, "worker-1")
 
@@ -257,7 +257,7 @@ func TestProcessNextJobUseCase_Execute_HandlerPanic(t *testing.T) {
 		return len(msg) > 0 // Check that error message contains panic info
 	})).Return(nil)
 
-	uc := NewProcessNextJobUseCase(mockRepo, mockResolver, mockBackoff, mockClock)
+	uc := NewProcessNextJobUseCase(mockRepo, mockResolver, mockBackoff, mockClock, &ports.NoOpJobNotifier{})
 
 	// Should not panic, should recover gracefully
 	found, err := uc.Execute(ctx, "worker-1")
@@ -302,7 +302,7 @@ func TestProcessNextJobUseCase_Execute_ContextCancellation(t *testing.T) {
 	// First call with canceled context should fail, then retry with background context
 	mockRepo.On("Reschedule", mock.Anything, int64(1), expectedRunAt, "context canceled").Return(nil)
 
-	uc := NewProcessNextJobUseCase(mockRepo, mockResolver, mockBackoff, mockClock)
+	uc := NewProcessNextJobUseCase(mockRepo, mockResolver, mockBackoff, mockClock, &ports.NoOpJobNotifier{})
 
 	found, err := uc.Execute(ctx, "worker-1")
 
@@ -341,7 +341,7 @@ func TestProcessNextJobUseCase_Execute_StateTransitionRetry(t *testing.T) {
 	mockRepo.On("MarkSuccess", mock.Anything, int64(1)).Return(errors.New("transient db error")).Once()
 	mockRepo.On("MarkSuccess", mock.Anything, int64(1)).Return(nil).Once()
 
-	uc := NewProcessNextJobUseCase(mockRepo, mockResolver, mockBackoff, mockClock)
+	uc := NewProcessNextJobUseCase(mockRepo, mockResolver, mockBackoff, mockClock, &ports.NoOpJobNotifier{})
 
 	found, err := uc.Execute(ctx, "worker-1")
 
@@ -381,7 +381,7 @@ func TestProcessNextJobUseCase_Execute_ScheduledJobTracking(t *testing.T) {
 	mockResolver.On("Get", "scheduled-job").Return(handler, true)
 	mockRepo.On("MarkSuccess", mock.Anything, int64(1)).Return(nil)
 
-	uc := NewProcessNextJobUseCase(mockRepo, mockResolver, mockBackoff, mockClock)
+	uc := NewProcessNextJobUseCase(mockRepo, mockResolver, mockBackoff, mockClock, &ports.NoOpJobNotifier{})
 
 	found, err := uc.Execute(ctx, "worker-1")
 

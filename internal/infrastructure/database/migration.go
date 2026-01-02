@@ -654,6 +654,45 @@ DROP INDEX IF EXISTS idx_users_username;
 DROP TABLE IF EXISTS users;
 `,
 	},
+	{
+		version: 10,
+		name:    "add_full_credits_support",
+		up: `
+-- Track if full credits have been fetched for movies
+ALTER TABLE movie_metadata ADD COLUMN full_credits_fetched INTEGER DEFAULT 0;
+
+-- Series credits table (aggregate credits across all episodes)
+CREATE TABLE IF NOT EXISTS series_credits (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    series_metadata_id INTEGER NOT NULL REFERENCES series_metadata(id) ON DELETE CASCADE,
+    credit_type TEXT NOT NULL CHECK(credit_type IN ('cast', 'crew')),
+    tmdb_person_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    roles TEXT,
+    jobs TEXT,
+    department TEXT,
+    profile_path TEXT,
+    total_episode_count INTEGER DEFAULT 0,
+    display_order INTEGER,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_series_credits_series_id ON series_credits(series_metadata_id);
+CREATE INDEX IF NOT EXISTS idx_series_credits_type ON series_credits(credit_type);
+CREATE INDEX IF NOT EXISTS idx_series_credits_order ON series_credits(series_metadata_id, credit_type, display_order);
+
+-- Track if full credits have been fetched for series
+ALTER TABLE series_metadata ADD COLUMN full_credits_fetched INTEGER DEFAULT 0;
+`,
+		down: `
+DROP INDEX IF EXISTS idx_series_credits_order;
+DROP INDEX IF EXISTS idx_series_credits_type;
+DROP INDEX IF EXISTS idx_series_credits_series_id;
+DROP TABLE IF EXISTS series_credits;
+
+-- SQLite doesn't support DROP COLUMN
+`,
+	},
 }
 
 func NewDatabaseMigration(db *sql.DB) *DatabaseMigration {

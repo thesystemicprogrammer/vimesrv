@@ -370,14 +370,27 @@ components:
         max_results:
           type: integer
           default: 10
+        language:
+          type: string
+          description: Language code for search results (e.g., "en", "de"). Falls back to server default if not provided.
+          example: "en"
 
     SearchResponse:
       type: object
       properties:
         data:
-          type: array
-          items:
-            $ref: '#/components/schemas/SearchResult'
+          type: object
+          properties:
+            media_id:
+              type: string
+            query:
+              type: string
+            results:
+              type: array
+              items:
+                $ref: '#/components/schemas/SearchResult'
+            count:
+              type: integer
 
     SearchResult:
       type: object

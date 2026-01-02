@@ -33,8 +33,10 @@ type UseCases struct {
 	// Library browsing use cases
 	ListMoviesUseCase         *library.ListMoviesUseCase
 	GetMovieUseCase           *library.GetMovieUseCase
+	GetMovieCreditsUseCase    *library.GetMovieCreditsUseCase
 	ListSeriesUseCase         *library.ListSeriesUseCase
 	GetSeriesUseCase          *library.GetSeriesUseCase
+	GetSeriesCreditsUseCase   *library.GetSeriesCreditsUseCase
 	ListRecentUseCase         *library.ListRecentUseCase
 	ListUnmatchedUseCase      *library.ListUnmatchedUseCase
 	GetSimilarMoviesUseCase   *library.GetSimilarMoviesUseCase
@@ -152,6 +154,8 @@ func initUseCases(cfg *config.Config, adapters *Adapters) *UseCases {
 	var getSimilarMoviesUseCase *library.GetSimilarMoviesUseCase
 	var getSimilarSeriesUseCase *library.GetSimilarSeriesUseCase
 	var getMovieCollectionUseCase *library.GetMovieCollectionUseCase
+	var getMovieCreditsUseCase *library.GetMovieCreditsUseCase
+	var getSeriesCreditsUseCase *library.GetSeriesCreditsUseCase
 
 	if cfg.TMDB.Enabled {
 		getSimilarMoviesUseCase = library.NewGetSimilarMoviesUseCase(
@@ -177,11 +181,23 @@ func initUseCases(cfg *config.Config, adapters *Adapters) *UseCases {
 			adapters.TMDBClient,
 			cfg.TMDB,
 		)
+
+		getMovieCreditsUseCase = library.NewGetMovieCreditsUseCase(
+			adapters.MovieMetadataRepository,
+			adapters.MovieCreditRepository,
+			adapters.TMDBClient,
+		)
+
+		getSeriesCreditsUseCase = library.NewGetSeriesCreditsUseCase(
+			adapters.SeriesMetadataRepository,
+			adapters.SeriesCreditRepository,
+			adapters.TMDBClient,
+		)
 	}
 
 	return &UseCases{
 		EnqueueJobUseCase:          job.NewEnqueueJobUseCase(cfg.Job, adapters.JobRepository, ports.RealClock{}),
-		ProcessNextJobUseCase:      job.NewProcessNextJobUseCase(adapters.JobRepository, adapters.HandlerRegistry, adapters.BackoffStrategy, ports.RealClock{}),
+		ProcessNextJobUseCase:      job.NewProcessNextJobUseCase(adapters.JobRepository, adapters.HandlerRegistry, adapters.BackoffStrategy, ports.RealClock{}, adapters.JobNotifier),
 		RecoverStuckJobsUseCase:    job.NewRecoverStuckJobsUseCase(cfg.Job, adapters.JobRepository, ports.RealClock{}),
 		SchedulerTickUseCase:       job.NewSchedulerTickUseCase(cfg.Job, adapters.ScheduleRepository, adapters.CronParser, ports.RealClock{}),
 		UpsertScheduleUseCase:      job.NewUpsertScheduleUseCase(cfg.Job, adapters.ScheduleRepository, adapters.CronParser, ports.RealClock{}),
@@ -211,8 +227,10 @@ func initUseCases(cfg *config.Config, adapters *Adapters) *UseCases {
 		// Library browsing use cases
 		ListMoviesUseCase:         library.NewListMoviesUseCase(adapters.LibraryRepository),
 		GetMovieUseCase:           library.NewGetMovieUseCase(adapters.LibraryRepository, getSimilarMoviesUseCase, getMovieCollectionUseCase, cfg.TMDB.MaxCastMembers),
+		GetMovieCreditsUseCase:    getMovieCreditsUseCase,
 		ListSeriesUseCase:         library.NewListSeriesUseCase(adapters.LibraryRepository),
 		GetSeriesUseCase:          library.NewGetSeriesUseCase(adapters.LibraryRepository, getSimilarSeriesUseCase),
+		GetSeriesCreditsUseCase:   getSeriesCreditsUseCase,
 		ListRecentUseCase:         library.NewListRecentUseCase(adapters.LibraryRepository, cfg.Library),
 		ListUnmatchedUseCase:      library.NewListUnmatchedUseCase(adapters.LibraryRepository),
 		GetSimilarMoviesUseCase:   getSimilarMoviesUseCase,

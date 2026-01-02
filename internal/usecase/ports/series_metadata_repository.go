@@ -50,4 +50,13 @@ type SeriesMetadataRepository interface {
 
 	// ListIDsWithoutTranslation returns series metadata IDs that don't have a translation for the given language
 	ListIDsWithoutTranslation(ctx context.Context, language string) ([]SeriesMetadataForTranslation, error)
+
+	// SetFullCreditsFetched marks that full credits have been fetched from TMDB for this series
+	SetFullCreditsFetched(ctx context.Context, seriesMetadataID int64) error
+
+	// HasFullCreditsFetched checks if full credits have been fetched from TMDB for this series
+	HasFullCreditsFetched(ctx context.Context, seriesMetadataID int64) (bool, error)
+
+	// GetTMDBIDByID retrieves the TMDB ID for a series metadata record
+	GetTMDBIDByID(ctx context.Context, seriesMetadataID int64) (int, error)
 }

@@ -39,6 +39,11 @@ export const routes: Routes = [
     loadComponent: () => import('./features/library/series-detail.component').then(m => m.SeriesDetailComponent)
   },
   {
+    path: 'series/:id/cast',
+    canActivate: [authGuard, passwordChangeGuard],
+    loadComponent: () => import('./features/library/series-cast.component').then(m => m.SeriesCastComponent)
+  },
+  {
     path: 'play/:id',
     canActivate: [authGuard, passwordChangeGuard],
     loadComponent: () => import('./features/player/player.component').then(m => m.PlayerComponent)

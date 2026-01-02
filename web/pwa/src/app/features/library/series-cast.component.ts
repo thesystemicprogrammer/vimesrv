@@ -1,7 +1,6 @@
 import { Component, inject, OnInit, signal, computed } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { ApiService, MovieDetail, CreditPerson, MovieCreditsResponse } from '../../core/services/api.service';
-import { forkJoin } from 'rxjs';
+import { ApiService, SeriesDetail, SeriesCreditPerson } from '../../core/services/api.service';
 
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
 
@@ -22,11 +21,21 @@ const DEPARTMENT_ORDER = [
 
 interface CrewDepartment {
   name: string;
-  members: CreditPerson[];
+  members: SeriesCreditPerson[];
+}
+
+interface ParsedRole {
+  character: string;
+  episode_count: number;
+}
+
+interface ParsedJob {
+  job: string;
+  episode_count: number;
 }
 
 @Component({
-  selector: 'app-movie-cast',
+  selector: 'app-series-cast',
   standalone: true,
   template: `
     @if (loading()) {
@@ -45,7 +54,7 @@ interface CrewDepartment {
           &larr; Back
         </button>
       </div>
-    } @else if (movie()) {
+    } @else if (series()) {
       <!-- Backdrop hero section -->
       <div class="relative min-h-[30vh]">
         @if (backdropUrl()) {
@@ -73,7 +82,7 @@ interface CrewDepartment {
         <div class="absolute bottom-0 left-0 right-0 p-4 md:p-8">
           <div class="container mx-auto">
             <h1 class="text-2xl md:text-3xl font-bold text-white">Cast & Crew</h1>
-            <p class="text-slate-300">{{ movie()!.title }} ({{ movie()!.year }})</p>
+            <p class="text-slate-300">{{ series()!.name }} ({{ series()!.year }})</p>
           </div>
         </div>
       </div>
@@ -84,7 +93,7 @@ interface CrewDepartment {
         @if (cast().length > 0) {
           <section class="mb-10">
             <h2 class="text-xl font-semibold text-white mb-4 border-b border-slate-700 pb-2">
-              Cast ({{ cast().length }})
+              Series Cast ({{ cast().length }})
             </h2>
             <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
               @for (person of cast(); track person.id) {
@@ -111,9 +120,10 @@ interface CrewDepartment {
                   </div>
                   <div class="p-3">
                     <p class="font-medium text-white text-sm group-hover:text-blue-400 transition">{{ person.name }}</p>
-                    @if (person.character) {
-                      <p class="text-slate-400 text-xs truncate">{{ person.character }}</p>
-                    }
+                    <p class="text-slate-400 text-xs truncate">{{ parseRolesDisplay(person.roles) }}</p>
+                    <p class="text-slate-500 text-xs mt-1">
+                      {{ person.total_episode_count }} {{ person.total_episode_count === 1 ? 'episode' : 'episodes' }}
+                    </p>
                   </div>
                 </a>
               }
@@ -152,9 +162,10 @@ interface CrewDepartment {
                   </div>
                   <div class="p-3">
                     <p class="font-medium text-white text-sm group-hover:text-blue-400 transition">{{ person.name }}</p>
-                    @if (person.job) {
-                      <p class="text-slate-400 text-xs truncate">{{ person.job }}</p>
-                    }
+                    <p class="text-slate-400 text-xs truncate">{{ parseJobsDisplay(person.jobs) }}</p>
+                    <p class="text-slate-500 text-xs mt-1">
+                      {{ person.total_episode_count }} {{ person.total_episode_count === 1 ? 'episode' : 'episodes' }}
+                    </p>
                   </div>
                 </a>
               }
@@ -165,14 +176,14 @@ interface CrewDepartment {
     }
   `
 })
-export class MovieCastComponent implements OnInit {
+export class SeriesCastComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly api = inject(ApiService);
 
-  movie = signal<MovieDetail | null>(null);
-  cast = signal<CreditPerson[]>([]);
-  crew = signal<CreditPerson[]>([]);
+  series = signal<SeriesDetail | null>(null);
+  cast = signal<SeriesCreditPerson[]>([]);
+  crew = signal<SeriesCreditPerson[]>([]);
   loading = signal(true);
   error = signal<string | null>(null);
   backdropUrl = signal<string | null>(null);
@@ -182,11 +193,11 @@ export class MovieCastComponent implements OnInit {
     const crewList = this.crew();
     if (crewList.length === 0) return [];
 
-    // Group by department (using job to infer department, or 'Crew' as fallback)
-    const deptMap = new Map<string, CreditPerson[]>();
+    // Group by department
+    const deptMap = new Map<string, SeriesCreditPerson[]>();
 
     for (const person of crewList) {
-      const dept = this.inferDepartment(person.job || '');
+      const dept = person.department || this.inferDepartment(this.parseJobsDisplay(person.jobs));
       if (!deptMap.has(dept)) {
         deptMap.set(dept, []);
       }
@@ -214,59 +225,52 @@ export class MovieCastComponent implements OnInit {
   });
 
   ngOnInit(): void {
-    const mediaId = this.route.snapshot.paramMap.get('id');
-    if (!mediaId) {
-      this.error.set('Invalid movie ID');
+    const seriesIdParam = this.route.snapshot.paramMap.get('id');
+    if (!seriesIdParam || isNaN(Number(seriesIdParam))) {
+      this.error.set('Invalid series ID');
       this.loading.set(false);
       return;
     }
 
-    this.loadMovieAndCredits(mediaId);
+    this.loadSeriesAndCredits(Number(seriesIdParam));
   }
 
-  loadMovieAndCredits(mediaId: string): void {
+  loadSeriesAndCredits(seriesId: number): void {
     this.loading.set(true);
     this.error.set(null);
 
-    // First get the movie to get the movie_metadata_id
-    this.api.getMovie(mediaId).subscribe({
+    // First get the series details
+    this.api.getSeriesDetail(seriesId).subscribe({
       next: (response) => {
-        const movieData = response.data;
-        this.movie.set(movieData);
-        if (movieData.backdrop_path) {
-          this.backdropUrl.set(`${TMDB_IMAGE_BASE}/w1280${movieData.backdrop_path}`);
+        const seriesData = response.data;
+        this.series.set(seriesData);
+        if (seriesData.backdrop_path) {
+          this.backdropUrl.set(`${TMDB_IMAGE_BASE}/w1280${seriesData.backdrop_path}`);
         }
 
-        // If we have a movie_metadata_id, fetch full credits
-        if (movieData.movie_metadata_id) {
-          this.api.getMovieCredits(movieData.movie_metadata_id).subscribe({
-            next: (creditsResponse) => {
-              this.cast.set(creditsResponse.data.cast || []);
-              this.crew.set(creditsResponse.data.crew || []);
-              this.loading.set(false);
-            },
-            error: (err) => {
-              // Fall back to inline credits from movie detail
-              this.cast.set(movieData.cast || []);
-              this.crew.set(movieData.crew || []);
-              this.loading.set(false);
-            }
-          });
-        } else {
-          // No metadata, use inline credits
-          this.cast.set(movieData.cast || []);
-          this.crew.set(movieData.crew || []);
-          this.loading.set(false);
-        }
+        // Then fetch full credits
+        this.api.getSeriesCredits(seriesId).subscribe({
+          next: (creditsResponse) => {
+            this.cast.set(creditsResponse.data.cast || []);
+            this.crew.set(creditsResponse.data.crew || []);
+            this.loading.set(false);
+          },
+          error: (err) => {
+            // Still show the page, just without credits
+            this.cast.set([]);
+            this.crew.set([]);
+            this.loading.set(false);
+          }
+        });
       },
       error: (err) => {
-        this.error.set(err.error?.error?.message || 'Failed to load movie');
+        this.error.set(err.error?.error?.message || 'Failed to load series');
         this.loading.set(false);
       }
     });
   }
 
-  // Infer department from job title
+  // Infer department from job title (fallback when department not provided)
   inferDepartment(job: string): string {
     const jobLower = job.toLowerCase();
 
@@ -305,9 +309,9 @@ export class MovieCastComponent implements OnInit {
   }
 
   goBack(): void {
-    const m = this.movie();
-    if (m) {
-      this.router.navigate(['/movie', m.media_id]);
+    const s = this.series();
+    if (s) {
+      this.router.navigate(['/series', s.series_metadata_id]);
     } else {
       this.router.navigate(['/library']);
     }
@@ -319,5 +323,35 @@ export class MovieCastComponent implements OnInit {
 
   getTmdbPersonUrl(tmdbPersonId: number): string {
     return `https://www.themoviedb.org/person/${tmdbPersonId}`;
+  }
+
+  parseRolesDisplay(rolesJson: string | undefined): string {
+    if (!rolesJson) return '';
+    try {
+      const roles = JSON.parse(rolesJson) as ParsedRole[];
+      if (roles.length === 0) return '';
+      // Show first character, or combine if multiple
+      if (roles.length === 1) {
+        return roles[0].character || '';
+      }
+      return roles.map(r => r.character).filter(c => c).join(' / ');
+    } catch {
+      return '';
+    }
+  }
+
+  parseJobsDisplay(jobsJson: string | undefined): string {
+    if (!jobsJson) return '';
+    try {
+      const jobs = JSON.parse(jobsJson) as ParsedJob[];
+      if (jobs.length === 0) return '';
+      // Show first job, or combine if multiple
+      if (jobs.length === 1) {
+        return jobs[0].job || '';
+      }
+      return jobs.map(j => j.job).filter(j => j).join(' / ');
+    } catch {
+      return '';
+    }
   }
 }

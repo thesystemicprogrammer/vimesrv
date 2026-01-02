@@ -16,6 +16,7 @@ type Config struct {
 	Logging     LoggingConfig     `mapstructure:"logging"`
 	TMDB        TMDBConfig        `mapstructure:"tmdb"`
 	Library     LibraryConfig     `mapstructure:"library"`
+	WebSocket   WebSocketConfig   `mapstructure:"websocket"`
 }
 
 // AuthConfig holds authentication configuration
@@ -107,6 +108,15 @@ type TMDBConfig struct {
 	CacheTTLHours       int    `mapstructure:"cache_ttl_hours"`
 }
 
+// WebSocketConfig holds WebSocket server configuration
+type WebSocketConfig struct {
+	Enabled             bool `mapstructure:"enabled"`
+	PingIntervalSecs    int  `mapstructure:"ping_interval_seconds"`
+	PongTimeoutSecs     int  `mapstructure:"pong_timeout_seconds"`
+	WriteTimeoutSecs    int  `mapstructure:"write_timeout_seconds"`
+	MaxMessageSizeBytes int  `mapstructure:"max_message_size_bytes"`
+}
+
 type LibraryConfig struct {
 	RecentlyAddedCount int `mapstructure:"recently_added_count"`
 }
@@ -150,6 +160,12 @@ func (c *Config) Validate() error {
 
 	if err := c.Library.Validate(); err != nil {
 		return fmt.Errorf("library config: %w", err)
+	}
+
+	if c.WebSocket.Enabled {
+		if err := c.WebSocket.Validate(); err != nil {
+			return fmt.Errorf("websocket config: %w", err)
+		}
 	}
 
 	return nil
@@ -461,6 +477,26 @@ func (t *TMDBConfig) Validate() error {
 func (l *LibraryConfig) Validate() error {
 	if l.RecentlyAddedCount < 1 || l.RecentlyAddedCount > 100 {
 		return fmt.Errorf("recently_added_count must be between 1 and 100, got %d", l.RecentlyAddedCount)
+	}
+
+	return nil
+}
+
+func (w *WebSocketConfig) Validate() error {
+	if w.PingIntervalSecs < 10 || w.PingIntervalSecs > 120 {
+		return fmt.Errorf("ping_interval_seconds must be between 10 and 120, got %d", w.PingIntervalSecs)
+	}
+
+	if w.PongTimeoutSecs < 5 || w.PongTimeoutSecs > 60 {
+		return fmt.Errorf("pong_timeout_seconds must be between 5 and 60, got %d", w.PongTimeoutSecs)
+	}
+
+	if w.WriteTimeoutSecs < 5 || w.WriteTimeoutSecs > 60 {
+		return fmt.Errorf("write_timeout_seconds must be between 5 and 60, got %d", w.WriteTimeoutSecs)
+	}
+
+	if w.MaxMessageSizeBytes < 256 || w.MaxMessageSizeBytes > 65536 {
+		return fmt.Errorf("max_message_size_bytes must be between 256 and 65536, got %d", w.MaxMessageSizeBytes)
 	}
 
 	return nil

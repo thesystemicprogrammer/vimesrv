@@ -437,5 +437,61 @@ func seriesLanguageParams(lang string) (exact string, base string) {
 	return lang, lang
 }
 
+// SetFullCreditsFetched marks that full credits have been fetched from TMDB for this series
+func (r *SQLiteSeriesMetadataRepository) SetFullCreditsFetched(ctx context.Context, seriesMetadataID int64) error {
+	result, err := r.db.ExecContext(ctx,
+		"UPDATE series_metadata SET full_credits_fetched = 1 WHERE id = ?",
+		seriesMetadataID,
+	)
+	if err != nil {
+		return fmt.Errorf("set full credits fetched: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return shared.ErrNotFound
+	}
+
+	return nil
+}
+
+// HasFullCreditsFetched checks if full credits have been fetched from TMDB for this series
+func (r *SQLiteSeriesMetadataRepository) HasFullCreditsFetched(ctx context.Context, seriesMetadataID int64) (bool, error) {
+	var fetched int
+	err := r.db.QueryRowContext(ctx,
+		"SELECT full_credits_fetched FROM series_metadata WHERE id = ?",
+		seriesMetadataID,
+	).Scan(&fetched)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, shared.ErrNotFound
+		}
+		return false, fmt.Errorf("check full credits fetched: %w", err)
+	}
+
+	return fetched == 1, nil
+}
+
+// GetTMDBIDByID retrieves the TMDB ID for a series metadata record
+func (r *SQLiteSeriesMetadataRepository) GetTMDBIDByID(ctx context.Context, seriesMetadataID int64) (int, error) {
+	var tmdbID int
+	err := r.db.QueryRowContext(ctx,
+		"SELECT tmdb_id FROM series_metadata WHERE id = ?",
+		seriesMetadataID,
+	).Scan(&tmdbID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, shared.ErrNotFound
+		}
+		return 0, fmt.Errorf("get tmdb id: %w", err)
+	}
+
+	return tmdbID, nil
+}
+
 // Ensure SQLiteSeriesMetadataRepository implements SeriesMetadataRepository
 var _ ports.SeriesMetadataRepository = (*SQLiteSeriesMetadataRepository)(nil)

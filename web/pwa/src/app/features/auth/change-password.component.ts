@@ -1,22 +1,23 @@
 import { Component, inject, signal, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 
 @Component({
   selector: 'app-change-password',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, TranslateModule],
   template: `
     <div class="min-h-screen flex items-center justify-center bg-slate-900 px-4">
       <div class="max-w-md w-full space-y-8">
         <div class="text-center">
-          <h1 class="text-3xl font-bold text-white">Change Password</h1>
+          <h1 class="text-3xl font-bold text-white">{{ 'auth.changePassword' | translate }}</h1>
           @if (isForced()) {
-            <p class="mt-2 text-yellow-400">You must change your password before continuing</p>
+            <p class="mt-2 text-yellow-400">{{ 'auth.mustChangePassword' | translate }}</p>
           } @else {
-            <p class="mt-2 text-slate-400">Update your password</p>
+            <p class="mt-2 text-slate-400">{{ 'auth.updatePassword' | translate }}</p>
           }
         </div>
 
@@ -35,7 +36,7 @@ import { AuthService } from '../../core/services/auth.service';
 
           <div class="space-y-4">
             <div>
-              <label for="currentPassword" class="block text-sm font-medium text-slate-300">Current Password</label>
+              <label for="currentPassword" class="block text-sm font-medium text-slate-300">{{ 'auth.currentPassword' | translate }}</label>
               <input
                 id="currentPassword"
                 name="currentPassword"
@@ -43,12 +44,12 @@ import { AuthService } from '../../core/services/auth.service';
                 [(ngModel)]="currentPassword"
                 required
                 class="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Enter your current password"
+                [placeholder]="'auth.enterCurrentPassword' | translate"
               />
             </div>
 
             <div>
-              <label for="newPassword" class="block text-sm font-medium text-slate-300">New Password</label>
+              <label for="newPassword" class="block text-sm font-medium text-slate-300">{{ 'auth.newPassword' | translate }}</label>
               <input
                 id="newPassword"
                 name="newPassword"
@@ -57,12 +58,12 @@ import { AuthService } from '../../core/services/auth.service';
                 required
                 minlength="8"
                 class="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Enter your new password (min 8 characters)"
+                [placeholder]="'auth.enterNewPassword' | translate"
               />
             </div>
 
             <div>
-              <label for="confirmPassword" class="block text-sm font-medium text-slate-300">Confirm New Password</label>
+              <label for="confirmPassword" class="block text-sm font-medium text-slate-300">{{ 'auth.confirmPassword' | translate }}</label>
               <input
                 id="confirmPassword"
                 name="confirmPassword"
@@ -70,7 +71,7 @@ import { AuthService } from '../../core/services/auth.service';
                 [(ngModel)]="confirmPassword"
                 required
                 class="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Confirm your new password"
+                [placeholder]="'auth.confirmNewPassword' | translate"
               />
             </div>
           </div>
@@ -82,7 +83,7 @@ import { AuthService } from '../../core/services/auth.service';
                 (click)="cancel()"
                 class="flex-1 py-2 px-4 border border-slate-600 rounded-md shadow-sm text-sm font-medium text-slate-300 bg-transparent hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500"
               >
-                Cancel
+                {{ 'common.cancel' | translate }}
               </button>
             }
             <button
@@ -95,9 +96,9 @@ import { AuthService } from '../../core/services/auth.service';
                   <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                   <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                Changing...
+                {{ 'auth.changingPassword' | translate }}
               } @else {
-                Change Password
+                {{ 'auth.changePassword' | translate }}
               }
             </button>
           </div>
@@ -110,6 +111,7 @@ export class ChangePasswordComponent implements OnInit {
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly translate = inject(TranslateService);
 
   currentPassword = '';
   newPassword = '';
@@ -130,22 +132,22 @@ export class ChangePasswordComponent implements OnInit {
 
     // Validate inputs
     if (!this.currentPassword || !this.newPassword || !this.confirmPassword) {
-      this.error.set('Please fill in all fields');
+      this.error.set(this.translate.instant('auth.fillAllFields'));
       return;
     }
 
     if (this.newPassword.length < 8) {
-      this.error.set('New password must be at least 8 characters');
+      this.error.set(this.translate.instant('auth.passwordMinLength'));
       return;
     }
 
     if (this.newPassword !== this.confirmPassword) {
-      this.error.set('New passwords do not match');
+      this.error.set(this.translate.instant('auth.passwordMismatch'));
       return;
     }
 
     if (this.currentPassword === this.newPassword) {
-      this.error.set('New password must be different from current password');
+      this.error.set(this.translate.instant('auth.passwordMustBeDifferent'));
       return;
     }
 
@@ -157,7 +159,7 @@ export class ChangePasswordComponent implements OnInit {
     }).subscribe({
       next: () => {
         this.loading.set(false);
-        this.success.set('Password changed successfully!');
+        this.success.set(this.translate.instant('auth.passwordChanged'));
         
         // Clear the must change password flag locally
         this.auth.clearMustChangePassword();
@@ -169,7 +171,7 @@ export class ChangePasswordComponent implements OnInit {
       },
       error: (err) => {
         this.loading.set(false);
-        this.error.set(err.error?.error?.message || 'Failed to change password');
+        this.error.set(err.error?.error?.message || this.translate.instant('common.error'));
       }
     });
   }

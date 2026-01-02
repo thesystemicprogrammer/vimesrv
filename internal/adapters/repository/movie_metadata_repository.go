@@ -465,5 +465,61 @@ func movieLanguageParams(lang string) (exact string, base string) {
 	return lang, lang
 }
 
+// SetFullCreditsFetched marks that full credits have been fetched from TMDB for this movie
+func (r *SQLiteMovieMetadataRepository) SetFullCreditsFetched(ctx context.Context, movieMetadataID int64) error {
+	result, err := r.db.ExecContext(ctx,
+		"UPDATE movie_metadata SET full_credits_fetched = 1 WHERE id = ?",
+		movieMetadataID,
+	)
+	if err != nil {
+		return fmt.Errorf("set full credits fetched: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return shared.ErrNotFound
+	}
+
+	return nil
+}
+
+// HasFullCreditsFetched checks if full credits have been fetched from TMDB for this movie
+func (r *SQLiteMovieMetadataRepository) HasFullCreditsFetched(ctx context.Context, movieMetadataID int64) (bool, error) {
+	var fetched int
+	err := r.db.QueryRowContext(ctx,
+		"SELECT full_credits_fetched FROM movie_metadata WHERE id = ?",
+		movieMetadataID,
+	).Scan(&fetched)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, shared.ErrNotFound
+		}
+		return false, fmt.Errorf("check full credits fetched: %w", err)
+	}
+
+	return fetched == 1, nil
+}
+
+// GetTMDBIDByID retrieves the TMDB ID for a movie metadata record
+func (r *SQLiteMovieMetadataRepository) GetTMDBIDByID(ctx context.Context, movieMetadataID int64) (int, error) {
+	var tmdbID int
+	err := r.db.QueryRowContext(ctx,
+		"SELECT tmdb_id FROM movie_metadata WHERE id = ?",
+		movieMetadataID,
+	).Scan(&tmdbID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, shared.ErrNotFound
+		}
+		return 0, fmt.Errorf("get tmdb id: %w", err)
+	}
+
+	return tmdbID, nil
+}
+
 // Ensure SQLiteMovieMetadataRepository implements MovieMetadataRepository
 var _ ports.MovieMetadataRepository = (*SQLiteMovieMetadataRepository)(nil)

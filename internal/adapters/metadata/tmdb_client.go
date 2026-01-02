@@ -400,6 +400,21 @@ func (c *TMDBHTTPClient) GetMovieCredits(ctx context.Context, movieID int) (*por
 	return &credits, nil
 }
 
+// GetSeriesAggregateCredits retrieves aggregate cast and crew for a TV series
+func (c *TMDBHTTPClient) GetSeriesAggregateCredits(ctx context.Context, seriesID int) (*ports.TMDBSeriesAggregateCredits, error) {
+	body, err := c.doRequest(ctx, fmt.Sprintf("/tv/%d/aggregate_credits", seriesID), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var credits ports.TMDBSeriesAggregateCredits
+	if err := json.Unmarshal(body, &credits); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+
+	return &credits, nil
+}
+
 // GetMovieReleaseDates retrieves release dates and certifications for a movie
 func (c *TMDBHTTPClient) GetMovieReleaseDates(ctx context.Context, movieID int) (*ports.TMDBReleaseDatesResponse, error) {
 	body, err := c.doRequest(ctx, fmt.Sprintf("/movie/%d/release_dates", movieID), nil)

@@ -109,6 +109,7 @@ func (r *SQLiteCollectionRepository) GetCollectionTranslation(ctx context.Contex
 		&t.Language,
 		&name,
 		&overview,
+		&t.FetchedAt,
 	)
 
 	if err != nil {

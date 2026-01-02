@@ -118,6 +118,8 @@ export interface MovieDetail extends MovieSummary {
   crew?: CreditPerson[];
   similar_movies?: SimilarMovieItem[];
   collection?: MovieCollectionInfo;
+  audio_languages?: string[];
+  subtitle_languages?: string[];
 }
 
 export interface SeriesSummary {
@@ -147,6 +149,8 @@ export interface EpisodeSummary {
   air_date?: string;
   still_path?: string;
   vote_average: number;
+  audio_languages?: string[];
+  subtitle_languages?: string[];
 }
 
 export interface SeasonSummary {
@@ -209,6 +213,28 @@ export interface SeriesDetail extends SeriesSummary {
   overview?: string;
   seasons?: SeasonSummary[];
   similar_series?: SimilarSeriesItem[];
+}
+
+// Credits response types for full cast/crew pages
+export interface MovieCreditsResponse {
+  cast: CreditPerson[];
+  crew: CreditPerson[];
+}
+
+export interface SeriesCreditPerson {
+  id: number;
+  tmdb_person_id: number;
+  name: string;
+  roles?: string;  // JSON string of roles for cast
+  jobs?: string;   // JSON string of jobs for crew
+  department?: string;
+  profile_path?: string;
+  total_episode_count: number;
+}
+
+export interface SeriesCreditsResponse {
+  cast: SeriesCreditPerson[];
+  crew: SeriesCreditPerson[];
 }
 
 export interface UnmatchedMediaSummary {
@@ -293,6 +319,7 @@ export interface SearchRequest {
   year?: number;
   media_type?: 'movie' | 'tv';
   max_results?: number;
+  language?: string;
 }
 
 export interface LinkSearchRequest {
@@ -300,6 +327,13 @@ export interface LinkSearchRequest {
   media_type: 'movie' | 'tv';
   season_number?: number;
   episode_number?: number;
+}
+
+export interface SearchMetadataResponse {
+  media_id: string;
+  query: string;
+  results: SearchResult[];
+  count: number;
 }
 
 // User management types
@@ -421,6 +455,12 @@ export class ApiService {
     );
   }
 
+  getMovieCredits(movieMetadataId: number): Observable<ApiResponse<MovieCreditsResponse>> {
+    return this.http.get<ApiResponse<MovieCreditsResponse>>(
+      `${this.baseUrl}/library/movies/${movieMetadataId}/credits`
+    );
+  }
+
   listSeries(includeEmpty = false): Observable<ApiResponse<SeriesListResponse>> {
     const lang = this.auth.language();
     const params = new HttpParams()
@@ -440,6 +480,12 @@ export class ApiService {
     return this.http.get<ApiResponse<SeriesDetail>>(
       `${this.baseUrl}/library/series/${seriesId}`,
       { params }
+    );
+  }
+
+  getSeriesCredits(seriesMetadataId: number): Observable<ApiResponse<SeriesCreditsResponse>> {
+    return this.http.get<ApiResponse<SeriesCreditsResponse>>(
+      `${this.baseUrl}/library/series/${seriesMetadataId}/credits`
     );
   }
 
@@ -474,8 +520,8 @@ export class ApiService {
     );
   }
 
-  searchMetadata(mediaId: string, request: SearchRequest): Observable<ApiResponse<SearchResult[]>> {
-    return this.http.post<ApiResponse<SearchResult[]>>(
+  searchMetadata(mediaId: string, request: SearchRequest): Observable<ApiResponse<SearchMetadataResponse>> {
+    return this.http.post<ApiResponse<SearchMetadataResponse>>(
       `${this.baseUrl}/media/${mediaId}/search`,
       request
     );

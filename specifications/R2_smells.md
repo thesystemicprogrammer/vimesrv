@@ -15,6 +15,7 @@ Whenever I discover something odd or something I don't understand, I write it do
 - Translation of fixed front end texts: We can switch language but only for TMDB metadata. But we need to translate the whole frontend
 - Translation fetching in TMDB: Is it consistent or could it be improved simpliyfied?
 - Translation fetching in TMDB: Is it consistent or could it be improved simpliyfied?
+- Not all texts are translated (buttons, director, overview)
 -
 
 # Tasks

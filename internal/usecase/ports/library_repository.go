@@ -114,6 +114,10 @@ type MovieDetail struct {
 
 	// Collection info (if movie belongs to a collection)
 	Collection *MovieCollectionInfo `json:"collection,omitempty"`
+
+	// Audio and subtitle languages
+	AudioLanguages    []string `json:"audio_languages,omitempty"`
+	SubtitleLanguages []string `json:"subtitle_languages,omitempty"`
 }
 
 // SeriesSummary represents a series with summary info for library display
@@ -148,6 +152,10 @@ type EpisodeSummary struct {
 	AirDate           string  `json:"air_date,omitempty"`
 	StillPath         string  `json:"still_path,omitempty"`
 	VoteAverage       float64 `json:"vote_average"`
+
+	// Audio and subtitle languages
+	AudioLanguages    []string `json:"audio_languages,omitempty"`
+	SubtitleLanguages []string `json:"subtitle_languages,omitempty"`
 }
 
 // SeasonSummary represents a season with its episodes

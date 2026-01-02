@@ -35,7 +35,7 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
         <!-- Backdrop image -->
         @if (backdropUrl()) {
           <div
-            class="absolute inset-0 bg-cover bg-center"
+            class="absolute inset-0 bg-cover bg-top"
             [style.background-image]="'url(' + backdropUrl() + ')'"
           ></div>
         }
@@ -59,7 +59,7 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
         <div class="absolute bottom-0 left-0 right-0 p-4 md:p-8">
           <div class="container mx-auto flex gap-6 items-end">
             <!-- Poster -->
-            <div class="hidden md:block flex-shrink-0 w-48 lg:w-56">
+            <div class="hidden md:block flex-shrink-0 w-56 lg:w-64 xl:w-72">
               <div class="aspect-[2/3] rounded-lg overflow-hidden shadow-2xl bg-slate-800">
                 @if (posterUrl()) {
                   <img
@@ -190,7 +190,12 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
             </h2>
             <div class="flex flex-wrap gap-4">
               @for (director of movie()!.directors; track director.id) {
-                <div class="flex items-center gap-3">
+                <a
+                  [href]="getTmdbPersonUrl(director.tmdb_person_id)"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="flex items-center gap-3 hover:bg-slate-800 rounded-lg p-2 -m-2 transition"
+                >
                   <div class="w-12 h-12 rounded-full bg-slate-700 overflow-hidden flex-shrink-0">
                     @if (director.profile_path) {
                       <img
@@ -206,8 +211,8 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
                       </div>
                     }
                   </div>
-                  <span class="text-slate-300">{{ director.name }}</span>
-                </div>
+                  <span class="text-slate-300 hover:text-white transition">{{ director.name }}</span>
+                </a>
               }
             </div>
           </section>
@@ -227,8 +232,13 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
             </div>
             <div class="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-transparent">
               @for (person of movie()!.cast; track person.id) {
-                <div class="flex-shrink-0 w-28">
-                  <div class="aspect-[2/3] rounded-lg overflow-hidden bg-slate-700">
+                <a
+                  [href]="getTmdbPersonUrl(person.tmdb_person_id)"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="flex-shrink-0 w-28 group"
+                >
+                  <div class="aspect-[2/3] rounded-lg overflow-hidden bg-slate-700 group-hover:ring-2 group-hover:ring-blue-500 transition">
                     @if (person.profile_path) {
                       <img
                         [src]="getProfileUrl(person.profile_path)"
@@ -243,11 +253,11 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
                       </div>
                     }
                   </div>
-                  <p class="font-medium text-white text-sm mt-2 truncate">{{ person.name }}</p>
+                  <p class="font-medium text-white text-sm mt-2 truncate group-hover:text-blue-400 transition">{{ person.name }}</p>
                   @if (person.character) {
                     <p class="text-slate-400 text-xs truncate">{{ person.character }}</p>
                   }
-                </div>
+                </a>
               }
             </div>
           </section>
@@ -259,7 +269,12 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
             <h2 class="text-xl font-semibold text-white mb-3">Crew</h2>
             <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
               @for (person of movie()!.crew; track person.id) {
-                <div class="flex items-center gap-3 bg-slate-800 rounded-lg p-3">
+                <a
+                  [href]="getTmdbPersonUrl(person.tmdb_person_id)"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="flex items-center gap-3 bg-slate-800 rounded-lg p-3 hover:bg-slate-700 transition group"
+                >
                   <div class="w-10 h-10 rounded-full bg-slate-700 overflow-hidden flex-shrink-0">
                     @if (person.profile_path) {
                       <img
@@ -276,12 +291,12 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
                     }
                   </div>
                   <div class="min-w-0">
-                    <p class="font-medium text-white text-sm truncate">{{ person.name }}</p>
+                    <p class="font-medium text-white text-sm truncate group-hover:text-blue-400 transition">{{ person.name }}</p>
                     @if (person.job) {
                       <p class="text-slate-400 text-xs truncate">{{ person.job }}</p>
                     }
                   </div>
-                </div>
+                </a>
               }
             </div>
           </section>
@@ -662,6 +677,10 @@ export class MovieDetailComponent implements OnInit, OnDestroy {
 
   getTmdbMovieUrl(tmdbId: number): string {
     return `https://www.themoviedb.org/movie/${tmdbId}?language=${this.auth.language()}`;
+  }
+
+  getTmdbPersonUrl(tmdbPersonId: number): string {
+    return `https://www.themoviedb.org/person/${tmdbPersonId}`;
   }
 
   formatEnrichmentStatus(status: string): string {

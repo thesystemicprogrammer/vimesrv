@@ -2,6 +2,7 @@ import { Component, inject, OnInit, OnDestroy, signal, computed, ViewChild } fro
 import { Router } from '@angular/router';
 import { toObservable } from '@angular/core/rxjs-interop';
 import { forkJoin, Subscription, skip } from 'rxjs';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import {
   ApiService,
   MovieSummary,
@@ -19,21 +20,21 @@ type FilterTab = 'all' | 'movies' | 'series' | 'unmatched';
 @Component({
   selector: 'app-library',
   standalone: true,
-  imports: [MediaCardComponent, MediaRowComponent, MetadataMatchModalComponent],
+  imports: [MediaCardComponent, MediaRowComponent, MetadataMatchModalComponent, TranslateModule],
   template: `
     <div class="container mx-auto px-4 py-8">
       <!-- Header -->
       <div class="flex justify-between items-center mb-6">
-        <h1 class="text-3xl font-bold text-white">Library</h1>
+        <h1 class="text-3xl font-bold text-white">{{ 'library.title' | translate }}</h1>
         <button
           (click)="scanLibrary()"
           [disabled]="scanning()"
           class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition disabled:opacity-50"
         >
           @if (scanning()) {
-            Scanning...
+            {{ 'library.scanning' | translate }}
           } @else {
-            Scan Library
+            {{ 'library.scanLibrary' | translate }}
           }
         </button>
       </div>
@@ -45,7 +46,7 @@ type FilterTab = 'all' | 'movies' | 'series' | 'unmatched';
             (click)="setActiveTab(tab.id)"
             [class]="getTabClass(tab.id)"
           >
-            {{ tab.label }}
+            {{ tab.labelKey | translate }}
             @if (tab.count() !== null) {
               <span class="ml-1.5 px-1.5 py-0.5 text-xs rounded-full bg-slate-600">
                 {{ tab.count() }}
@@ -68,7 +69,7 @@ type FilterTab = 'all' | 'movies' | 'series' | 'unmatched';
         @if (activeTab() === 'all') {
           @if (recentItems().length > 0) {
             <app-media-row
-              title="Recently Added"
+              [title]="'library.recentlyAdded' | translate"
               cardType="recent"
               [recentItems]="recentItems()"
               (recentItemClick)="onRecentItemClick($event)"
@@ -78,12 +79,12 @@ type FilterTab = 'all' | 'movies' | 'series' | 'unmatched';
           @if (movies().length > 0) {
             <section class="mb-10">
               <div class="flex justify-between items-center mb-4">
-                <h2 class="text-xl font-bold text-white">Movies</h2>
+                <h2 class="text-xl font-bold text-white">{{ 'library.movies' | translate }}</h2>
                 <button
                   (click)="setActiveTab('movies')"
                   class="text-blue-400 hover:text-blue-300 text-sm font-medium transition"
                 >
-                  See all
+                  {{ 'library.seeAll' | translate }}
                 </button>
               </div>
               <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 gap-4">
@@ -101,12 +102,12 @@ type FilterTab = 'all' | 'movies' | 'series' | 'unmatched';
           @if (series().length > 0) {
             <section class="mb-10">
               <div class="flex justify-between items-center mb-4">
-                <h2 class="text-xl font-bold text-white">Series</h2>
+                <h2 class="text-xl font-bold text-white">{{ 'library.series' | translate }}</h2>
                 <button
                   (click)="setActiveTab('series')"
                   class="text-blue-400 hover:text-blue-300 text-sm font-medium transition"
                 >
-                  See all
+                  {{ 'library.seeAll' | translate }}
                 </button>
               </div>
               <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 gap-4">
@@ -123,8 +124,8 @@ type FilterTab = 'all' | 'movies' | 'series' | 'unmatched';
 
           @if (movies().length === 0 && series().length === 0) {
             <div class="text-center text-slate-400 py-16">
-              <p class="text-xl mb-4">No media found</p>
-              <p>Click "Scan Library" to discover media files</p>
+              <p class="text-xl mb-4">{{ 'library.noMediaFound' | translate }}</p>
+              <p>{{ 'library.clickScanToDiscover' | translate }}</p>
             </div>
           }
         }
@@ -133,7 +134,7 @@ type FilterTab = 'all' | 'movies' | 'series' | 'unmatched';
         @if (activeTab() === 'movies') {
           @if (movies().length === 0) {
             <div class="text-center text-slate-400 py-16">
-              <p class="text-xl">No movies found</p>
+              <p class="text-xl">{{ 'library.noMoviesFound' | translate }}</p>
             </div>
           } @else {
             <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 gap-4">
@@ -152,7 +153,7 @@ type FilterTab = 'all' | 'movies' | 'series' | 'unmatched';
         @if (activeTab() === 'series') {
           @if (series().length === 0) {
             <div class="text-center text-slate-400 py-16">
-              <p class="text-xl">No series found</p>
+              <p class="text-xl">{{ 'library.noSeriesFound' | translate }}</p>
             </div>
           } @else {
             <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 gap-4">
@@ -171,8 +172,8 @@ type FilterTab = 'all' | 'movies' | 'series' | 'unmatched';
         @if (activeTab() === 'unmatched') {
           @if (unmatched().length === 0) {
             <div class="text-center text-slate-400 py-16">
-              <p class="text-xl mb-2">No unmatched media</p>
-              <p class="text-sm">All your media files have been matched with metadata</p>
+              <p class="text-xl mb-2">{{ 'library.noUnmatchedMedia' | translate }}</p>
+              <p class="text-sm">{{ 'library.allMediaMatched' | translate }}</p>
             </div>
           } @else {
             <div class="space-y-2">
@@ -193,7 +194,7 @@ type FilterTab = 'all' | 'movies' | 'series' | 'unmatched';
                     (click)="openMatchModal(item)"
                     class="ml-4 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded transition"
                   >
-                    Fix Match
+                    {{ 'library.fixMatch' | translate }}
                   </button>
                 </div>
               }
@@ -216,6 +217,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
   private readonly router = inject(Router);
   private readonly auth = inject(AuthService);
+  private readonly translate = inject(TranslateService);
 
   private languageSubscription: Subscription | null = null;
 
@@ -236,10 +238,10 @@ export class LibraryComponent implements OnInit, OnDestroy {
 
   // Tab configuration with computed counts
   tabs = [
-    { id: 'all' as const, label: 'All', count: computed(() => null) },
-    { id: 'movies' as const, label: 'Movies', count: computed(() => this.movies().length) },
-    { id: 'series' as const, label: 'Series', count: computed(() => this.series().length) },
-    { id: 'unmatched' as const, label: 'Unmatched', count: computed(() => this.unmatched().length) }
+    { id: 'all' as const, labelKey: 'library.all', count: computed(() => null) },
+    { id: 'movies' as const, labelKey: 'library.movies', count: computed(() => this.movies().length) },
+    { id: 'series' as const, labelKey: 'library.series', count: computed(() => this.series().length) },
+    { id: 'unmatched' as const, labelKey: 'library.unmatched', count: computed(() => this.unmatched().length) }
   ];
 
   constructor() {
@@ -364,10 +366,10 @@ export class LibraryComponent implements OnInit, OnDestroy {
 
   formatStatus(status: string): string {
     switch (status) {
-      case 'pending': return 'Pending';
-      case 'not_found': return 'Not Found';
-      case 'failed': return 'Failed';
-      case 'skipped': return 'Skipped';
+      case 'pending': return this.translate.instant('library.pending');
+      case 'not_found': return this.translate.instant('library.notFound');
+      case 'failed': return this.translate.instant('library.failed');
+      case 'skipped': return this.translate.instant('library.skipped');
       default: return status;
     }
   }

@@ -16,6 +16,15 @@ func registerHTTPHandlers(useCases *UseCases, adapters *Adapters, httpServer *se
 		logger.Error().Err(err).Msg("failed to register PWA")
 	}
 
+	// === WebSocket Route (public, but with token auth in handler) ===
+
+	// Register WebSocket handler if hub is enabled
+	if adapters.WebSocketHub != nil {
+		wsHandler := http.NewWebSocketHandler(adapters.WebSocketHub, &cfg.Auth)
+		wsHandler.RegisterRoutes(router)
+		logger.Info().Msg("WebSocket route registered")
+	}
+
 	// === Public Routes (no auth required) ===
 
 	// Auth handler - login is public
@@ -67,8 +76,10 @@ func registerHTTPHandlers(useCases *UseCases, adapters *Adapters, httpServer *se
 		libraryHandler := http.NewLibraryHandler(
 			useCases.ListMoviesUseCase,
 			useCases.GetMovieUseCase,
+			useCases.GetMovieCreditsUseCase,
 			useCases.ListSeriesUseCase,
 			useCases.GetSeriesUseCase,
+			useCases.GetSeriesCreditsUseCase,
 			useCases.ListRecentUseCase,
 			useCases.ListUnmatchedUseCase,
 		)

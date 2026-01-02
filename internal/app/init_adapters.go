@@ -6,6 +6,7 @@ import (
 	metadataAdapter "github.com/thesystemicprogrammer/vimesrv/internal/adapters/metadata"
 	"github.com/thesystemicprogrammer/vimesrv/internal/adapters/repository"
 	"github.com/thesystemicprogrammer/vimesrv/internal/infrastructure/database"
+	"github.com/thesystemicprogrammer/vimesrv/internal/infrastructure/websocket"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/config"
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/ports"
 )
@@ -33,11 +34,14 @@ type Adapters struct {
 	EpisodeMetadataRepository    ports.EpisodeMetadataRepository
 	MetadataCandidateRepository  ports.MetadataCandidateRepository
 	MovieCreditRepository        ports.MovieCreditRepository
+	SeriesCreditRepository       ports.SeriesCreditRepository
 	MovieCertificationRepository ports.MovieCertificationRepository
 	SimilarContentRepository     ports.SimilarContentRepository
 	CollectionRepository         ports.CollectionRepository
 	LibraryRepository            ports.LibraryRepository
 	UserRepository               ports.UserRepository
+	WebSocketHub                 *websocket.Hub
+	JobNotifier                  ports.JobNotifier
 }
 
 func initAdapters(cfg *config.Config, db *database.DB) *Adapters {
@@ -62,11 +66,21 @@ func initAdapters(cfg *config.Config, db *database.DB) *Adapters {
 		EpisodeMetadataRepository:    repository.NewSQLiteEpisodeMetadataRepository(db.DB),
 		MetadataCandidateRepository:  repository.NewSQLiteMetadataCandidateRepository(db.DB),
 		MovieCreditRepository:        repository.NewSQLiteMovieCreditRepository(db.DB),
+		SeriesCreditRepository:       repository.NewSQLiteSeriesCreditRepository(db.DB),
 		MovieCertificationRepository: repository.NewSQLiteMovieCertificationRepository(db.DB),
 		SimilarContentRepository:     repository.NewSQLiteSimilarContentRepository(db.DB),
 		CollectionRepository:         repository.NewSQLiteCollectionRepository(db.DB),
 		LibraryRepository:            repository.NewLibraryRepository(db),
 		UserRepository:               repository.NewSQLiteUserRepository(db),
+	}
+
+	// Initialize WebSocket hub if enabled
+	if cfg.WebSocket.Enabled {
+		adapters.WebSocketHub = websocket.NewHub()
+		adapters.JobNotifier = websocket.NewWebSocketJobNotifier(adapters.WebSocketHub)
+	} else {
+		// Use no-op notifier when WebSocket is disabled
+		adapters.JobNotifier = &ports.NoOpJobNotifier{}
 	}
 
 	// Initialize TMDB-related adapters only if TMDB is enabled

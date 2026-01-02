@@ -99,7 +99,7 @@ func setupTestJobManager(t *testing.T, cfg config.JobConfig, handlers map[string
 
 	// Create use cases
 	enqueueJobUC := usecasejob.NewEnqueueJobUseCase(cfg, jobRepo, clock)
-	processNextJobUC := usecasejob.NewProcessNextJobUseCase(jobRepo, handlerRegistry, backoffStrategy, clock)
+	processNextJobUC := usecasejob.NewProcessNextJobUseCase(jobRepo, handlerRegistry, backoffStrategy, clock, &ports.NoOpJobNotifier{})
 	schedulerTickUC := usecasejob.NewSchedulerTickUseCase(cfg, scheduleRepo, cronParser, clock)
 	upsertScheduleUC := usecasejob.NewUpsertScheduleUseCase(cfg, scheduleRepo, cronParser, clock)
 	recoverStuckJobsUC := usecasejob.NewRecoverStuckJobsUseCase(cfg, jobRepo, clock)
@@ -157,7 +157,7 @@ func setupTestJobManagerWithMockClock(t *testing.T, cfg config.JobConfig, handle
 
 	// Create use cases with mock clock
 	enqueueJobUC := usecasejob.NewEnqueueJobUseCase(cfg, jobRepo, mockClock)
-	processNextJobUC := usecasejob.NewProcessNextJobUseCase(jobRepo, handlerRegistry, backoffStrategy, mockClock)
+	processNextJobUC := usecasejob.NewProcessNextJobUseCase(jobRepo, handlerRegistry, backoffStrategy, mockClock, &ports.NoOpJobNotifier{})
 	schedulerTickUC := usecasejob.NewSchedulerTickUseCase(cfg, scheduleRepo, cronParser, mockClock)
 	upsertScheduleUC := usecasejob.NewUpsertScheduleUseCase(cfg, scheduleRepo, cronParser, mockClock)
 	recoverStuckJobsUC := usecasejob.NewRecoverStuckJobsUseCase(cfg, jobRepo, mockClock)
@@ -220,7 +220,7 @@ func setupTestJobManagerWithSecondCron(t *testing.T, cfg config.JobConfig, handl
 
 	// Create use cases
 	enqueueJobUC := usecasejob.NewEnqueueJobUseCase(cfg, jobRepo, clock)
-	processNextJobUC := usecasejob.NewProcessNextJobUseCase(jobRepo, handlerRegistry, backoffStrategy, clock)
+	processNextJobUC := usecasejob.NewProcessNextJobUseCase(jobRepo, handlerRegistry, backoffStrategy, clock, &ports.NoOpJobNotifier{})
 	schedulerTickUC := usecasejob.NewSchedulerTickUseCase(cfg, scheduleRepo, cronParser, clock)
 	upsertScheduleUC := usecasejob.NewUpsertScheduleUseCase(cfg, scheduleRepo, cronParser, clock)
 	recoverStuckJobsUC := usecasejob.NewRecoverStuckJobsUseCase(cfg, jobRepo, clock)

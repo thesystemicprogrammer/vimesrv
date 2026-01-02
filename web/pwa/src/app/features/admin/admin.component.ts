@@ -2,6 +2,7 @@ import { Component, inject, signal, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { ApiService, User, UserRole } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 
@@ -10,22 +11,22 @@ type ModalMode = 'create' | 'edit' | 'reset-password' | 'delete' | null;
 @Component({
   selector: 'app-admin',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, TranslateModule],
   template: `
     <div class="min-h-screen bg-slate-900 py-8 px-4">
       <div class="max-w-6xl mx-auto">
         <!-- Header -->
         <div class="flex items-center justify-between mb-8">
           <div>
-            <h1 class="text-3xl font-bold text-white">User Management</h1>
-            <p class="text-slate-400 mt-1">Manage user accounts and permissions</p>
+            <h1 class="text-3xl font-bold text-white">{{ 'admin.title' | translate }}</h1>
+            <p class="text-slate-400 mt-1">{{ 'admin.subtitle' | translate }}</p>
           </div>
           <div class="flex gap-3">
             <button
               (click)="goBack()"
               class="px-4 py-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
             >
-              Back
+              {{ 'admin.back' | translate }}
             </button>
             <button
               (click)="openCreateModal()"
@@ -34,7 +35,7 @@ type ModalMode = 'create' | 'edit' | 'reset-password' | 'delete' | null;
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
               </svg>
-              Add User
+              {{ 'admin.addUser' | translate }}
             </button>
           </div>
         </div>
@@ -76,11 +77,11 @@ type ModalMode = 'create' | 'edit' | 'reset-password' | 'delete' | null;
             <table class="w-full">
               <thead class="bg-slate-700/50">
                 <tr>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Username</th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Role</th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Status</th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Created</th>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-slate-400 uppercase tracking-wider">Actions</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">{{ 'admin.username' | translate }}</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">{{ 'admin.role' | translate }}</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">{{ 'admin.status' | translate }}</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">{{ 'admin.created' | translate }}</th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-slate-400 uppercase tracking-wider">{{ 'admin.actions' | translate }}</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-700">
@@ -94,7 +95,7 @@ type ModalMode = 'create' | 'edit' | 'reset-password' | 'delete' | null;
                         <div>
                           <span class="text-white font-medium">{{ user.username }}</span>
                           @if (user.id === auth.userId()) {
-                            <span class="ml-2 text-xs text-blue-400">(you)</span>
+                            <span class="ml-2 text-xs text-blue-400">({{ 'admin.you' | translate }})</span>
                           }
                         </div>
                       </div>
@@ -117,10 +118,10 @@ type ModalMode = 'create' | 'edit' | 'reset-password' | 'delete' | null;
                           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
                           </svg>
-                          Must change password
+                          {{ 'admin.mustChangePassword' | translate }}
                         </span>
                       } @else {
-                        <span class="text-green-400 text-sm">Active</span>
+                        <span class="text-green-400 text-sm">{{ 'admin.active' | translate }}</span>
                       }
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-slate-400 text-sm">
@@ -162,7 +163,7 @@ type ModalMode = 'create' | 'edit' | 'reset-password' | 'delete' | null;
                 } @empty {
                   <tr>
                     <td colspan="5" class="px-6 py-12 text-center text-slate-400">
-                      No users found
+                      {{ 'admin.noUsersFound' | translate }}
                     </td>
                   </tr>
                 }
@@ -187,22 +188,22 @@ type ModalMode = 'create' | 'edit' | 'reset-password' | 'delete' | null;
           <!-- Create User Modal -->
           @if (modalMode() === 'create') {
             <div class="p-6">
-              <h2 class="text-xl font-bold text-white mb-4">Create User</h2>
+              <h2 class="text-xl font-bold text-white mb-4">{{ 'admin.createUser' | translate }}</h2>
               <form (ngSubmit)="createUser()">
                 <div class="space-y-4">
                   <div>
-                    <label class="block text-sm font-medium text-slate-300 mb-1">Username</label>
+                    <label class="block text-sm font-medium text-slate-300 mb-1">{{ 'admin.username' | translate }}</label>
                     <input
                       type="text"
                       [(ngModel)]="formUsername"
                       name="username"
                       required
                       class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Enter username"
+                      [placeholder]="'admin.enterUsername' | translate"
                     />
                   </div>
                   <div>
-                    <label class="block text-sm font-medium text-slate-300 mb-1">Password</label>
+                    <label class="block text-sm font-medium text-slate-300 mb-1">{{ 'admin.password' | translate }}</label>
                     <input
                       type="password"
                       [(ngModel)]="formPassword"
@@ -210,19 +211,19 @@ type ModalMode = 'create' | 'edit' | 'reset-password' | 'delete' | null;
                       required
                       minlength="8"
                       class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Enter password (min 8 characters)"
+                      [placeholder]="'admin.enterPassword' | translate"
                     />
                   </div>
                   <div>
-                    <label class="block text-sm font-medium text-slate-300 mb-1">Role</label>
+                    <label class="block text-sm font-medium text-slate-300 mb-1">{{ 'admin.role' | translate }}</label>
                     <select
                       [(ngModel)]="formRole"
                       name="role"
                       class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
-                      <option value="user">User</option>
-                      <option value="manager">Manager</option>
-                      <option value="admin">Admin</option>
+                      <option value="user">{{ 'admin.roleUser' | translate }}</option>
+                      <option value="manager">{{ 'admin.roleManager' | translate }}</option>
+                      <option value="admin">{{ 'admin.roleAdmin' | translate }}</option>
                     </select>
                   </div>
                 </div>
@@ -232,7 +233,7 @@ type ModalMode = 'create' | 'edit' | 'reset-password' | 'delete' | null;
                     (click)="closeModal()"
                     class="flex-1 px-4 py-2 border border-slate-600 text-slate-300 rounded-md hover:bg-slate-700 transition-colors"
                   >
-                    Cancel
+                    {{ 'common.cancel' | translate }}
                   </button>
                   <button
                     type="submit"
@@ -240,9 +241,9 @@ type ModalMode = 'create' | 'edit' | 'reset-password' | 'delete' | null;
                     class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
                   >
                     @if (modalLoading()) {
-                      Creating...
+                      {{ 'admin.creating' | translate }}
                     } @else {
-                      Create User
+                      {{ 'admin.createUser' | translate }}
                     }
                   </button>
                 </div>
@@ -253,19 +254,19 @@ type ModalMode = 'create' | 'edit' | 'reset-password' | 'delete' | null;
           <!-- Edit User Modal -->
           @if (modalMode() === 'edit') {
             <div class="p-6">
-              <h2 class="text-xl font-bold text-white mb-4">Edit User Role</h2>
-              <p class="text-slate-400 mb-4">Editing: <span class="text-white font-medium">{{ selectedUser()?.username }}</span></p>
+              <h2 class="text-xl font-bold text-white mb-4">{{ 'admin.editUserRole' | translate }}</h2>
+              <p class="text-slate-400 mb-4">{{ 'admin.editing' | translate }}: <span class="text-white font-medium">{{ selectedUser()?.username }}</span></p>
               <form (ngSubmit)="updateUser()">
                 <div>
-                  <label class="block text-sm font-medium text-slate-300 mb-1">Role</label>
+                  <label class="block text-sm font-medium text-slate-300 mb-1">{{ 'admin.role' | translate }}</label>
                   <select
                     [(ngModel)]="formRole"
                     name="role"
                     class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value="user">User</option>
-                    <option value="manager">Manager</option>
-                    <option value="admin">Admin</option>
+                    <option value="user">{{ 'admin.roleUser' | translate }}</option>
+                    <option value="manager">{{ 'admin.roleManager' | translate }}</option>
+                    <option value="admin">{{ 'admin.roleAdmin' | translate }}</option>
                   </select>
                 </div>
                 <div class="flex gap-3 mt-6">
@@ -274,7 +275,7 @@ type ModalMode = 'create' | 'edit' | 'reset-password' | 'delete' | null;
                     (click)="closeModal()"
                     class="flex-1 px-4 py-2 border border-slate-600 text-slate-300 rounded-md hover:bg-slate-700 transition-colors"
                   >
-                    Cancel
+                    {{ 'common.cancel' | translate }}
                   </button>
                   <button
                     type="submit"
@@ -282,9 +283,9 @@ type ModalMode = 'create' | 'edit' | 'reset-password' | 'delete' | null;
                     class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
                   >
                     @if (modalLoading()) {
-                      Saving...
+                      {{ 'admin.saving' | translate }}
                     } @else {
-                      Save Changes
+                      {{ 'admin.saveChanges' | translate }}
                     }
                   </button>
                 </div>
@@ -295,11 +296,11 @@ type ModalMode = 'create' | 'edit' | 'reset-password' | 'delete' | null;
           <!-- Reset Password Modal -->
           @if (modalMode() === 'reset-password') {
             <div class="p-6">
-              <h2 class="text-xl font-bold text-white mb-4">Reset Password</h2>
-              <p class="text-slate-400 mb-4">Reset password for: <span class="text-white font-medium">{{ selectedUser()?.username }}</span></p>
+              <h2 class="text-xl font-bold text-white mb-4">{{ 'admin.resetPassword' | translate }}</h2>
+              <p class="text-slate-400 mb-4">{{ 'admin.resetPassword' | translate }}: <span class="text-white font-medium">{{ selectedUser()?.username }}</span></p>
               <form (ngSubmit)="resetPassword()">
                 <div>
-                  <label class="block text-sm font-medium text-slate-300 mb-1">New Password</label>
+                  <label class="block text-sm font-medium text-slate-300 mb-1">{{ 'admin.newPassword' | translate }}</label>
                   <input
                     type="password"
                     [(ngModel)]="formPassword"
@@ -307,11 +308,11 @@ type ModalMode = 'create' | 'edit' | 'reset-password' | 'delete' | null;
                     required
                     minlength="8"
                     class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Enter new password (min 8 characters)"
+                    [placeholder]="'admin.enterNewPassword' | translate"
                   />
                 </div>
                 <p class="mt-2 text-sm text-yellow-400">
-                  The user will be required to change this password on next login.
+                  {{ 'admin.passwordMustChange' | translate }}
                 </p>
                 <div class="flex gap-3 mt-6">
                   <button
@@ -319,7 +320,7 @@ type ModalMode = 'create' | 'edit' | 'reset-password' | 'delete' | null;
                     (click)="closeModal()"
                     class="flex-1 px-4 py-2 border border-slate-600 text-slate-300 rounded-md hover:bg-slate-700 transition-colors"
                   >
-                    Cancel
+                    {{ 'common.cancel' | translate }}
                   </button>
                   <button
                     type="submit"
@@ -327,9 +328,9 @@ type ModalMode = 'create' | 'edit' | 'reset-password' | 'delete' | null;
                     class="flex-1 px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 transition-colors disabled:opacity-50"
                   >
                     @if (modalLoading()) {
-                      Resetting...
+                      {{ 'admin.resetting' | translate }}
                     } @else {
-                      Reset Password
+                      {{ 'admin.resetPassword' | translate }}
                     }
                   </button>
                 </div>
@@ -340,17 +341,17 @@ type ModalMode = 'create' | 'edit' | 'reset-password' | 'delete' | null;
           <!-- Delete User Modal -->
           @if (modalMode() === 'delete') {
             <div class="p-6">
-              <h2 class="text-xl font-bold text-white mb-4">Delete User</h2>
+              <h2 class="text-xl font-bold text-white mb-4">{{ 'admin.deleteUser' | translate }}</h2>
               <p class="text-slate-400 mb-4">
-                Are you sure you want to delete <span class="text-white font-medium">{{ selectedUser()?.username }}</span>?
+                {{ 'admin.confirmDelete' | translate }} <span class="text-white font-medium">{{ selectedUser()?.username }}</span>?
               </p>
-              <p class="text-red-400 text-sm mb-6">This action cannot be undone.</p>
+              <p class="text-red-400 text-sm mb-6">{{ 'admin.actionCannotBeUndone' | translate }}</p>
               <div class="flex gap-3">
                 <button
                   (click)="closeModal()"
                   class="flex-1 px-4 py-2 border border-slate-600 text-slate-300 rounded-md hover:bg-slate-700 transition-colors"
                 >
-                  Cancel
+                  {{ 'common.cancel' | translate }}
                 </button>
                 <button
                   (click)="deleteUser()"
@@ -358,9 +359,9 @@ type ModalMode = 'create' | 'edit' | 'reset-password' | 'delete' | null;
                   class="flex-1 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors disabled:opacity-50"
                 >
                   @if (modalLoading()) {
-                    Deleting...
+                    {{ 'admin.deleting' | translate }}
                   } @else {
-                    Delete User
+                    {{ 'admin.deleteUser' | translate }}
                   }
                 </button>
               </div>
@@ -375,6 +376,7 @@ export class AdminComponent implements OnInit {
   private readonly api = inject(ApiService);
   readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly translate = inject(TranslateService);
 
   users = signal<User[]>([]);
   loading = signal(true);
@@ -457,12 +459,12 @@ export class AdminComponent implements OnInit {
   // CRUD operations
   createUser(): void {
     if (!this.formUsername || !this.formPassword) {
-      this.error.set('Please fill in all fields');
+      this.error.set(this.translate.instant('admin.fillAllFields'));
       return;
     }
 
     if (this.formPassword.length < 8) {
-      this.error.set('Password must be at least 8 characters');
+      this.error.set(this.translate.instant('admin.passwordMinLength'));
       return;
     }
 
@@ -474,13 +476,13 @@ export class AdminComponent implements OnInit {
     }).subscribe({
       next: () => {
         this.modalLoading.set(false);
-        this.success.set(`User "${this.formUsername}" created successfully`);
+        this.success.set(this.translate.instant('admin.userCreated', { username: this.formUsername }));
         this.closeModal();
         this.loadUsers();
       },
       error: (err) => {
         this.modalLoading.set(false);
-        this.error.set(err.error?.error?.message || 'Failed to create user');
+        this.error.set(err.error?.error?.message || this.translate.instant('common.error'));
       }
     });
   }
@@ -493,13 +495,13 @@ export class AdminComponent implements OnInit {
     this.api.updateUser(user.id, { role: this.formRole }).subscribe({
       next: () => {
         this.modalLoading.set(false);
-        this.success.set(`User "${user.username}" updated successfully`);
+        this.success.set(this.translate.instant('admin.userUpdated', { username: user.username }));
         this.closeModal();
         this.loadUsers();
       },
       error: (err) => {
         this.modalLoading.set(false);
-        this.error.set(err.error?.error?.message || 'Failed to update user');
+        this.error.set(err.error?.error?.message || this.translate.instant('common.error'));
       }
     });
   }
@@ -509,7 +511,7 @@ export class AdminComponent implements OnInit {
     if (!user || !this.formPassword) return;
 
     if (this.formPassword.length < 8) {
-      this.error.set('Password must be at least 8 characters');
+      this.error.set(this.translate.instant('admin.passwordMinLength'));
       return;
     }
 
@@ -517,13 +519,13 @@ export class AdminComponent implements OnInit {
     this.api.resetUserPassword(user.id, { new_password: this.formPassword }).subscribe({
       next: () => {
         this.modalLoading.set(false);
-        this.success.set(`Password reset for "${user.username}"`);
+        this.success.set(this.translate.instant('admin.passwordReset', { username: user.username }));
         this.closeModal();
         this.loadUsers();
       },
       error: (err) => {
         this.modalLoading.set(false);
-        this.error.set(err.error?.error?.message || 'Failed to reset password');
+        this.error.set(err.error?.error?.message || this.translate.instant('common.error'));
       }
     });
   }
@@ -536,13 +538,13 @@ export class AdminComponent implements OnInit {
     this.api.deleteUser(user.id).subscribe({
       next: () => {
         this.modalLoading.set(false);
-        this.success.set(`User "${user.username}" deleted successfully`);
+        this.success.set(this.translate.instant('admin.userDeleted', { username: user.username }));
         this.closeModal();
         this.loadUsers();
       },
       error: (err) => {
         this.modalLoading.set(false);
-        this.error.set(err.error?.error?.message || 'Failed to delete user');
+        this.error.set(err.error?.error?.message || this.translate.instant('common.error'));
       }
     });
   }

@@ -47,4 +47,13 @@ type MovieMetadataRepository interface {
 
 	// ListIDsWithoutTranslation returns movie metadata IDs that don't have a translation for the given language
 	ListIDsWithoutTranslation(ctx context.Context, language string) ([]MovieMetadataForTranslation, error)
+
+	// SetFullCreditsFetched marks that full credits have been fetched from TMDB for this movie
+	SetFullCreditsFetched(ctx context.Context, movieMetadataID int64) error
+
+	// HasFullCreditsFetched checks if full credits have been fetched from TMDB for this movie
+	HasFullCreditsFetched(ctx context.Context, movieMetadataID int64) (bool, error)
+
+	// GetTMDBIDByID retrieves the TMDB ID for a movie metadata record
+	GetTMDBIDByID(ctx context.Context, movieMetadataID int64) (int, error)
 }

@@ -130,3 +130,10 @@ tmdb:
 
 library:
   recently_added_count: 20 # Number of items to show in "Recently Added" section
+
+websocket:
+  enabled: true
+  ping_interval_seconds: 30
+  pong_timeout_seconds: 10
+  write_timeout_seconds: 10
+  max_message_size_bytes: 512

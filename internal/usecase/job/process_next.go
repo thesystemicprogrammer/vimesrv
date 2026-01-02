@@ -15,14 +15,16 @@ type ProcessNextJobUseCase struct {
 	handlerResolver ports.HandlerResolver
 	backoffStrategy ports.BackoffStrategy
 	clock           ports.Clock
+	jobNotifier     ports.JobNotifier
 }
 
-func NewProcessNextJobUseCase(jobRepository ports.JobRepository, handlerResolver ports.HandlerResolver, backoffStrategy ports.BackoffStrategy, clock ports.Clock) *ProcessNextJobUseCase {
+func NewProcessNextJobUseCase(jobRepository ports.JobRepository, handlerResolver ports.HandlerResolver, backoffStrategy ports.BackoffStrategy, clock ports.Clock, jobNotifier ports.JobNotifier) *ProcessNextJobUseCase {
 	return &ProcessNextJobUseCase{
 		jobRepository:   jobRepository,
 		handlerResolver: handlerResolver,
 		backoffStrategy: backoffStrategy,
 		clock:           clock,
+		jobNotifier:     jobNotifier,
 	}
 }
 
@@ -111,6 +113,7 @@ func (uc *ProcessNextJobUseCase) Execute(ctx context.Context, workerID string) (
 			return uc.jobRepository.MarkSuccess(retryCtx, job.ID)
 		}, job.ID, "MarkSuccess")
 		logger.Info().Int64("ID", job.ID).Str("type", job.Type).Dur("duration", duration).Int("attempts", job.Attempts).Msg("job successfully executed")
+		uc.jobNotifier.NotifyJobCompleted(job)
 		return true, nil
 	}
 
@@ -119,6 +122,7 @@ func (uc *ProcessNextJobUseCase) Execute(ctx context.Context, workerID string) (
 			return uc.jobRepository.MarkDead(retryCtx, job.ID, handlerErr.Error())
 		}, job.ID, "MarkDead")
 		logger.Error().Int64("ID", job.ID).Int("attempts", job.Attempts).Int("maxAttempts", job.MaxAttempts).Msg("job exceeded max attempts")
+		uc.jobNotifier.NotifyJobFailed(job, handlerErr.Error())
 		return true, nil
 	}
 
@@ -128,5 +132,6 @@ func (uc *ProcessNextJobUseCase) Execute(ctx context.Context, workerID string) (
 		return uc.jobRepository.Reschedule(retryCtx, job.ID, next, handlerErr.Error())
 	}, job.ID, "Reschedule")
 	logger.Error().Err(handlerErr).Int64("ID", job.ID).Int("attempts", job.Attempts).Int("maxAttempts", job.MaxAttempts).Dur("delay", delay).Msg("job failed, rescheduling for retry")
+	uc.jobNotifier.NotifyJobRetrying(job, job.Attempts, job.MaxAttempts)
 	return true, nil
 }

@@ -468,6 +468,54 @@ func (r *LibraryRepository) GetMovieDetail(ctx context.Context, mediaID string, 
 	// Use domain function to get certification with fallback
 	detail.Certification = domain.GetCertificationWithFallback(certifications, baseLang)
 
+	// Fetch audio languages
+	audioLangQuery := `
+		SELECT DISTINCT language
+		FROM audio_streams
+		WHERE media_id = ? AND language != ''
+		ORDER BY language
+	`
+	audioLangRows, err := r.db.QueryContext(ctx, audioLangQuery, mediaID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query audio languages: %w", err)
+	}
+	defer audioLangRows.Close()
+
+	for audioLangRows.Next() {
+		var lang string
+		if err := audioLangRows.Scan(&lang); err != nil {
+			return nil, fmt.Errorf("failed to scan audio language: %w", err)
+		}
+		detail.AudioLanguages = append(detail.AudioLanguages, lang)
+	}
+	if err := audioLangRows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating audio languages: %w", err)
+	}
+
+	// Fetch subtitle languages
+	subtitleLangQuery := `
+		SELECT DISTINCT language
+		FROM subtitle_streams
+		WHERE media_id = ? AND language != ''
+		ORDER BY language
+	`
+	subtitleLangRows, err := r.db.QueryContext(ctx, subtitleLangQuery, mediaID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query subtitle languages: %w", err)
+	}
+	defer subtitleLangRows.Close()
+
+	for subtitleLangRows.Next() {
+		var lang string
+		if err := subtitleLangRows.Scan(&lang); err != nil {
+			return nil, fmt.Errorf("failed to scan subtitle language: %w", err)
+		}
+		detail.SubtitleLanguages = append(detail.SubtitleLanguages, lang)
+	}
+	if err := subtitleLangRows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating subtitle languages: %w", err)
+	}
+
 	return &detail, nil
 }
 
@@ -750,6 +798,9 @@ func (r *LibraryRepository) GetSeriesDetail(ctx context.Context, seriesID int64,
 	defer episodeRows.Close()
 
 	availableCount := 0
+	var mediaIDs []string
+	mediaIDToEpisodeIndex := make(map[string][]struct{ seasonIdx, episodeIdx int })
+
 	for episodeRows.Next() {
 		var e ports.EpisodeSummary
 		var seasonID int64
@@ -780,12 +831,20 @@ func (r *LibraryRepository) GetSeriesDetail(ctx context.Context, seriesID int64,
 			e.Status = mediaStatus.String
 			e.TranscodeStatus = transcodeStatus.String
 			availableCount++
+			mediaIDs = append(mediaIDs, mediaID.String)
 		}
 
 		// Find season and append episode
 		for i := range detail.Seasons {
 			if detail.Seasons[i].SeasonMetadataID == seasonID {
+				episodeIdx := len(detail.Seasons[i].Episodes)
 				detail.Seasons[i].Episodes = append(detail.Seasons[i].Episodes, e)
+				if mediaID.Valid {
+					mediaIDToEpisodeIndex[mediaID.String] = append(
+						mediaIDToEpisodeIndex[mediaID.String],
+						struct{ seasonIdx, episodeIdx int }{i, episodeIdx},
+					)
+				}
 				break
 			}
 		}
@@ -796,6 +855,102 @@ func (r *LibraryRepository) GetSeriesDetail(ctx context.Context, seriesID int64,
 	}
 
 	detail.AvailableEpisodes = availableCount
+
+	// Fetch audio and subtitle languages for all episodes with media files
+	if len(mediaIDs) > 0 {
+		// Build placeholders for IN clause
+		langPlaceholders := make([]string, len(mediaIDs))
+		langArgs := make([]interface{}, len(mediaIDs))
+		for i, id := range mediaIDs {
+			langPlaceholders[i] = "?"
+			langArgs[i] = id
+		}
+		inClause := strings.Join(langPlaceholders, ",")
+
+		// Fetch audio languages
+		audioLangQuery := fmt.Sprintf(`
+			SELECT media_id, language
+			FROM audio_streams
+			WHERE media_id IN (%s) AND language != ''
+			ORDER BY media_id, language
+		`, inClause)
+		audioLangRows, err := r.db.QueryContext(ctx, audioLangQuery, langArgs...)
+		if err != nil {
+			return nil, fmt.Errorf("failed to query episode audio languages: %w", err)
+		}
+		defer audioLangRows.Close()
+
+		audioLangMap := make(map[string][]string)
+		for audioLangRows.Next() {
+			var mediaID, lang string
+			if err := audioLangRows.Scan(&mediaID, &lang); err != nil {
+				return nil, fmt.Errorf("failed to scan episode audio language: %w", err)
+			}
+			// Only add if not already present (dedup)
+			langs := audioLangMap[mediaID]
+			found := false
+			for _, l := range langs {
+				if l == lang {
+					found = true
+					break
+				}
+			}
+			if !found {
+				audioLangMap[mediaID] = append(audioLangMap[mediaID], lang)
+			}
+		}
+		if err := audioLangRows.Err(); err != nil {
+			return nil, fmt.Errorf("error iterating episode audio languages: %w", err)
+		}
+
+		// Fetch subtitle languages
+		subtitleLangQuery := fmt.Sprintf(`
+			SELECT media_id, language
+			FROM subtitle_streams
+			WHERE media_id IN (%s) AND language != ''
+			ORDER BY media_id, language
+		`, inClause)
+		subtitleLangRows, err := r.db.QueryContext(ctx, subtitleLangQuery, langArgs...)
+		if err != nil {
+			return nil, fmt.Errorf("failed to query episode subtitle languages: %w", err)
+		}
+		defer subtitleLangRows.Close()
+
+		subtitleLangMap := make(map[string][]string)
+		for subtitleLangRows.Next() {
+			var mediaID, lang string
+			if err := subtitleLangRows.Scan(&mediaID, &lang); err != nil {
+				return nil, fmt.Errorf("failed to scan episode subtitle language: %w", err)
+			}
+			// Only add if not already present (dedup)
+			langs := subtitleLangMap[mediaID]
+			found := false
+			for _, l := range langs {
+				if l == lang {
+					found = true
+					break
+				}
+			}
+			if !found {
+				subtitleLangMap[mediaID] = append(subtitleLangMap[mediaID], lang)
+			}
+		}
+		if err := subtitleLangRows.Err(); err != nil {
+			return nil, fmt.Errorf("error iterating episode subtitle languages: %w", err)
+		}
+
+		// Assign languages to episodes
+		for mediaID, indices := range mediaIDToEpisodeIndex {
+			for _, idx := range indices {
+				if audioLangs, ok := audioLangMap[mediaID]; ok {
+					detail.Seasons[idx.seasonIdx].Episodes[idx.episodeIdx].AudioLanguages = audioLangs
+				}
+				if subtitleLangs, ok := subtitleLangMap[mediaID]; ok {
+					detail.Seasons[idx.seasonIdx].Episodes[idx.episodeIdx].SubtitleLanguages = subtitleLangs
+				}
+			}
+		}
+	}
 
 	return &detail, nil
 }

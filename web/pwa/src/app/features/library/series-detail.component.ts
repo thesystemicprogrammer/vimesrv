@@ -8,7 +8,8 @@ import {
   SeasonSummary,
   EpisodeSummary,
   SimilarSeriesItem,
-  UnmatchedMediaSummary
+  UnmatchedMediaSummary,
+  SeriesCreditPerson
 } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { MetadataMatchModalComponent } from './metadata-match-modal.component';
@@ -42,7 +43,7 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
         <!-- Backdrop image -->
         @if (backdropUrl()) {
           <div
-            class="absolute inset-0 bg-cover bg-center"
+            class="absolute inset-0 bg-cover bg-top"
             [style.background-image]="'url(' + backdropUrl() + ')'"
           ></div>
         }
@@ -66,7 +67,7 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
         <div class="absolute bottom-0 left-0 right-0 p-4 md:p-8">
           <div class="container mx-auto flex gap-6 items-end">
             <!-- Poster -->
-            <div class="hidden md:block flex-shrink-0 w-40 lg:w-48">
+            <div class="hidden md:block flex-shrink-0 w-56 lg:w-64 xl:w-72">
               <div class="aspect-[2/3] rounded-lg overflow-hidden shadow-2xl bg-slate-800">
                 @if (posterUrl()) {
                   <img
@@ -131,6 +132,56 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
           <p class="text-slate-300 leading-relaxed max-w-4xl">
             {{ series()!.overview }}
           </p>
+        </div>
+      }
+
+      <!-- Cast preview section -->
+      @if (castPreview().length > 0) {
+        <div class="container mx-auto px-4 pb-6">
+          <section class="mb-4">
+            <div class="flex items-center justify-between mb-3">
+              <h2 class="text-xl font-semibold text-white">Cast</h2>
+              <a
+                [routerLink]="['/series', series()!.series_metadata_id, 'cast']"
+                class="text-blue-400 hover:text-blue-300 text-sm transition"
+              >
+                View all &rarr;
+              </a>
+            </div>
+            <div class="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-transparent">
+              @for (person of castPreview(); track person.id) {
+                <a
+                  [href]="getTmdbPersonUrl(person.tmdb_person_id)"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="flex-shrink-0 w-28 group"
+                >
+                  <div class="aspect-[2/3] rounded-lg overflow-hidden bg-slate-700 group-hover:ring-2 group-hover:ring-blue-500 transition">
+                    @if (person.profile_path) {
+                      <img
+                        [src]="getProfileUrl(person.profile_path)"
+                        [alt]="person.name"
+                        class="w-full h-full object-cover"
+                      />
+                    } @else {
+                      <div class="w-full h-full flex items-center justify-center text-slate-500">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                        </svg>
+                      </div>
+                    }
+                  </div>
+                  <p class="font-medium text-white text-sm mt-2 truncate group-hover:text-blue-400 transition">{{ person.name }}</p>
+                  <p class="text-slate-400 text-xs truncate">
+                    {{ parseRoles(person.roles) }}
+                  </p>
+                  <p class="text-slate-500 text-xs">
+                    {{ person.total_episode_count }} {{ person.total_episode_count === 1 ? 'episode' : 'episodes' }}
+                  </p>
+                </a>
+              }
+            </div>
+          </section>
         </div>
       }
 
@@ -403,6 +454,9 @@ export class SeriesDetailComponent implements OnInit, OnDestroy {
   posterUrl = signal<string | null>(null);
   backdropUrl = signal<string | null>(null);
 
+  // Cast data
+  castPreview = signal<SeriesCreditPerson[]>([]);
+
   // Metadata change state
   selectedMedia = signal<UnmatchedMediaSummary | null>(null);
   selectedEpisode = signal<EpisodeSummary | null>(null);
@@ -479,6 +533,19 @@ export class SeriesDetailComponent implements OnInit, OnDestroy {
           }
         }
 
+        // Fetch series credits for cast preview (non-blocking)
+        this.api.getSeriesCredits(seriesId).subscribe({
+          next: (creditsResponse) => {
+            // Take top 10 cast members for preview
+            const cast = creditsResponse.data.cast || [];
+            this.castPreview.set(cast.slice(0, 10));
+          },
+          error: () => {
+            // Silently fail - cast section just won't show
+            this.castPreview.set([]);
+          }
+        });
+
         this.loading.set(false);
       },
       error: (err) => {
@@ -536,6 +603,26 @@ export class SeriesDetailComponent implements OnInit, OnDestroy {
 
   getTmdbSeriesUrl(tmdbId: number): string {
     return `https://www.themoviedb.org/tv/${tmdbId}?language=${this.auth.language()}`;
+  }
+
+  getTmdbPersonUrl(tmdbPersonId: number): string {
+    return `https://www.themoviedb.org/person/${tmdbPersonId}`;
+  }
+
+  getProfileUrl(profilePath: string): string {
+    return `${TMDB_IMAGE_BASE}/w185${profilePath}`;
+  }
+
+  parseRoles(rolesJson: string | undefined): string {
+    if (!rolesJson) return '';
+    try {
+      const roles = JSON.parse(rolesJson) as Array<{ character: string; episode_count: number }>;
+      if (roles.length === 0) return '';
+      // Return the first character name
+      return roles[0].character || '';
+    } catch {
+      return '';
+    }
   }
 
   openChangeMetadata(episode: EpisodeSummary): void {

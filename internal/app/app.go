@@ -97,6 +97,12 @@ func (app *Application) Start() error {
 		// Don't fail startup, just log the warning
 	}
 
+	// Start WebSocket hub if enabled
+	if app.adapters.WebSocketHub != nil {
+		go app.adapters.WebSocketHub.Run()
+		logger.Info().Msg("WebSocket hub started")
+	}
+
 	// Start HTTP server in goroutine
 	go func() {
 		logger.Info().Str("address", app.httpServer.Addr()).Msg("HTTP server listening")
@@ -141,7 +147,14 @@ func (app *Application) Shutdown() error {
 	// Track shutdown errors
 	var shutdownErrors []error
 
-	// Step 1: Shutdown HTTP server (prevents new requests/job creation)
+	// Step 1: Stop WebSocket hub (close all client connections)
+	if app.adapters.WebSocketHub != nil {
+		logger.Info().Msg("stopping WebSocket hub")
+		app.adapters.WebSocketHub.Stop()
+		logger.Info().Msg("WebSocket hub stopped successfully")
+	}
+
+	// Step 2: Shutdown HTTP server (prevents new requests/job creation)
 	logger.Info().Msg("shutting down HTTP server")
 	if err := app.httpServer.Shutdown(ctx); err != nil {
 		logger.Error().Err(err).Msg("error during HTTP server shutdown")
@@ -150,7 +163,7 @@ func (app *Application) Shutdown() error {
 		logger.Info().Msg("HTTP server stopped successfully")
 	}
 
-	// Step 2: Stop job manager (let workers finish in-flight jobs)
+	// Step 3: Stop job manager (let workers finish in-flight jobs)
 	logger.Info().Msg("stopping job manager")
 	if err := app.jobManager.Stop(ctx); err != nil {
 		logger.Error().Err(err).Msg("error during job manager shutdown")
@@ -159,7 +172,7 @@ func (app *Application) Shutdown() error {
 		logger.Info().Msg("job manager stopped successfully")
 	}
 
-	// Step 3: Close database connection
+	// Step 4: Close database connection
 	logger.Info().Msg("closing database connection")
 	if err := app.db.Close(); err != nil {
 		logger.Error().Err(err).Msg("error closing database")
