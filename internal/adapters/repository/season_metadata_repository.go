@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/thesystemicprogrammer/vimesrv/internal/domain"
@@ -351,6 +352,56 @@ func (r *SQLiteSeasonMetadataRepository) UpsertTranslation(ctx context.Context, 
 	translation.UpdatedAt = now
 
 	return nil
+}
+
+// ListIDsWithoutTranslation returns season metadata IDs that don't have a translation for the given language
+func (r *SQLiteSeasonMetadataRepository) ListIDsWithoutTranslation(ctx context.Context, language string) ([]ports.SeasonMetadataForTranslation, error) {
+	exact, base := seasonLanguageParams(language)
+
+	// Join with series_metadata to get series tmdb_id
+	query := `
+		SELECT sea.id, sea.season_number, ser.tmdb_id
+		FROM season_metadata sea
+		JOIN series_metadata ser ON sea.series_id = ser.id
+		WHERE NOT EXISTS (
+			SELECT 1 FROM season_metadata_translations t
+			WHERE t.season_metadata_id = sea.id 
+			AND (t.language = ? OR t.language LIKE ? || '%')
+		)
+		ORDER BY sea.id
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, exact, base)
+	if err != nil {
+		return nil, fmt.Errorf("query seasons without translation: %w", err)
+	}
+	defer rows.Close()
+
+	var results []ports.SeasonMetadataForTranslation
+	for rows.Next() {
+		var s ports.SeasonMetadataForTranslation
+		if err := rows.Scan(&s.ID, &s.SeasonNumber, &s.SeriesTMDBID); err != nil {
+			return nil, fmt.Errorf("scan season: %w", err)
+		}
+		results = append(results, s)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate seasons: %w", err)
+	}
+
+	return results, nil
+}
+
+// seasonLanguageParams returns the exact language and base language for fallback queries
+func seasonLanguageParams(lang string) (exact string, base string) {
+	if lang == "" {
+		return "en", "en"
+	}
+	if idx := strings.IndexAny(lang, "-_"); idx > 0 {
+		return lang, lang[:idx]
+	}
+	return lang, lang
 }
 
 // Ensure SQLiteSeasonMetadataRepository implements SeasonMetadataRepository

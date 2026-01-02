@@ -122,6 +122,69 @@ type TMDBEpisodeDetails struct {
 	VoteCount     int     `json:"vote_count"`
 }
 
+// TMDBCastMember represents a cast member from TMDB credits
+type TMDBCastMember struct {
+	ID          int    `json:"id"`
+	Name        string `json:"name"`
+	Character   string `json:"character"`
+	ProfilePath string `json:"profile_path"`
+	Order       int    `json:"order"`
+}
+
+// TMDBCrewMember represents a crew member from TMDB credits
+type TMDBCrewMember struct {
+	ID          int    `json:"id"`
+	Name        string `json:"name"`
+	Job         string `json:"job"`
+	Department  string `json:"department"`
+	ProfilePath string `json:"profile_path"`
+}
+
+// TMDBMovieCredits represents the full credits response from TMDB
+type TMDBMovieCredits struct {
+	ID   int              `json:"id"`
+	Cast []TMDBCastMember `json:"cast"`
+	Crew []TMDBCrewMember `json:"crew"`
+}
+
+// TMDBReleaseDate represents a release date entry within a country
+type TMDBReleaseDate struct {
+	Certification string `json:"certification"`
+	Type          int    `json:"type"` // 1=Premiere, 2=Theatrical (limited), 3=Theatrical, 4=Digital, 5=Physical, 6=TV
+	ReleaseDate   string `json:"release_date"`
+}
+
+// TMDBReleaseDateCountry represents release dates for a specific country
+type TMDBReleaseDateCountry struct {
+	ISO3166_1    string            `json:"iso_3166_1"`
+	ReleaseDates []TMDBReleaseDate `json:"release_dates"`
+}
+
+// TMDBReleaseDatesResponse represents the release dates API response
+type TMDBReleaseDatesResponse struct {
+	ID      int                      `json:"id"`
+	Results []TMDBReleaseDateCountry `json:"results"`
+}
+
+// TMDBSimilarMovie represents a similar movie from TMDB
+type TMDBSimilarMovie struct {
+	ID            int     `json:"id"`
+	Title         string  `json:"title"`
+	OriginalTitle string  `json:"original_title"`
+	PosterPath    string  `json:"poster_path"`
+	ReleaseDate   string  `json:"release_date"`
+	VoteAverage   float64 `json:"vote_average"`
+	Overview      string  `json:"overview"`
+}
+
+// TMDBSimilarMoviesResponse represents the similar movies API response
+type TMDBSimilarMoviesResponse struct {
+	Page         int                `json:"page"`
+	TotalPages   int                `json:"total_pages"`
+	TotalResults int                `json:"total_results"`
+	Results      []TMDBSimilarMovie `json:"results"`
+}
+
 // TMDBClient defines the interface for interacting with the TMDB API
 type TMDBClient interface {
 	// SearchMovie searches for movies by title, optionally filtering by year
@@ -147,4 +210,13 @@ type TMDBClient interface {
 
 	// GetImageURL constructs a full image URL from a TMDB image path
 	GetImageURL(path string, size string) string
+
+	// GetMovieCredits retrieves cast and crew for a movie
+	GetMovieCredits(ctx context.Context, movieID int) (*TMDBMovieCredits, error)
+
+	// GetMovieReleaseDates retrieves release dates and certifications for a movie
+	GetMovieReleaseDates(ctx context.Context, movieID int) (*TMDBReleaseDatesResponse, error)
+
+	// GetSimilarMovies retrieves similar movies for a given movie
+	GetSimilarMovies(ctx context.Context, movieID int, language string) (*TMDBSimilarMoviesResponse, error)
 }

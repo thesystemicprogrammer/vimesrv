@@ -10,6 +10,7 @@ const (
 	ImageTypeSeriesBackdrop = "series_backdrop"
 	ImageTypeSeasonPoster   = "season_poster"
 	ImageTypeEpisodeStill   = "episode_still"
+	ImageTypeProfile        = "profile"
 )
 
 // ImageDownloader defines the interface for downloading and caching images

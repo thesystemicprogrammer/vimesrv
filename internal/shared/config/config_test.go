@@ -1152,6 +1152,10 @@ func TestConfig_Validate(t *testing.T) {
 		RequestsPer10s:    35,
 	}
 
+	validLibraryConfig := LibraryConfig{
+		RecentlyAddedCount: 20,
+	}
+
 	tests := []struct {
 		name    string
 		config  Config
@@ -1167,6 +1171,7 @@ func TestConfig_Validate(t *testing.T) {
 				Database:    validDatabaseConfig,
 				Logging:     validLoggingConfig,
 				TMDB:        validTMDBConfig,
+				Library:     validLibraryConfig,
 			},
 			wantErr: false,
 		},
@@ -1183,6 +1188,7 @@ func TestConfig_Validate(t *testing.T) {
 					Enabled: false,
 					APIKey:  "", // Should not validate when disabled
 				},
+				Library: validLibraryConfig,
 			},
 			wantErr: false,
 		},
@@ -1196,6 +1202,7 @@ func TestConfig_Validate(t *testing.T) {
 				Database:    validDatabaseConfig,
 				Logging:     validLoggingConfig,
 				TMDB:        validTMDBConfig,
+				Library:     validLibraryConfig,
 			},
 			wantErr: true,
 		},
@@ -1209,6 +1216,7 @@ func TestConfig_Validate(t *testing.T) {
 				Database:    validDatabaseConfig,
 				Logging:     validLoggingConfig,
 				TMDB:        validTMDBConfig,
+				Library:     validLibraryConfig,
 			},
 			wantErr: true,
 		},
@@ -1222,6 +1230,7 @@ func TestConfig_Validate(t *testing.T) {
 				Database:    validDatabaseConfig,
 				Logging:     validLoggingConfig,
 				TMDB:        validTMDBConfig,
+				Library:     validLibraryConfig,
 			},
 			wantErr: true,
 		},
@@ -1235,6 +1244,7 @@ func TestConfig_Validate(t *testing.T) {
 				Database:    invalidDatabaseConfig,
 				Logging:     validLoggingConfig,
 				TMDB:        validTMDBConfig,
+				Library:     validLibraryConfig,
 			},
 			wantErr: true,
 		},
@@ -1248,6 +1258,7 @@ func TestConfig_Validate(t *testing.T) {
 				Database:    validDatabaseConfig,
 				Logging:     invalidLoggingConfig,
 				TMDB:        validTMDBConfig,
+				Library:     validLibraryConfig,
 			},
 			wantErr: true,
 		},
@@ -1261,6 +1272,7 @@ func TestConfig_Validate(t *testing.T) {
 				Database:    validDatabaseConfig,
 				Logging:     validLoggingConfig,
 				TMDB:        invalidTMDBConfig,
+				Library:     validLibraryConfig,
 			},
 			wantErr: true,
 		},

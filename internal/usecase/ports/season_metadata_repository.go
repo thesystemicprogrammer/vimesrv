@@ -6,6 +6,13 @@ import (
 	"github.com/thesystemicprogrammer/vimesrv/internal/domain"
 )
 
+// SeasonMetadataForTranslation contains info needed to fetch translations
+type SeasonMetadataForTranslation struct {
+	ID           int64
+	SeasonNumber int
+	SeriesTMDBID int // Needed for TMDB API call
+}
+
 // SeasonMetadataRepository defines the interface for season metadata persistence
 type SeasonMetadataRepository interface {
 	// Create inserts a new season metadata record
@@ -40,4 +47,7 @@ type SeasonMetadataRepository interface {
 
 	// UpsertTranslation creates or updates a translation
 	UpsertTranslation(ctx context.Context, translation *domain.SeasonMetadataTranslation) error
+
+	// ListIDsWithoutTranslation returns season metadata IDs that don't have a translation for the given language
+	ListIDsWithoutTranslation(ctx context.Context, language string) ([]SeasonMetadataForTranslation, error)
 }

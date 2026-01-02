@@ -192,3 +192,27 @@ func (repo *JobRepository) ResetStuckJob(ctx context.Context, jobID int64) error
 
 	return nil
 }
+
+// ExistsPendingJobByType checks if there's already a queued or running job of the given type
+// with a payload containing the specified language value
+func (repo *JobRepository) ExistsPendingJobByType(ctx context.Context, jobType string, language string) (bool, error) {
+	const query = `
+	SELECT EXISTS(
+		SELECT 1 FROM jobs
+		WHERE type = ?
+		AND status IN ('queued', 'running')
+		AND payload LIKE ?
+	)
+	`
+	// Build the LIKE pattern to match the language in JSON payload
+	likePattern := `%"language":"` + language + `"%`
+
+	var exists bool
+	err := repo.db.QueryRowContext(ctx, query, jobType, likePattern).Scan(&exists)
+	if err != nil {
+		logger.Error().Err(err).Str("jobType", jobType).Str("language", language).Msg("sql error checking for pending job")
+		return false, err
+	}
+
+	return exists, nil
+}

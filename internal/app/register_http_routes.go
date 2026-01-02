@@ -8,7 +8,7 @@ import (
 	"github.com/thesystemicprogrammer/vimesrv/web"
 )
 
-func registerHTTPHandlers(useCases *UseCases, httpServer *server.HTTPServer, cfg *config.Config) {
+func registerHTTPHandlers(useCases *UseCases, adapters *Adapters, httpServer *server.HTTPServer, cfg *config.Config) {
 	router := httpServer.Router()
 
 	// Register PWA (Angular frontend)
@@ -47,8 +47,21 @@ func registerHTTPHandlers(useCases *UseCases, httpServer *server.HTTPServer, cfg
 			useCases.LinkFromSearchUseCase,
 			useCases.SkipEnrichmentUseCase,
 			useCases.ResetEnrichmentUseCase,
+			useCases.EnqueueJobUseCase,
+			adapters.JobRepository,
 		)
 		metadataHandler.RegisterRoutes(apiGroup)
+
+		// Library Browsing API
+		libraryHandler := http.NewLibraryHandler(
+			useCases.ListMoviesUseCase,
+			useCases.GetMovieUseCase,
+			useCases.ListSeriesUseCase,
+			useCases.GetSeriesUseCase,
+			useCases.ListRecentUseCase,
+			useCases.ListUnmatchedUseCase,
+		)
+		libraryHandler.RegisterRoutes(apiGroup)
 	}
 
 	// === Protected Streaming Routes ===

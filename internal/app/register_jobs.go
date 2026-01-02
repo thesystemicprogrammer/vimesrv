@@ -21,4 +21,16 @@ func registerJobs(useCases *UseCases, adapters *Adapters) {
 		enrichMetadataJobHandler := metadata.NewEnrichMetadataJobHandler(useCases.EnrichMediaFileUseCase)
 		adapters.HandlerRegistry.Register(shared.JobTypeEnrichMetadata, enrichMetadataJobHandler)
 	}
+
+	// Fetch Translations (only if TMDB is enabled)
+	if adapters.TMDBClient != nil {
+		fetchTranslationsJobHandler := metadata.NewFetchTranslationsJobHandler(
+			adapters.MovieMetadataRepository,
+			adapters.SeriesMetadataRepository,
+			adapters.SeasonMetadataRepository,
+			adapters.EpisodeMetadataRepository,
+			adapters.TMDBClient,
+		)
+		adapters.HandlerRegistry.Register(shared.JobTypeFetchTranslations, fetchTranslationsJobHandler)
+	}
 }

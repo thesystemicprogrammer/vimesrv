@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/thesystemicprogrammer/vimesrv/internal/domain"
@@ -398,6 +399,54 @@ func (r *SQLiteMovieMetadataRepository) UpsertTranslation(ctx context.Context, t
 	translation.UpdatedAt = now
 
 	return nil
+}
+
+// ListIDsWithoutTranslation returns movie metadata IDs that don't have a translation for the given language
+func (r *SQLiteMovieMetadataRepository) ListIDsWithoutTranslation(ctx context.Context, language string) ([]ports.MovieMetadataForTranslation, error) {
+	exact, base := movieLanguageParams(language)
+
+	query := `
+		SELECT mm.id, mm.tmdb_id, mm.original_title
+		FROM movie_metadata mm
+		WHERE NOT EXISTS (
+			SELECT 1 FROM movie_metadata_translations t
+			WHERE t.movie_metadata_id = mm.id 
+			AND (t.language = ? OR t.language LIKE ? || '%')
+		)
+		ORDER BY mm.id
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, exact, base)
+	if err != nil {
+		return nil, fmt.Errorf("query movies without translation: %w", err)
+	}
+	defer rows.Close()
+
+	var results []ports.MovieMetadataForTranslation
+	for rows.Next() {
+		var m ports.MovieMetadataForTranslation
+		if err := rows.Scan(&m.ID, &m.TMDBID, &m.OriginalTitle); err != nil {
+			return nil, fmt.Errorf("scan movie: %w", err)
+		}
+		results = append(results, m)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate movies: %w", err)
+	}
+
+	return results, nil
+}
+
+// movieLanguageParams returns the exact language and base language for fallback queries
+func movieLanguageParams(lang string) (exact string, base string) {
+	if lang == "" {
+		return "en", "en"
+	}
+	if idx := strings.IndexAny(lang, "-_"); idx > 0 {
+		return lang, lang[:idx]
+	}
+	return lang, lang
 }
 
 // Ensure SQLiteMovieMetadataRepository implements MovieMetadataRepository

@@ -171,6 +171,9 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("tmdb.poster_size", "w500")
 	v.SetDefault("tmdb.backdrop_size", "w1280")
 	v.SetDefault("tmdb.requests_per_10s", 35)
+
+	// Library defaults
+	v.SetDefault("library.recently_added_count", 20)
 }
 
 // bindEnvVars binds environment variables to viper keys
@@ -208,6 +211,9 @@ func bindEnvVars(v *viper.Viper) {
 	v.BindEnv("tmdb.poster_size", "TMDB_POSTER_SIZE")
 	v.BindEnv("tmdb.backdrop_size", "TMDB_BACKDROP_SIZE")
 	v.BindEnv("tmdb.requests_per_10s", "TMDB_REQUESTS_PER_10S")
+
+	// Library
+	v.BindEnv("library.recently_added_count", "LIBRARY_RECENTLY_ADDED_COUNT")
 }
 
 func normalizePathsToAbsolute(cfg *Config) error {

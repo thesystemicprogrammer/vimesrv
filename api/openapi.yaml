@@ -19,7 +19,7 @@ tags:
   - name: Metadata
     description: TMDB metadata enrichment
   - name: Library
-    description: Library scanning
+    description: Library scanning and browsing
   - name: Streaming
     description: DASH streaming endpoints
 
@@ -323,6 +323,212 @@ components:
       properties:
         data:
           type: object
+
+    # Library Browsing Schemas
+    MovieSummary:
+      type: object
+      properties:
+        media_id:
+          type: string
+        duration:
+          type: integer
+        resolution:
+          type: string
+        status:
+          type: string
+        enrichment_status:
+          type: string
+        created_at:
+          type: string
+        transcode_status:
+          type: string
+          enum: [none, pending, completed]
+        movie_metadata_id:
+          type: integer
+          format: int64
+        title:
+          type: string
+        year:
+          type: string
+        poster_path:
+          type: string
+        backdrop_path:
+          type: string
+        vote_average:
+          type: number
+        genres:
+          type: string
+
+    SeriesSummary:
+      type: object
+      properties:
+        series_metadata_id:
+          type: integer
+          format: int64
+        tmdb_id:
+          type: integer
+        name:
+          type: string
+        year:
+          type: string
+        poster_path:
+          type: string
+        backdrop_path:
+          type: string
+        vote_average:
+          type: number
+        genres:
+          type: string
+        number_of_seasons:
+          type: integer
+        number_of_episodes:
+          type: integer
+        available_episodes:
+          type: integer
+
+    EpisodeSummary:
+      type: object
+      properties:
+        media_id:
+          type: string
+        duration:
+          type: integer
+        status:
+          type: string
+        transcode_status:
+          type: string
+        episode_metadata_id:
+          type: integer
+          format: int64
+        season_number:
+          type: integer
+        episode_number:
+          type: integer
+        name:
+          type: string
+        overview:
+          type: string
+        air_date:
+          type: string
+        still_path:
+          type: string
+        vote_average:
+          type: number
+
+    SeasonSummary:
+      type: object
+      properties:
+        season_metadata_id:
+          type: integer
+          format: int64
+        season_number:
+          type: integer
+        name:
+          type: string
+        overview:
+          type: string
+        poster_path:
+          type: string
+        air_date:
+          type: string
+        episode_count:
+          type: integer
+        episodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/EpisodeSummary'
+
+    SeriesDetail:
+      allOf:
+        - $ref: '#/components/schemas/SeriesSummary'
+        - type: object
+          properties:
+            overview:
+              type: string
+            seasons:
+              type: array
+              items:
+                $ref: '#/components/schemas/SeasonSummary'
+
+    UnmatchedMediaSummary:
+      type: object
+      properties:
+        media_id:
+          type: string
+        filename:
+          type: string
+        title:
+          type: string
+        duration:
+          type: integer
+        resolution:
+          type: string
+        enrichment_status:
+          type: string
+        created_at:
+          type: string
+
+    MoviesListResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/MovieSummary'
+            total:
+              type: integer
+            page:
+              type: integer
+            per_page:
+              type: integer
+
+    SeriesListResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/SeriesSummary'
+
+    SeriesDetailResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/SeriesDetail'
+
+    RecentListResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/MovieSummary'
+
+    UnmatchedListResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/UnmatchedMediaSummary'
+            total:
+              type: integer
+            page:
+              type: integer
+            per_page:
+              type: integer
 
 paths:
   /api/v1/auth/login:
@@ -673,6 +879,216 @@ paths:
                 $ref: '#/components/schemas/Error'
         '503':
           description: TMDB integration disabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/library/movies:
+    get:
+      tags: [Library]
+      summary: List movies
+      description: Returns a paginated list of movies with metadata
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: lang
+          in: query
+          description: Language for metadata translations
+          schema:
+            type: string
+            default: en
+      responses:
+        '200':
+          description: Movies list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MoviesListResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/library/movies/{id}:
+    get:
+      tags: [Library]
+      summary: Get movie details
+      description: Returns detailed information about a specific movie with metadata
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Media file ID
+          schema:
+            type: string
+        - name: lang
+          in: query
+          description: Language for metadata translations
+          schema:
+            type: string
+            default: en
+      responses:
+        '200':
+          description: Movie details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/MovieSummary'
+        '404':
+          description: Movie not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/library/series:
+    get:
+      tags: [Library]
+      summary: List series
+      description: Returns a list of series with metadata
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: lang
+          in: query
+          description: Language for metadata translations
+          schema:
+            type: string
+            default: en
+        - name: include_empty
+          in: query
+          description: Include series with no available episodes
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Series list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeriesListResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/library/series/{id}:
+    get:
+      tags: [Library]
+      summary: Get series details
+      description: Returns detailed information about a series with all seasons and episodes
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Series metadata ID
+          schema:
+            type: integer
+            format: int64
+        - name: lang
+          in: query
+          description: Language for metadata translations
+          schema:
+            type: string
+            default: en
+      responses:
+        '200':
+          description: Series details with seasons and episodes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeriesDetailResponse'
+        '400':
+          description: Invalid series ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Series not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/library/recent:
+    get:
+      tags: [Library]
+      summary: List recently added
+      description: Returns recently added movies and episodes
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: lang
+          in: query
+          description: Language for metadata translations
+          schema:
+            type: string
+            default: en
+      responses:
+        '200':
+          description: Recently added media
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecentListResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/library/unmatched:
+    get:
+      tags: [Library]
+      summary: List unmatched media
+      description: Returns media files without linked metadata
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Unmatched media list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnmatchedListResponse'
+        '401':
+          description: Unauthorized
           content:
             application/json:
               schema:

@@ -6,6 +6,13 @@ import (
 	"github.com/thesystemicprogrammer/vimesrv/internal/domain"
 )
 
+// MovieMetadataForTranslation contains info needed to fetch translations
+type MovieMetadataForTranslation struct {
+	ID            int64
+	TMDBID        int
+	OriginalTitle string
+}
+
 // MovieMetadataRepository defines the interface for movie metadata persistence
 type MovieMetadataRepository interface {
 	// Create inserts a new movie metadata record
@@ -37,4 +44,7 @@ type MovieMetadataRepository interface {
 
 	// UpsertTranslation creates or updates a translation
 	UpsertTranslation(ctx context.Context, translation *domain.MovieMetadataTranslation) error
+
+	// ListIDsWithoutTranslation returns movie metadata IDs that don't have a translation for the given language
+	ListIDsWithoutTranslation(ctx context.Context, language string) ([]MovieMetadataForTranslation, error)
 }

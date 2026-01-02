@@ -1,0 +1,178 @@
+package ports
+
+import (
+	"context"
+)
+
+// MovieSummary represents a movie with its metadata for library display
+type MovieSummary struct {
+	// Media file info
+	MediaID          string `json:"media_id"`
+	Duration         int    `json:"duration"`
+	Resolution       string `json:"resolution"`
+	Status           string `json:"status"`            // ready, processing, error
+	EnrichmentStatus string `json:"enrichment_status"` // linked, auto_linked, etc.
+	CreatedAt        string `json:"created_at"`
+
+	// Transcode status
+	TranscodeStatus string `json:"transcode_status"` // none, pending, completed
+
+	// Movie metadata (if linked)
+	MovieMetadataID *int64  `json:"movie_metadata_id,omitempty"`
+	Title           string  `json:"title"`          // From translation or original_title
+	Year            string  `json:"year,omitempty"` // Extracted from release_date
+	PosterPath      string  `json:"poster_path,omitempty"`
+	BackdropPath    string  `json:"backdrop_path,omitempty"`
+	VoteAverage     float64 `json:"vote_average"`
+	Genres          string  `json:"genres,omitempty"` // Comma-separated
+}
+
+// CreditPerson represents a cast or crew member for display
+type CreditPerson struct {
+	ID           int64  `json:"id"`
+	TMDBPersonID int    `json:"tmdb_person_id"`
+	Name         string `json:"name"`
+	Character    string `json:"character,omitempty"` // For cast
+	Job          string `json:"job,omitempty"`       // For crew
+	ProfilePath  string `json:"profile_path,omitempty"`
+}
+
+// MovieDetail represents a movie with full details including credits and certifications
+type MovieDetail struct {
+	MovieSummary
+
+	// Extended metadata
+	OriginalTitle string `json:"original_title,omitempty"`
+	Tagline       string `json:"tagline,omitempty"`
+	Overview      string `json:"overview,omitempty"`
+	ReleaseDate   string `json:"release_date,omitempty"`
+	Runtime       int    `json:"runtime,omitempty"`
+	MovieStatus   string `json:"movie_status,omitempty"` // Released, Post Production, etc.
+	IMDbID        string `json:"imdb_id,omitempty"`
+	TMDBID        int    `json:"tmdb_id,omitempty"`
+
+	// Certification for user's locale
+	Certification string `json:"certification,omitempty"`
+
+	// Credits
+	Cast      []CreditPerson `json:"cast,omitempty"`
+	Directors []CreditPerson `json:"directors,omitempty"`
+	Crew      []CreditPerson `json:"crew,omitempty"` // Other notable crew
+}
+
+// SeriesSummary represents a series with summary info for library display
+type SeriesSummary struct {
+	SeriesMetadataID  int64   `json:"series_metadata_id"`
+	TMDBID            int     `json:"tmdb_id"`
+	Name              string  `json:"name"`           // From translation or original_name
+	Year              string  `json:"year,omitempty"` // Extracted from first_air_date
+	PosterPath        string  `json:"poster_path,omitempty"`
+	BackdropPath      string  `json:"backdrop_path,omitempty"`
+	VoteAverage       float64 `json:"vote_average"`
+	Genres            string  `json:"genres,omitempty"` // Comma-separated
+	NumberOfSeasons   int     `json:"number_of_seasons"`
+	NumberOfEpisodes  int     `json:"number_of_episodes"`
+	AvailableEpisodes int     `json:"available_episodes"` // Count of linked media files
+}
+
+// EpisodeSummary represents an episode with its metadata and media file info
+type EpisodeSummary struct {
+	// Media file info (if available)
+	MediaID         *string `json:"media_id,omitempty"`
+	Duration        int     `json:"duration"`
+	Status          string  `json:"status,omitempty"`
+	TranscodeStatus string  `json:"transcode_status,omitempty"`
+
+	// Episode metadata
+	EpisodeMetadataID int64   `json:"episode_metadata_id"`
+	SeasonNumber      int     `json:"season_number"`
+	EpisodeNumber     int     `json:"episode_number"`
+	Name              string  `json:"name"`
+	Overview          string  `json:"overview,omitempty"`
+	AirDate           string  `json:"air_date,omitempty"`
+	StillPath         string  `json:"still_path,omitempty"`
+	VoteAverage       float64 `json:"vote_average"`
+}
+
+// SeasonSummary represents a season with its episodes
+type SeasonSummary struct {
+	SeasonMetadataID int64            `json:"season_metadata_id"`
+	SeasonNumber     int              `json:"season_number"`
+	Name             string           `json:"name"`
+	Overview         string           `json:"overview,omitempty"`
+	PosterPath       string           `json:"poster_path,omitempty"`
+	AirDate          string           `json:"air_date,omitempty"`
+	EpisodeCount     int              `json:"episode_count"`
+	Episodes         []EpisodeSummary `json:"episodes,omitempty"`
+}
+
+// SeriesDetail represents a full series with seasons and episodes for detail view
+type SeriesDetail struct {
+	SeriesSummary
+	Overview string          `json:"overview,omitempty"`
+	Seasons  []SeasonSummary `json:"seasons,omitempty"`
+}
+
+// UnmatchedMediaSummary represents a media file without metadata
+type UnmatchedMediaSummary struct {
+	MediaID          string `json:"media_id"`
+	Filename         string `json:"filename"`
+	Title            string `json:"title"`
+	Duration         int    `json:"duration"`
+	Resolution       string `json:"resolution"`
+	EnrichmentStatus string `json:"enrichment_status"`
+	CreatedAt        string `json:"created_at"`
+}
+
+// RecentlyAddedItem represents a recently added item (movie or season) for display
+// Movies are returned as individual items, episodes are grouped by season
+type RecentlyAddedItem struct {
+	// Type discriminator: "movie" or "season"
+	Type string `json:"type"`
+
+	// Common fields
+	Title        string  `json:"title"`
+	Year         string  `json:"year,omitempty"`
+	PosterPath   string  `json:"poster_path,omitempty"`
+	BackdropPath string  `json:"backdrop_path,omitempty"`
+	VoteAverage  float64 `json:"vote_average"`
+	CreatedAt    string  `json:"created_at"` // Most recent addition time
+
+	// Movie-specific fields (when Type == "movie")
+	MediaID         string `json:"media_id,omitempty"`
+	MovieMetadataID *int64 `json:"movie_metadata_id,omitempty"`
+	TranscodeStatus string `json:"transcode_status,omitempty"`
+
+	// Season-specific fields (when Type == "season")
+	SeriesMetadataID *int64 `json:"series_metadata_id,omitempty"`
+	SeasonNumber     *int   `json:"season_number,omitempty"`
+	EpisodeCount     int    `json:"episode_count,omitempty"` // Number of episodes added
+}
+
+// LibraryRepository provides library-focused queries that join media files with metadata
+type LibraryRepository interface {
+	// ListMovies returns movies with their metadata, sorted by most recently added
+	// language is used to select the appropriate translation (e.g., "en", "de")
+	ListMovies(ctx context.Context, language string, limit, offset int) ([]MovieSummary, int, error)
+
+	// GetMovie returns a single movie with full details
+	GetMovie(ctx context.Context, mediaID string, language string) (*MovieSummary, error)
+
+	// GetMovieDetail returns a movie with full details including credits and certification
+	GetMovieDetail(ctx context.Context, mediaID string, language string, maxCast int) (*MovieDetail, error)
+
+	// ListSeries returns series with summary info, sorted by name
+	// Only returns series that have at least one linked episode (or all if includeEmpty is true)
+	ListSeries(ctx context.Context, language string, includeEmpty bool) ([]SeriesSummary, error)
+
+	// GetSeriesDetail returns a series with all seasons and episodes
+	GetSeriesDetail(ctx context.Context, seriesID int64, language string) (*SeriesDetail, error)
+
+	// ListRecentlyAdded returns the most recently added media (movies and seasons)
+	// Movies are returned as individual items, episodes are grouped by season
+	// Returns items sorted by most recent addition descending
+	ListRecentlyAdded(ctx context.Context, language string, limit int) ([]RecentlyAddedItem, error)
+
+	// ListUnmatched returns media files that don't have metadata linked
+	ListUnmatched(ctx context.Context, limit, offset int) ([]UnmatchedMediaSummary, int, error)
+}

@@ -385,5 +385,55 @@ func (c *TMDBHTTPClient) GetImageURL(path string, size string) string {
 	return fmt.Sprintf("%s/%s%s", tmdbImageBaseURL, size, path)
 }
 
+// GetMovieCredits retrieves cast and crew for a movie
+func (c *TMDBHTTPClient) GetMovieCredits(ctx context.Context, movieID int) (*ports.TMDBMovieCredits, error) {
+	body, err := c.doRequest(ctx, fmt.Sprintf("/movie/%d/credits", movieID), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var credits ports.TMDBMovieCredits
+	if err := json.Unmarshal(body, &credits); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+
+	return &credits, nil
+}
+
+// GetMovieReleaseDates retrieves release dates and certifications for a movie
+func (c *TMDBHTTPClient) GetMovieReleaseDates(ctx context.Context, movieID int) (*ports.TMDBReleaseDatesResponse, error) {
+	body, err := c.doRequest(ctx, fmt.Sprintf("/movie/%d/release_dates", movieID), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var response ports.TMDBReleaseDatesResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+
+	return &response, nil
+}
+
+// GetSimilarMovies retrieves similar movies for a given movie
+func (c *TMDBHTTPClient) GetSimilarMovies(ctx context.Context, movieID int, language string) (*ports.TMDBSimilarMoviesResponse, error) {
+	params := url.Values{}
+	if language != "" {
+		params.Set("language", language)
+	}
+
+	body, err := c.doRequest(ctx, fmt.Sprintf("/movie/%d/similar", movieID), params)
+	if err != nil {
+		return nil, err
+	}
+
+	var response ports.TMDBSimilarMoviesResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+
+	return &response, nil
+}
+
 // Ensure TMDBHTTPClient implements TMDBClient
 var _ ports.TMDBClient = (*TMDBHTTPClient)(nil)

@@ -166,6 +166,27 @@ func TestRegexFilenameParser_Parse(t *testing.T) {
 			expectedQual:   "720p",
 		},
 
+		// Series with year in filename
+		{
+			name:           "Series with year before season/episode",
+			filename:       "IT_Welcome_To_Derry_2025_S01_E02.mp4",
+			expectedTitle:  "IT Welcome To Derry",
+			expectedYear:   2025,
+			expectedSeason: 1,
+			expectedEp:     2,
+			expectedSeries: true,
+		},
+		{
+			name:           "Series with year dots format",
+			filename:       "House.of.the.Dragon.2022.S02E05.1080p.mkv",
+			expectedTitle:  "House of the Dragon",
+			expectedYear:   2022,
+			expectedSeason: 2,
+			expectedEp:     5,
+			expectedSeries: true,
+			expectedQual:   "1080p",
+		},
+
 		// Edge cases
 		{
 			name:          "Movie with numbers in title",

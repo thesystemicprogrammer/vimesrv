@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/thesystemicprogrammer/vimesrv/internal/domain"
@@ -341,6 +342,57 @@ func (r *SQLiteEpisodeMetadataRepository) UpsertTranslation(ctx context.Context,
 	translation.UpdatedAt = now
 
 	return nil
+}
+
+// ListIDsWithoutTranslation returns episode metadata IDs that don't have a translation for the given language
+func (r *SQLiteEpisodeMetadataRepository) ListIDsWithoutTranslation(ctx context.Context, language string) ([]ports.EpisodeMetadataForTranslation, error) {
+	exact, base := episodeLanguageParams(language)
+
+	// Join with season_metadata and series_metadata to get season_number and series tmdb_id
+	query := `
+		SELECT ep.id, ep.episode_number, sea.season_number, ser.tmdb_id
+		FROM episode_metadata ep
+		JOIN season_metadata sea ON ep.season_id = sea.id
+		JOIN series_metadata ser ON sea.series_id = ser.id
+		WHERE NOT EXISTS (
+			SELECT 1 FROM episode_metadata_translations t
+			WHERE t.episode_metadata_id = ep.id 
+			AND (t.language = ? OR t.language LIKE ? || '%')
+		)
+		ORDER BY ep.id
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, exact, base)
+	if err != nil {
+		return nil, fmt.Errorf("query episodes without translation: %w", err)
+	}
+	defer rows.Close()
+
+	var results []ports.EpisodeMetadataForTranslation
+	for rows.Next() {
+		var e ports.EpisodeMetadataForTranslation
+		if err := rows.Scan(&e.ID, &e.EpisodeNumber, &e.SeasonNumber, &e.SeriesTMDBID); err != nil {
+			return nil, fmt.Errorf("scan episode: %w", err)
+		}
+		results = append(results, e)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate episodes: %w", err)
+	}
+
+	return results, nil
+}
+
+// episodeLanguageParams returns the exact language and base language for fallback queries
+func episodeLanguageParams(lang string) (exact string, base string) {
+	if lang == "" {
+		return "en", "en"
+	}
+	if idx := strings.IndexAny(lang, "-_"); idx > 0 {
+		return lang, lang[:idx]
+	}
+	return lang, lang
 }
 
 // Ensure SQLiteEpisodeMetadataRepository implements EpisodeMetadataRepository

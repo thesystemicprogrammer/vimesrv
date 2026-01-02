@@ -15,4 +15,7 @@ type JobRepository interface {
 	MarkDead(ctx context.Context, jobID int64, lastErr string) error
 	FindStuckJobs(ctx context.Context, threshold time.Duration) ([]*domain.Job, error)
 	ResetStuckJob(ctx context.Context, jobID int64) error
+	// ExistsPendingJobByType checks if there's already a queued or running job of the given type
+	// with a payload containing the specified language value
+	ExistsPendingJobByType(ctx context.Context, jobType string, language string) (bool, error)
 }

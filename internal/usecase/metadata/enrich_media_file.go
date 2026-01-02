@@ -33,16 +33,18 @@ type EnrichMediaFileOutput struct {
 
 // EnrichMediaFileUseCase orchestrates the metadata enrichment process for a media file
 type EnrichMediaFileUseCase struct {
-	config                      config.TMDBConfig
-	filenameParser              ports.FilenameParser
-	tmdbClient                  ports.TMDBClient
-	imageDownloader             ports.ImageDownloader
-	mediaRepository             ports.MediaRepository
-	movieMetadataRepository     ports.MovieMetadataRepository
-	seriesMetadataRepository    ports.SeriesMetadataRepository
-	seasonMetadataRepository    ports.SeasonMetadataRepository
-	episodeMetadataRepository   ports.EpisodeMetadataRepository
-	metadataCandidateRepository ports.MetadataCandidateRepository
+	config                       config.TMDBConfig
+	filenameParser               ports.FilenameParser
+	tmdbClient                   ports.TMDBClient
+	imageDownloader              ports.ImageDownloader
+	mediaRepository              ports.MediaRepository
+	movieMetadataRepository      ports.MovieMetadataRepository
+	seriesMetadataRepository     ports.SeriesMetadataRepository
+	seasonMetadataRepository     ports.SeasonMetadataRepository
+	episodeMetadataRepository    ports.EpisodeMetadataRepository
+	metadataCandidateRepository  ports.MetadataCandidateRepository
+	movieCreditRepository        ports.MovieCreditRepository
+	movieCertificationRepository ports.MovieCertificationRepository
 }
 
 // NewEnrichMediaFileUseCase creates a new instance of EnrichMediaFileUseCase
@@ -57,18 +59,22 @@ func NewEnrichMediaFileUseCase(
 	seasonMetadataRepository ports.SeasonMetadataRepository,
 	episodeMetadataRepository ports.EpisodeMetadataRepository,
 	metadataCandidateRepository ports.MetadataCandidateRepository,
+	movieCreditRepository ports.MovieCreditRepository,
+	movieCertificationRepository ports.MovieCertificationRepository,
 ) *EnrichMediaFileUseCase {
 	return &EnrichMediaFileUseCase{
-		config:                      config,
-		filenameParser:              filenameParser,
-		tmdbClient:                  tmdbClient,
-		imageDownloader:             imageDownloader,
-		mediaRepository:             mediaRepository,
-		movieMetadataRepository:     movieMetadataRepository,
-		seriesMetadataRepository:    seriesMetadataRepository,
-		seasonMetadataRepository:    seasonMetadataRepository,
-		episodeMetadataRepository:   episodeMetadataRepository,
-		metadataCandidateRepository: metadataCandidateRepository,
+		config:                       config,
+		filenameParser:               filenameParser,
+		tmdbClient:                   tmdbClient,
+		imageDownloader:              imageDownloader,
+		mediaRepository:              mediaRepository,
+		movieMetadataRepository:      movieMetadataRepository,
+		seriesMetadataRepository:     seriesMetadataRepository,
+		seasonMetadataRepository:     seasonMetadataRepository,
+		episodeMetadataRepository:    episodeMetadataRepository,
+		metadataCandidateRepository:  metadataCandidateRepository,
+		movieCreditRepository:        movieCreditRepository,
+		movieCertificationRepository: movieCertificationRepository,
 	}
 }
 
@@ -419,6 +425,16 @@ func (uc *EnrichMediaFileUseCase) autoLinkMovie(ctx context.Context, media *doma
 			return nil, fmt.Errorf("failed to create movie translation: %w", err)
 		}
 
+		// Fetch and store movie credits
+		if err := uc.fetchAndStoreMovieCredits(ctx, movieMetadata.ID, candidate.TMDBID); err != nil {
+			logger.Warn().Err(err).Int("tmdb_id", candidate.TMDBID).Msg("Failed to fetch movie credits")
+		}
+
+		// Fetch and store movie certifications
+		if err := uc.fetchAndStoreCertifications(ctx, movieMetadata.ID, candidate.TMDBID); err != nil {
+			logger.Warn().Err(err).Int("tmdb_id", candidate.TMDBID).Msg("Failed to fetch movie certifications")
+		}
+
 		logger.Debug().
 			Int64("movie_id", movieMetadata.ID).
 			Int("tmdb_id", candidate.TMDBID).
@@ -628,6 +644,15 @@ func (uc *EnrichMediaFileUseCase) getOrCreateSeriesMetadata(ctx context.Context,
 	series.Networks = networks
 
 	if err := uc.seriesMetadataRepository.Create(ctx, series); err != nil {
+		// Handle race condition: if another worker created the series concurrently,
+		// fetch and return the existing record instead of failing
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			existing, fetchErr := uc.seriesMetadataRepository.GetByTMDBID(ctx, details.ID)
+			if fetchErr != nil {
+				return nil, fmt.Errorf("failed to fetch series after concurrent create: %w", fetchErr)
+			}
+			return existing, nil
+		}
 		return nil, fmt.Errorf("failed to create series metadata: %w", err)
 	}
 
@@ -658,6 +683,15 @@ func (uc *EnrichMediaFileUseCase) getOrCreateSeasonMetadata(ctx context.Context,
 	season.EpisodeCount = len(details.Episodes)
 
 	if err := uc.seasonMetadataRepository.Create(ctx, season); err != nil {
+		// Handle race condition: if another worker created the season concurrently,
+		// fetch and return the existing record instead of failing
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			existing, fetchErr := uc.seasonMetadataRepository.GetBySeriesAndNumber(ctx, seriesID, details.SeasonNumber)
+			if fetchErr != nil {
+				return nil, fmt.Errorf("failed to fetch season after concurrent create: %w", fetchErr)
+			}
+			return existing, nil
+		}
 		return nil, fmt.Errorf("failed to create season metadata: %w", err)
 	}
 
@@ -696,6 +730,15 @@ func (uc *EnrichMediaFileUseCase) getOrCreateEpisodeMetadata(ctx context.Context
 	episode.VoteCount = details.VoteCount
 
 	if err := uc.episodeMetadataRepository.Create(ctx, episode); err != nil {
+		// Handle race condition: if another worker created the episode concurrently,
+		// fetch and return the existing record instead of failing
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			existing, fetchErr := uc.episodeMetadataRepository.GetBySeasonAndNumber(ctx, seasonID, episodeNumber)
+			if fetchErr != nil {
+				return nil, fmt.Errorf("failed to fetch episode after concurrent create: %w", fetchErr)
+			}
+			return existing, nil
+		}
 		return nil, fmt.Errorf("failed to create episode metadata: %w", err)
 	}
 
@@ -910,4 +953,140 @@ func abs(x int) int {
 		return -x
 	}
 	return x
+}
+
+// fetchAndStoreMovieCredits fetches cast and crew from TMDB and stores them
+func (uc *EnrichMediaFileUseCase) fetchAndStoreMovieCredits(ctx context.Context, movieMetadataID int64, tmdbID int) error {
+	credits, err := uc.tmdbClient.GetMovieCredits(ctx, tmdbID)
+	if err != nil {
+		return fmt.Errorf("failed to get movie credits: %w", err)
+	}
+
+	var creditsToStore []*domain.MovieCredit
+
+	// Store top N cast members based on config
+	maxCast := uc.config.MaxCastMembers
+	if maxCast <= 0 {
+		maxCast = 10 // Default
+	}
+	castCount := min(len(credits.Cast), maxCast)
+	for i := 0; i < castCount; i++ {
+		cast := credits.Cast[i]
+		credit := domain.NewCastCredit(
+			movieMetadataID,
+			cast.ID,
+			cast.Name,
+			cast.Character,
+			cast.ProfilePath,
+			cast.Order,
+		)
+		creditsToStore = append(creditsToStore, credit)
+
+		// Download profile image if configured
+		if uc.config.DownloadImages && uc.imageDownloader != nil && cast.ProfilePath != "" {
+			if _, err := uc.imageDownloader.DownloadImage(ctx, cast.ProfilePath, ports.ImageTypeProfile, cast.ID); err != nil {
+				logger.Debug().Err(err).Int("person_id", cast.ID).Msg("Failed to download profile image")
+			}
+		}
+	}
+
+	// Store key crew members based on defined roles and limits
+	crewCounts := make(map[string]int)
+	for _, crew := range credits.Crew {
+		maxForJob, isRelevant := domain.MaxCrewPerJob[crew.Job]
+		if !isRelevant {
+			continue
+		}
+
+		if crewCounts[crew.Job] >= maxForJob {
+			continue
+		}
+
+		credit := domain.NewCrewCredit(
+			movieMetadataID,
+			crew.ID,
+			crew.Name,
+			crew.Job,
+			crew.Department,
+			crew.ProfilePath,
+		)
+		creditsToStore = append(creditsToStore, credit)
+		crewCounts[crew.Job]++
+
+		// Download profile image if configured
+		if uc.config.DownloadImages && uc.imageDownloader != nil && crew.ProfilePath != "" {
+			if _, err := uc.imageDownloader.DownloadImage(ctx, crew.ProfilePath, ports.ImageTypeProfile, crew.ID); err != nil {
+				logger.Debug().Err(err).Int("person_id", crew.ID).Msg("Failed to download profile image")
+			}
+		}
+	}
+
+	if len(creditsToStore) == 0 {
+		return nil
+	}
+
+	if err := uc.movieCreditRepository.CreateBatch(ctx, creditsToStore); err != nil {
+		return fmt.Errorf("failed to store movie credits: %w", err)
+	}
+
+	logger.Debug().
+		Int64("movie_id", movieMetadataID).
+		Int("cast_count", castCount).
+		Int("crew_count", len(creditsToStore)-castCount).
+		Msg("Stored movie credits")
+
+	return nil
+}
+
+// fetchAndStoreCertifications fetches release dates/certifications from TMDB and stores them
+func (uc *EnrichMediaFileUseCase) fetchAndStoreCertifications(ctx context.Context, movieMetadataID int64, tmdbID int) error {
+	releaseDates, err := uc.tmdbClient.GetMovieReleaseDates(ctx, tmdbID)
+	if err != nil {
+		return fmt.Errorf("failed to get movie release dates: %w", err)
+	}
+
+	var certsToStore []*domain.MovieCertification
+	seenCountries := make(map[string]bool)
+
+	for _, country := range releaseDates.Results {
+		// Skip if we already have a certification for this country
+		if seenCountries[country.ISO3166_1] {
+			continue
+		}
+
+		// Find the first non-empty certification for this country
+		// Prefer theatrical releases (type 3) but accept any
+		var certification string
+		for _, rd := range country.ReleaseDates {
+			if rd.Certification != "" {
+				certification = rd.Certification
+				if rd.Type == 3 { // Theatrical release
+					break
+				}
+			}
+		}
+
+		if certification == "" {
+			continue
+		}
+
+		cert := domain.NewMovieCertification(movieMetadataID, country.ISO3166_1, certification)
+		certsToStore = append(certsToStore, cert)
+		seenCountries[country.ISO3166_1] = true
+	}
+
+	if len(certsToStore) == 0 {
+		return nil
+	}
+
+	if err := uc.movieCertificationRepository.CreateBatch(ctx, certsToStore); err != nil {
+		return fmt.Errorf("failed to store movie certifications: %w", err)
+	}
+
+	logger.Debug().
+		Int64("movie_id", movieMetadataID).
+		Int("certification_count", len(certsToStore)).
+		Msg("Stored movie certifications")
+
+	return nil
 }

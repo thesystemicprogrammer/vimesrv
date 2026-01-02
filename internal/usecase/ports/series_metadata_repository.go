@@ -6,6 +6,13 @@ import (
 	"github.com/thesystemicprogrammer/vimesrv/internal/domain"
 )
 
+// SeriesMetadataForTranslation contains info needed to fetch translations
+type SeriesMetadataForTranslation struct {
+	ID           int64
+	TMDBID       int
+	OriginalName string
+}
+
 // SeriesMetadataRepository defines the interface for series metadata persistence
 type SeriesMetadataRepository interface {
 	// Create inserts a new series metadata record
@@ -40,4 +47,7 @@ type SeriesMetadataRepository interface {
 
 	// UpsertTranslation creates or updates a translation
 	UpsertTranslation(ctx context.Context, translation *domain.SeriesMetadataTranslation) error
+
+	// ListIDsWithoutTranslation returns series metadata IDs that don't have a translation for the given language
+	ListIDsWithoutTranslation(ctx context.Context, language string) ([]SeriesMetadataForTranslation, error)
 }

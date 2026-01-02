@@ -15,6 +15,7 @@ type Config struct {
 	Database    DatabaseConfig    `mapstructure:"database"`
 	Logging     LoggingConfig     `mapstructure:"logging"`
 	TMDB        TMDBConfig        `mapstructure:"tmdb"`
+	Library     LibraryConfig     `mapstructure:"library"`
 }
 
 // AuthConfig holds authentication configuration
@@ -89,17 +90,24 @@ type LoggingConfig struct {
 }
 
 type TMDBConfig struct {
-	Enabled           bool   `mapstructure:"enabled"`
-	APIKey            string `mapstructure:"api_key"`
-	Language          string `mapstructure:"language"`
-	AutoSearch        bool   `mapstructure:"auto_search"`
-	AutoLinkThreshold int    `mapstructure:"auto_link_threshold"`
-	MaxCandidates     int    `mapstructure:"max_candidates"`
-	ImageCachePath    string `mapstructure:"image_cache_path"`
-	DownloadImages    bool   `mapstructure:"download_images"`
-	PosterSize        string `mapstructure:"poster_size"`
-	BackdropSize      string `mapstructure:"backdrop_size"`
-	RequestsPer10s    int    `mapstructure:"requests_per_10s"`
+	Enabled            bool   `mapstructure:"enabled"`
+	APIKey             string `mapstructure:"api_key"`
+	Language           string `mapstructure:"language"`
+	AutoSearch         bool   `mapstructure:"auto_search"`
+	AutoLinkThreshold  int    `mapstructure:"auto_link_threshold"`
+	MaxCandidates      int    `mapstructure:"max_candidates"`
+	ImageCachePath     string `mapstructure:"image_cache_path"`
+	DownloadImages     bool   `mapstructure:"download_images"`
+	PosterSize         string `mapstructure:"poster_size"`
+	BackdropSize       string `mapstructure:"backdrop_size"`
+	ProfileSize        string `mapstructure:"profile_size"`
+	RequestsPer10s     int    `mapstructure:"requests_per_10s"`
+	MaxCastMembers     int    `mapstructure:"max_cast_members"`
+	SimilarMoviesCount int    `mapstructure:"similar_movies_count"`
+}
+
+type LibraryConfig struct {
+	RecentlyAddedCount int `mapstructure:"recently_added_count"`
 }
 
 func (c *Config) Validate() error {
@@ -137,6 +145,10 @@ func (c *Config) Validate() error {
 		if err := c.TMDB.Validate(); err != nil {
 			return fmt.Errorf("tmdb config: %w", err)
 		}
+	}
+
+	if err := c.Library.Validate(); err != nil {
+		return fmt.Errorf("library config: %w", err)
 	}
 
 	return nil
@@ -416,8 +428,34 @@ func (t *TMDBConfig) Validate() error {
 		return fmt.Errorf("invalid backdrop_size: %s (must be one of: w300, w780, w1280, original)", t.BackdropSize)
 	}
 
+	// ProfileSize is optional - only validate if set
+	if t.ProfileSize != "" {
+		validProfileSizes := map[string]bool{
+			"w45": true, "w185": true, "h632": true, "original": true,
+		}
+		if !validProfileSizes[t.ProfileSize] {
+			return fmt.Errorf("invalid profile_size: %s (must be one of: w45, w185, h632, original)", t.ProfileSize)
+		}
+	}
+
 	if t.RequestsPer10s < 1 || t.RequestsPer10s > 40 {
 		return fmt.Errorf("requests_per_10s must be between 1 and 40 (TMDB limit), got %d", t.RequestsPer10s)
+	}
+
+	if t.MaxCastMembers < 1 || t.MaxCastMembers > 50 {
+		return fmt.Errorf("max_cast_members must be between 1 and 50, got %d", t.MaxCastMembers)
+	}
+
+	if t.SimilarMoviesCount < 1 || t.SimilarMoviesCount > 20 {
+		return fmt.Errorf("similar_movies_count must be between 1 and 20, got %d", t.SimilarMoviesCount)
+	}
+
+	return nil
+}
+
+func (l *LibraryConfig) Validate() error {
+	if l.RecentlyAddedCount < 1 || l.RecentlyAddedCount > 100 {
+		return fmt.Errorf("recently_added_count must be between 1 and 100, got %d", l.RecentlyAddedCount)
 	}
 
 	return nil

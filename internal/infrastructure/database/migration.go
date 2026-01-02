@@ -408,6 +408,53 @@ DROP TABLE IF EXISTS movie_metadata;
 -- For development, we can just leave the columns
 `,
 	},
+	{
+		version: 5,
+		name:    "create_movie_credits_and_certifications",
+		up: `
+-- Movie credits table (cast & crew)
+CREATE TABLE IF NOT EXISTS movie_credits (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    movie_metadata_id INTEGER NOT NULL REFERENCES movie_metadata(id) ON DELETE CASCADE,
+    credit_type TEXT NOT NULL CHECK(credit_type IN ('cast', 'crew')),
+    tmdb_person_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    character TEXT,
+    job TEXT,
+    department TEXT,
+    profile_path TEXT,
+    display_order INTEGER,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_movie_credits_movie_id ON movie_credits(movie_metadata_id);
+CREATE INDEX IF NOT EXISTS idx_movie_credits_type ON movie_credits(credit_type);
+CREATE INDEX IF NOT EXISTS idx_movie_credits_order ON movie_credits(movie_metadata_id, credit_type, display_order);
+
+-- Movie certifications table (content ratings by country)
+CREATE TABLE IF NOT EXISTS movie_certifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    movie_metadata_id INTEGER NOT NULL REFERENCES movie_metadata(id) ON DELETE CASCADE,
+    country TEXT NOT NULL,
+    certification TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(movie_metadata_id, country)
+);
+
+CREATE INDEX IF NOT EXISTS idx_movie_certifications_movie_id ON movie_certifications(movie_metadata_id);
+CREATE INDEX IF NOT EXISTS idx_movie_certifications_country ON movie_certifications(country);
+`,
+		down: `
+DROP INDEX IF EXISTS idx_movie_certifications_country;
+DROP INDEX IF EXISTS idx_movie_certifications_movie_id;
+DROP TABLE IF EXISTS movie_certifications;
+
+DROP INDEX IF EXISTS idx_movie_credits_order;
+DROP INDEX IF EXISTS idx_movie_credits_type;
+DROP INDEX IF EXISTS idx_movie_credits_movie_id;
+DROP TABLE IF EXISTS movie_credits;
+`,
+	},
 }
 
 func NewDatabaseMigration(db *sql.DB) *DatabaseMigration {

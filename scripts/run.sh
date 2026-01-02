@@ -25,7 +25,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # Define paths
 BIN_DIR="$PROJECT_ROOT/bin"
 CONFIGS_SRC="$PROJECT_ROOT/configs"
-DOWNLOADS_DIR="$HOME/Downloads"
+FIXTURES_DIR="$PROJECT_ROOT/test/fixtures"
 
 # Parse arguments
 CLEAN_MODE=false
@@ -51,13 +51,20 @@ if [ "$CLEAN_MODE" = true ]; then
     echo "Copying configuration..."
     cp "$CONFIGS_SRC/default.yaml" "$BIN_DIR/configs/"
     
-    # Copy all .mkv files from Downloads if any exist
-    echo "Copying .mkv files from Downloads..."
-    if ls "$DOWNLOADS_DIR"/*.mkv 1> /dev/null 2>&1; then
-        cp "$DOWNLOADS_DIR"/*.mkv "$BIN_DIR/library/staging/"
-        echo "Copied $(ls "$DOWNLOADS_DIR"/*.mkv 2>/dev/null | wc -l) .mkv file(s)"
+    # Copy all video files from test/fixtures if any exist
+    echo "Copying video files from test/fixtures..."
+    VIDEO_COUNT=0
+    for ext in mkv mp4 avi mov wmv flv webm m4v mpeg mpg ts vob 3gp 3g2 mts m2ts; do
+        if ls "$FIXTURES_DIR"/*.$ext 1> /dev/null 2>&1; then
+            cp "$FIXTURES_DIR"/*.$ext "$BIN_DIR/library/staging/"
+            COUNT=$(ls "$FIXTURES_DIR"/*.$ext 2>/dev/null | wc -l)
+            VIDEO_COUNT=$((VIDEO_COUNT + COUNT))
+        fi
+    done
+    if [ "$VIDEO_COUNT" -gt 0 ]; then
+        echo "Copied $VIDEO_COUNT video file(s)"
     else
-        echo "No .mkv files found in $DOWNLOADS_DIR"
+        echo "No video files found in $FIXTURES_DIR"
     fi
 fi
 

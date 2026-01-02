@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/thesystemicprogrammer/vimesrv/internal/domain"
@@ -386,6 +387,54 @@ func (r *SQLiteSeriesMetadataRepository) UpsertTranslation(ctx context.Context, 
 	translation.UpdatedAt = now
 
 	return nil
+}
+
+// ListIDsWithoutTranslation returns series metadata IDs that don't have a translation for the given language
+func (r *SQLiteSeriesMetadataRepository) ListIDsWithoutTranslation(ctx context.Context, language string) ([]ports.SeriesMetadataForTranslation, error) {
+	exact, base := seriesLanguageParams(language)
+
+	query := `
+		SELECT sm.id, sm.tmdb_id, sm.original_name
+		FROM series_metadata sm
+		WHERE NOT EXISTS (
+			SELECT 1 FROM series_metadata_translations t
+			WHERE t.series_metadata_id = sm.id 
+			AND (t.language = ? OR t.language LIKE ? || '%')
+		)
+		ORDER BY sm.id
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, exact, base)
+	if err != nil {
+		return nil, fmt.Errorf("query series without translation: %w", err)
+	}
+	defer rows.Close()
+
+	var results []ports.SeriesMetadataForTranslation
+	for rows.Next() {
+		var s ports.SeriesMetadataForTranslation
+		if err := rows.Scan(&s.ID, &s.TMDBID, &s.OriginalName); err != nil {
+			return nil, fmt.Errorf("scan series: %w", err)
+		}
+		results = append(results, s)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate series: %w", err)
+	}
+
+	return results, nil
+}
+
+// seriesLanguageParams returns the exact language and base language for fallback queries
+func seriesLanguageParams(lang string) (exact string, base string) {
+	if lang == "" {
+		return "en", "en"
+	}
+	if idx := strings.IndexAny(lang, "-_"); idx > 0 {
+		return lang, lang[:idx]
+	}
+	return lang, lang
 }
 
 // Ensure SQLiteSeriesMetadataRepository implements SeriesMetadataRepository

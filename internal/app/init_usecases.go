@@ -29,6 +29,13 @@ type UseCases struct {
 	LinkFromSearchUseCase  *metadata.LinkFromSearchUseCase
 	SkipEnrichmentUseCase  *metadata.SkipEnrichmentUseCase
 	ResetEnrichmentUseCase *metadata.ResetEnrichmentUseCase
+	// Library browsing use cases
+	ListMoviesUseCase    *library.ListMoviesUseCase
+	GetMovieUseCase      *library.GetMovieUseCase
+	ListSeriesUseCase    *library.ListSeriesUseCase
+	GetSeriesUseCase     *library.GetSeriesUseCase
+	ListRecentUseCase    *library.ListRecentUseCase
+	ListUnmatchedUseCase *library.ListUnmatchedUseCase
 }
 
 func initUseCases(cfg *config.Config, adapters *Adapters) *UseCases {
@@ -64,6 +71,8 @@ func initUseCases(cfg *config.Config, adapters *Adapters) *UseCases {
 			adapters.SeasonMetadataRepository,
 			adapters.EpisodeMetadataRepository,
 			adapters.MetadataCandidateRepository,
+			adapters.MovieCreditRepository,
+			adapters.MovieCertificationRepository,
 		)
 
 		getCandidatesUseCase = metadata.NewGetCandidatesUseCase(
@@ -156,5 +165,12 @@ func initUseCases(cfg *config.Config, adapters *Adapters) *UseCases {
 		LinkFromSearchUseCase:  linkFromSearchUseCase,
 		SkipEnrichmentUseCase:  skipEnrichmentUseCase,
 		ResetEnrichmentUseCase: resetEnrichmentUseCase,
+		// Library browsing use cases
+		ListMoviesUseCase:    library.NewListMoviesUseCase(adapters.LibraryRepository),
+		GetMovieUseCase:      library.NewGetMovieUseCase(adapters.LibraryRepository, cfg.TMDB.MaxCastMembers),
+		ListSeriesUseCase:    library.NewListSeriesUseCase(adapters.LibraryRepository),
+		GetSeriesUseCase:     library.NewGetSeriesUseCase(adapters.LibraryRepository),
+		ListRecentUseCase:    library.NewListRecentUseCase(adapters.LibraryRepository, cfg.Library),
+		ListUnmatchedUseCase: library.NewListUnmatchedUseCase(adapters.LibraryRepository),
 	}
 }

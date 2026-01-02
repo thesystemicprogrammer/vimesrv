@@ -60,6 +60,11 @@ func (m *MockJobRepository) ResetStuckJob(ctx context.Context, jobID int64) erro
 	return args.Error(0)
 }
 
+func (m *MockJobRepository) ExistsPendingJobByType(ctx context.Context, jobType string, language string) (bool, error) {
+	args := m.Called(ctx, jobType, language)
+	return args.Bool(0), args.Error(1)
+}
+
 // MockClock is a mock implementation of ports.Clock
 type MockClock struct {
 	mock.Mock

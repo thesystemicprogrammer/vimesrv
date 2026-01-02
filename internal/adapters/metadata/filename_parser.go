@@ -260,29 +260,28 @@ func (p *RegexFilenameParser) extractTitle(name string, parsed *ports.ParsedFile
 		if earliestIdx > 0 && earliestIdx < len(title) {
 			title = title[:earliestIdx]
 		}
-	} else {
-		// For movies, try to extract title before year or quality markers
-		// Remove everything after the year if present
-		if parsed.Year > 0 {
-			yearStr := strconv.Itoa(parsed.Year)
-			// Find year position (with possible brackets or separators)
-			yearPatterns := []string{
-				"(" + yearStr + ")",
-				"[" + yearStr + "]",
-				"." + yearStr + ".",
-				" " + yearStr + " ",
-				"_" + yearStr + "_",
-				"-" + yearStr + "-",
-				"." + yearStr,
-				" " + yearStr,
-				"_" + yearStr,
-				"-" + yearStr,
-			}
-			for _, yp := range yearPatterns {
-				if idx := strings.Index(title, yp); idx > 0 {
-					title = title[:idx]
-					break
-				}
+	}
+
+	// For both series and movies, strip the year from the title if present
+	if parsed.Year > 0 {
+		yearStr := strconv.Itoa(parsed.Year)
+		// Find year position (with possible brackets or separators)
+		yearPatterns := []string{
+			"(" + yearStr + ")",
+			"[" + yearStr + "]",
+			"." + yearStr + ".",
+			" " + yearStr + " ",
+			"_" + yearStr + "_",
+			"-" + yearStr + "-",
+			"." + yearStr,
+			" " + yearStr,
+			"_" + yearStr,
+			"-" + yearStr,
+		}
+		for _, yp := range yearPatterns {
+			if idx := strings.Index(title, yp); idx > 0 {
+				title = title[:idx]
+				break
 			}
 		}
 	}

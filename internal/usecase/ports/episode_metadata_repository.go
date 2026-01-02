@@ -6,6 +6,14 @@ import (
 	"github.com/thesystemicprogrammer/vimesrv/internal/domain"
 )
 
+// EpisodeMetadataForTranslation contains info needed to fetch translations
+type EpisodeMetadataForTranslation struct {
+	ID            int64
+	EpisodeNumber int
+	SeasonNumber  int
+	SeriesTMDBID  int // Needed for TMDB API call
+}
+
 // EpisodeMetadataRepository defines the interface for episode metadata persistence
 type EpisodeMetadataRepository interface {
 	// Create inserts a new episode metadata record
@@ -37,4 +45,7 @@ type EpisodeMetadataRepository interface {
 
 	// UpsertTranslation creates or updates a translation
 	UpsertTranslation(ctx context.Context, translation *domain.EpisodeMetadataTranslation) error
+
+	// ListIDsWithoutTranslation returns episode metadata IDs that don't have a translation for the given language
+	ListIDsWithoutTranslation(ctx context.Context, language string) ([]EpisodeMetadataForTranslation, error)
 }

@@ -5,8 +5,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/thesystemicprogrammer/vimesrv/internal/infrastructure/server"
+	"github.com/thesystemicprogrammer/vimesrv/internal/shared"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/logger"
+	usecasejob "github.com/thesystemicprogrammer/vimesrv/internal/usecase/job"
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/metadata"
+	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/ports"
 )
 
 // MetadataHandler handles metadata enrichment API endpoints
@@ -17,6 +20,8 @@ type MetadataHandler struct {
 	linkFromSearchUC  *metadata.LinkFromSearchUseCase
 	skipEnrichmentUC  *metadata.SkipEnrichmentUseCase
 	resetEnrichmentUC *metadata.ResetEnrichmentUseCase
+	enqueueJobUC      *usecasejob.EnqueueJobUseCase
+	jobRepository     ports.JobRepository
 }
 
 // NewMetadataHandler creates a new metadata handler
@@ -27,6 +32,8 @@ func NewMetadataHandler(
 	linkFromSearchUC *metadata.LinkFromSearchUseCase,
 	skipEnrichmentUC *metadata.SkipEnrichmentUseCase,
 	resetEnrichmentUC *metadata.ResetEnrichmentUseCase,
+	enqueueJobUC *usecasejob.EnqueueJobUseCase,
+	jobRepository ports.JobRepository,
 ) *MetadataHandler {
 	return &MetadataHandler{
 		getCandidatesUC:   getCandidatesUC,
@@ -35,6 +42,8 @@ func NewMetadataHandler(
 		linkFromSearchUC:  linkFromSearchUC,
 		skipEnrichmentUC:  skipEnrichmentUC,
 		resetEnrichmentUC: resetEnrichmentUC,
+		enqueueJobUC:      enqueueJobUC,
+		jobRepository:     jobRepository,
 	}
 }
 
@@ -57,6 +66,9 @@ func (h *MetadataHandler) RegisterRoutes(router *gin.RouterGroup) {
 
 	// POST /api/v1/media/:id/reset - Reset enrichment status
 	router.POST("/media/:id/reset", h.ResetEnrichment)
+
+	// POST /api/v1/translations/fetch - Fetch translations for a language
+	router.POST("/translations/fetch", h.FetchTranslations)
 
 	logger.Debug().Msg("Metadata routes registered")
 }
@@ -338,4 +350,89 @@ func (h *MetadataHandler) ResetEnrichment(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, server.SuccessResponse(result))
+}
+
+// FetchTranslationsRequest is the request body for fetching translations
+type FetchTranslationsRequest struct {
+	Language string `json:"language" binding:"required"`
+}
+
+// FetchTranslations handles POST /api/v1/translations/fetch
+// It enqueues a fetch_translations job for the specified language
+func (h *MetadataHandler) FetchTranslations(c *gin.Context) {
+	var req FetchTranslationsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, server.ErrorResponse(
+			"INVALID_REQUEST",
+			"Invalid request body",
+			err.Error(),
+		))
+		return
+	}
+
+	logger.Debug().
+		Str("language", req.Language).
+		Msg("fetching translations")
+
+	// Check if TMDB is enabled (enqueueJobUC will be nil if not)
+	if h.enqueueJobUC == nil {
+		c.JSON(http.StatusServiceUnavailable, server.ErrorResponse(
+			"TMDB_DISABLED",
+			"TMDB integration is not enabled",
+			"",
+		))
+		return
+	}
+
+	// Check if there's already a pending job for this language
+	exists, err := h.jobRepository.ExistsPendingJobByType(c.Request.Context(), shared.JobTypeFetchTranslations, req.Language)
+	if err != nil {
+		logger.Error().Err(err).Str("language", req.Language).Msg("failed to check for pending translation job")
+		c.JSON(http.StatusInternalServerError, server.ErrorResponse(
+			"CHECK_FAILED",
+			"Failed to check for pending jobs",
+			err.Error(),
+		))
+		return
+	}
+
+	if exists {
+		logger.Debug().Str("language", req.Language).Msg("translation fetch job already pending")
+		c.JSON(http.StatusAccepted, server.SuccessResponse(map[string]interface{}{
+			"message": "Translation fetch job already in progress",
+			"queued":  false,
+		}))
+		return
+	}
+
+	// Enqueue the translation fetch job
+	jobInput := usecasejob.EnqueueJobInput{
+		Type: shared.JobTypeFetchTranslations,
+		Payload: map[string]string{
+			"language": req.Language,
+		},
+		Priority: shared.JobPriorityFetchTranslations,
+	}
+
+	jobID, err := h.enqueueJobUC.Execute(c.Request.Context(), jobInput)
+	if err != nil {
+		logger.Error().Err(err).Str("language", req.Language).Msg("failed to enqueue translation fetch job")
+		c.JSON(http.StatusInternalServerError, server.ErrorResponse(
+			"ENQUEUE_FAILED",
+			"Failed to enqueue translation fetch job",
+			err.Error(),
+		))
+		return
+	}
+
+	logger.Info().
+		Int64("job_id", jobID).
+		Str("language", req.Language).
+		Msg("translation fetch job enqueued")
+
+	c.JSON(http.StatusAccepted, server.SuccessResponse(map[string]interface{}{
+		"message": "Translation fetch job queued",
+		"job_id":  jobID,
+		"queued":  true,
+	}))
 }
