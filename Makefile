@@ -1,4 +1,4 @@
-.PHONY: help build build-prod build-pwa run test test-unit test-integration test-config clean deps setup install lint fmt vet check dev pwa-install pwa-build pwa-dev
+.PHONY: help build build-prod build-prod-pi build-pwa run test test-unit test-integration test-config clean deps setup install lint fmt vet check dev pwa-install pwa-build pwa-dev
 
 # Variables.1-dev.1-dev
 BINARY_NAME=vimesrv
@@ -43,6 +43,12 @@ build-prod: ## Build the application for production with optimizations
 	@mkdir -p $(BUILD_DIR)
 	@$(GO) build $(GOFLAGS) -ldflags="$(LDFLAGS)" -trimpath -o $(BUILD_DIR)/$(BINARY_NAME) $(CMD_DIR)
 	@echo "Production build complete: $(BUILD_DIR)/$(BINARY_NAME)"
+
+build-prod-pi: ## Build the application for Raspberry Pi (linux/arm64)
+	@echo "Building $(BINARY_NAME) for Raspberry Pi (linux/arm64)..."
+	@mkdir -p $(BUILD_DIR)
+	@GOOS=linux GOARCH=arm64 $(GO) build $(GOFLAGS) -ldflags="$(LDFLAGS)" -trimpath -o $(BUILD_DIR)/$(BINARY_NAME)-linux-arm64 $(CMD_DIR)
+	@echo "Raspberry Pi build complete: $(BUILD_DIR)/$(BINARY_NAME)-linux-arm64"
 
 build-pwa: pwa-build ## Build the application with embedded PWA for production
 	@echo "Building $(BINARY_NAME) with PWA for production..."
