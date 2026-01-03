@@ -12,6 +12,7 @@ import (
 	"github.com/thesystemicprogrammer/vimesrv/internal/domain"
 	"github.com/thesystemicprogrammer/vimesrv/internal/infrastructure/database"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/config"
+	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/metadata/linker"
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/ports"
 )
 
@@ -476,16 +477,33 @@ func TestLinkMetadata_Integration_LinkFromCandidate(t *testing.T) {
 		PosterSize: "w500",
 	}
 
-	// Create use case
-	useCase := NewLinkMetadataUseCase(
+	// Create credit and certification repositories for movie linker
+	creditRepo := repository.NewSQLiteMovieCreditRepository(db.DB)
+	certRepo := repository.NewSQLiteMovieCertificationRepository(db.DB)
+
+	// Create linkers
+	movieLinker := linker.NewMovieLinker(
 		cfg,
 		tmdbClient,
 		&integrationTestImageDownloader{},
-		mediaRepo,
 		movieMetadataRepo,
+		creditRepo,
+		certRepo,
+	)
+	episodeLinker := linker.NewEpisodeLinker(
+		cfg,
+		tmdbClient,
+		&integrationTestImageDownloader{},
 		seriesMetadataRepo,
 		seasonMetadataRepo,
 		episodeMetadataRepo,
+	)
+
+	// Create use case
+	useCase := NewLinkMetadataUseCase(
+		movieLinker,
+		episodeLinker,
+		mediaRepo,
 		candidateRepo,
 	)
 

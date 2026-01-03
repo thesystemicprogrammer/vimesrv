@@ -203,6 +203,11 @@ func TestLoggerWithFile(t *testing.T) {
 	// Log a message
 	logger.Info().Msg("test file message")
 
+	// Close the logger to flush writes and clean up
+	if err := Close(); err != nil {
+		t.Fatalf("Failed to close logger: %v", err)
+	}
+
 	// Read the file
 	content, err := os.ReadFile(tmpFile)
 	if err != nil {
@@ -244,4 +249,70 @@ func TestHelperFunctions(t *testing.T) {
 	if !strings.Contains(buf.String(), "error test") {
 		t.Error("Error() helper did not log message")
 	}
+}
+
+func TestClose(t *testing.T) {
+	t.Run("close without file writer returns nil", func(t *testing.T) {
+		// Ensure no file writer is set
+		mu.Lock()
+		fileWriter = nil
+		mu.Unlock()
+
+		err := Close()
+		if err != nil {
+			t.Errorf("Expected nil error when no file writer set, got: %v", err)
+		}
+	})
+
+	t.Run("close with file writer closes it", func(t *testing.T) {
+		// Create a temporary log file
+		tmpFile := "/tmp/vimesrv_close_test.log"
+		defer os.Remove(tmpFile)
+
+		cfg := config.LoggingConfig{
+			Level:      "info",
+			Format:     "json",
+			File:       tmpFile,
+			MaxSizeMB:  10,
+			MaxAgeDays: 1,
+			MaxBackups: 1,
+			Compress:   false,
+			LocalTime:  true,
+		}
+
+		_, err := New(cfg)
+		if err != nil {
+			t.Fatalf("Failed to create logger: %v", err)
+		}
+
+		// Verify file writer is set
+		mu.RLock()
+		hasWriter := fileWriter != nil
+		mu.RUnlock()
+		if !hasWriter {
+			t.Fatal("Expected file writer to be set after New() with file config")
+		}
+
+		// Close should succeed
+		err = Close()
+		if err != nil {
+			t.Errorf("Expected nil error on close, got: %v", err)
+		}
+
+		// Verify file writer is now nil
+		mu.RLock()
+		hasWriter = fileWriter != nil
+		mu.RUnlock()
+		if hasWriter {
+			t.Error("Expected file writer to be nil after Close()")
+		}
+	})
+
+	t.Run("double close returns nil", func(t *testing.T) {
+		// Ensure no file writer is set (previous test should have cleared it)
+		err := Close()
+		if err != nil {
+			t.Errorf("Expected nil error on double close, got: %v", err)
+		}
+	})
 }

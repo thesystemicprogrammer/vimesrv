@@ -176,6 +176,11 @@ func (l *MovieLinker) fetchAndStoreCredits(ctx context.Context, movieMetadataID 
 		return fmt.Errorf("failed to get movie credits: %w", err)
 	}
 
+	// If no credits data available, just return
+	if credits == nil {
+		return nil
+	}
+
 	var creditsToStore []*domain.MovieCredit
 
 	// Store top N cast members based on config
@@ -257,6 +262,11 @@ func (l *MovieLinker) fetchAndStoreCertifications(ctx context.Context, movieMeta
 	releaseDates, err := l.tmdbClient.GetMovieReleaseDates(ctx, tmdbID)
 	if err != nil {
 		return fmt.Errorf("failed to get movie release dates: %w", err)
+	}
+
+	// If no release dates data available, just return
+	if releaseDates == nil {
+		return nil
 	}
 
 	var certsToStore []*domain.MovieCertification

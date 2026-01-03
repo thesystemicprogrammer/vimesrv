@@ -109,7 +109,13 @@ database:
 logging:
   level: "info"
   format: "console"
-  file: ""
+  file: ""              # Empty = stdout only; set a path to enable file logging
+  max_size_mb: 100      # Rotate when file exceeds this size (MB)
+  max_age_days: 7       # Delete logs older than this (days, 0 = no limit)
+  max_backups: 5        # Max number of old log files to keep (0 = no limit)
+  compress: true        # Compress rotated logs with gzip
+  local_time: true      # Use local timezone for backup filenames
+  rotate_at: "00:00"    # Daily rotation time in HH:MM 24-hour format (empty = disabled)
 
 tmdb:
   enabled: false # Set to true and provide TMDB_API_KEY environment variable to enable

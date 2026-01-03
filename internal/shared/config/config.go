@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 // Config holds all application configuration
@@ -89,6 +90,13 @@ type LoggingConfig struct {
 	Level  string `mapstructure:"level"`
 	Format string `mapstructure:"format"`
 	File   string `mapstructure:"file"`
+	// Rotation settings (only apply when File is set)
+	MaxSizeMB  int    `mapstructure:"max_size_mb"`  // Max size in MB before rotation (default: 100)
+	MaxAgeDays int    `mapstructure:"max_age_days"` // Days to retain old logs (0 = no age limit)
+	MaxBackups int    `mapstructure:"max_backups"`  // Max old files to keep (0 = no backup limit)
+	Compress   bool   `mapstructure:"compress"`     // Compress rotated files with gzip
+	LocalTime  bool   `mapstructure:"local_time"`   // Use local time for backup filenames
+	RotateAt   string `mapstructure:"rotate_at"`    // Daily rotation time in HH:MM format (empty = disabled)
 }
 
 type TMDBConfig struct {
@@ -410,6 +418,24 @@ func (l *LoggingConfig) Validate() error {
 
 	if !validFormats[l.Format] {
 		return fmt.Errorf("format must be one of: console, json; got: %s", l.Format)
+	}
+
+	// Only validate rotation settings if file logging is enabled
+	if l.File != "" {
+		if l.MaxSizeMB < 0 || l.MaxSizeMB > 10000 {
+			return fmt.Errorf("max_size_mb must be between 0 and 10000, got %d", l.MaxSizeMB)
+		}
+		if l.MaxAgeDays < 0 || l.MaxAgeDays > 365 {
+			return fmt.Errorf("max_age_days must be between 0 and 365, got %d", l.MaxAgeDays)
+		}
+		if l.MaxBackups < 0 || l.MaxBackups > 100 {
+			return fmt.Errorf("max_backups must be between 0 and 100, got %d", l.MaxBackups)
+		}
+		if l.RotateAt != "" {
+			if _, err := time.Parse("15:04", l.RotateAt); err != nil {
+				return fmt.Errorf("rotate_at must be in HH:MM format (24-hour), got: %s", l.RotateAt)
+			}
+		}
 	}
 
 	return nil

@@ -48,6 +48,9 @@ type EpisodeLinkResult struct {
 	SeriesMetadata  *domain.SeriesMetadata
 	SeasonMetadata  *domain.SeasonMetadata
 	EpisodeMetadata *domain.EpisodeMetadata
+	SeriesDetails   *ports.TMDBSeriesDetails // Includes title information for output messages
+	SeasonNumber    int
+	EpisodeNumber   int
 }
 
 // Link fetches episode metadata from TMDB and creates/retrieves the local records
@@ -98,6 +101,9 @@ func (l *EpisodeLinker) Link(ctx context.Context, seriesTMDBID, seasonNumber, ep
 		SeriesMetadata:  seriesMetadata,
 		SeasonMetadata:  seasonMetadata,
 		EpisodeMetadata: episodeMetadata,
+		SeriesDetails:   seriesDetails,
+		SeasonNumber:    seasonNumber,
+		EpisodeNumber:   episodeNumber,
 	}, nil
 }
 

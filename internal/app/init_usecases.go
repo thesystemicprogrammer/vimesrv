@@ -6,6 +6,7 @@ import (
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/library"
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/media"
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/metadata"
+	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/metadata/linker"
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/ports"
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/transcode"
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/user"
@@ -74,6 +75,25 @@ func initUseCases(cfg *config.Config, adapters *Adapters) *UseCases {
 	var resetEnrichmentUseCase *metadata.ResetEnrichmentUseCase
 
 	if cfg.TMDB.Enabled {
+		// Create shared linkers for movie and episode metadata
+		movieLinker := linker.NewMovieLinker(
+			cfg.TMDB,
+			adapters.TMDBClient,
+			adapters.ImageDownloader,
+			adapters.MovieMetadataRepository,
+			adapters.MovieCreditRepository,
+			adapters.MovieCertificationRepository,
+		)
+
+		episodeLinker := linker.NewEpisodeLinker(
+			cfg.TMDB,
+			adapters.TMDBClient,
+			adapters.ImageDownloader,
+			adapters.SeriesMetadataRepository,
+			adapters.SeasonMetadataRepository,
+			adapters.EpisodeMetadataRepository,
+		)
+
 		enrichMediaFileUseCase = metadata.NewEnrichMediaFileUseCase(
 			cfg.TMDB,
 			adapters.FilenameParser,
@@ -97,14 +117,9 @@ func initUseCases(cfg *config.Config, adapters *Adapters) *UseCases {
 		)
 
 		linkMetadataUseCase = metadata.NewLinkMetadataUseCase(
-			cfg.TMDB,
-			adapters.TMDBClient,
-			adapters.ImageDownloader,
+			movieLinker,
+			episodeLinker,
 			adapters.MediaRepository,
-			adapters.MovieMetadataRepository,
-			adapters.SeriesMetadataRepository,
-			adapters.SeasonMetadataRepository,
-			adapters.EpisodeMetadataRepository,
 			adapters.MetadataCandidateRepository,
 		)
 
@@ -114,14 +129,9 @@ func initUseCases(cfg *config.Config, adapters *Adapters) *UseCases {
 		)
 
 		linkFromSearchUseCase = metadata.NewLinkFromSearchUseCase(
-			cfg.TMDB,
-			adapters.TMDBClient,
-			adapters.ImageDownloader,
+			movieLinker,
+			episodeLinker,
 			adapters.MediaRepository,
-			adapters.MovieMetadataRepository,
-			adapters.SeriesMetadataRepository,
-			adapters.SeasonMetadataRepository,
-			adapters.EpisodeMetadataRepository,
 			adapters.MetadataCandidateRepository,
 		)
 

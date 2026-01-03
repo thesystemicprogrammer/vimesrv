@@ -184,10 +184,21 @@ func (app *Application) Shutdown() error {
 	// Return combined errors if any
 	if len(shutdownErrors) > 0 {
 		logger.Error().Int("errorCount", len(shutdownErrors)).Msg("graceful shutdown completed with errors")
+		// Step 5: Close logger (flushes pending writes, stops rotation goroutines)
+		// Do this after logging errors but before returning
+		if err := logger.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "error closing logger: %v\n", err)
+		}
 		return fmt.Errorf("shutdown encountered %d error(s): %v", len(shutdownErrors), shutdownErrors)
 	}
 
 	logger.Info().Msg("graceful shutdown complete")
+
+	// Step 5: Close logger (flushes pending writes, stops rotation goroutines)
+	if err := logger.Close(); err != nil {
+		fmt.Fprintf(os.Stderr, "error closing logger: %v\n", err)
+	}
+
 	return nil
 }
 

@@ -7,12 +7,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/DeRuina/timberjack"
 	"github.com/rs/zerolog"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/config"
 )
 
 var (
 	globalLogger *zerolog.Logger
+	fileWriter   io.Closer // Track timberjack writer for cleanup
 	mu           sync.RWMutex
 	defaultLog   zerolog.Logger
 )
@@ -38,11 +40,37 @@ func New(cfg config.LoggingConfig) (*zerolog.Logger, error) {
 
 	var writer io.Writer
 	if cfg.File != "" {
-		file, err := os.OpenFile(cfg.File, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
-		if err != nil {
-			return nil, fmt.Errorf("failed to open log file: %w", err)
+		// Use timberjack for log rotation when file logging is enabled
+		maxSize := cfg.MaxSizeMB
+		if maxSize == 0 {
+			maxSize = 100 // Default 100MB
 		}
-		writer = file
+
+		compression := "none"
+		if cfg.Compress {
+			compression = "gzip"
+		}
+
+		var rotateAt []string
+		if cfg.RotateAt != "" {
+			rotateAt = []string{cfg.RotateAt}
+		}
+
+		tjLogger := &timberjack.Logger{
+			Filename:    cfg.File,
+			MaxSize:     maxSize,
+			MaxAge:      cfg.MaxAgeDays,
+			MaxBackups:  cfg.MaxBackups,
+			Compression: compression,
+			LocalTime:   cfg.LocalTime,
+			RotateAt:    rotateAt,
+		}
+
+		mu.Lock()
+		fileWriter = tjLogger
+		mu.Unlock()
+
+		writer = tjLogger
 	} else {
 		writer = os.Stdout
 	}
@@ -104,6 +132,19 @@ func GetGlobal() *zerolog.Logger {
 		return &defaultLog
 	}
 	return globalLogger
+}
+
+// Close closes the file writer if one exists.
+// Should be called on application shutdown to stop timberjack's background goroutines.
+func Close() error {
+	mu.Lock()
+	defer mu.Unlock()
+	if fileWriter != nil {
+		err := fileWriter.Close()
+		fileWriter = nil
+		return err
+	}
+	return nil
 }
 
 func Info() *zerolog.Event {

@@ -6,8 +6,52 @@ import (
 	"testing"
 
 	"github.com/thesystemicprogrammer/vimesrv/internal/domain"
+	"github.com/thesystemicprogrammer/vimesrv/internal/shared/config"
+	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/metadata/linker"
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/ports"
 )
+
+// Helper function to create a MovieLinker with mock dependencies for testing
+func createTestMovieLinker(
+	tmdbClient ports.TMDBClient,
+	movieRepo ports.MovieMetadataRepository,
+	creditRepo ports.MovieCreditRepository,
+	certRepo ports.MovieCertificationRepository,
+) *linker.MovieLinker {
+	return linker.NewMovieLinker(
+		config.TMDBConfig{
+			Enabled:    true,
+			Language:   "en",
+			PosterSize: "w500",
+		},
+		tmdbClient,
+		nil, // imageDownloader
+		movieRepo,
+		creditRepo,
+		certRepo,
+	)
+}
+
+// Helper function to create an EpisodeLinker with mock dependencies for testing
+func createTestEpisodeLinker(
+	tmdbClient ports.TMDBClient,
+	seriesRepo ports.SeriesMetadataRepository,
+	seasonRepo ports.SeasonMetadataRepository,
+	episodeRepo ports.EpisodeMetadataRepository,
+) *linker.EpisodeLinker {
+	return linker.NewEpisodeLinker(
+		config.TMDBConfig{
+			Enabled:    true,
+			Language:   "en",
+			PosterSize: "w500",
+		},
+		tmdbClient,
+		nil, // imageDownloader
+		seriesRepo,
+		seasonRepo,
+		episodeRepo,
+	)
+}
 
 // Extended mock for MetadataCandidateRepository with full functionality
 type mockCandidateRepoFull struct {
@@ -18,6 +62,60 @@ type mockCandidateRepoFull struct {
 	rejectAllFunc                func(ctx context.Context, mediaFileID string) error
 	deleteByMediaFileIDFunc      func(ctx context.Context, mediaFileID string) error
 	createBatchFunc              func(ctx context.Context, candidates []domain.MetadataCandidate) error
+}
+
+// Mock MovieCreditRepository for testing linkers
+type mockMovieCreditRepositoryForLinker struct{}
+
+func (m *mockMovieCreditRepositoryForLinker) Create(ctx context.Context, credit *domain.MovieCredit) error {
+	return nil
+}
+
+func (m *mockMovieCreditRepositoryForLinker) CreateBatch(ctx context.Context, credits []*domain.MovieCredit) error {
+	return nil
+}
+
+func (m *mockMovieCreditRepositoryForLinker) GetByMovieMetadataID(ctx context.Context, movieMetadataID int64) ([]domain.MovieCredit, error) {
+	return nil, nil
+}
+
+func (m *mockMovieCreditRepositoryForLinker) GetCastByMovieMetadataID(ctx context.Context, movieMetadataID int64, limit int) ([]domain.MovieCredit, error) {
+	return nil, nil
+}
+
+func (m *mockMovieCreditRepositoryForLinker) GetCrewByMovieMetadataID(ctx context.Context, movieMetadataID int64) ([]domain.MovieCredit, error) {
+	return nil, nil
+}
+
+func (m *mockMovieCreditRepositoryForLinker) GetDirectorsByMovieMetadataID(ctx context.Context, movieMetadataID int64) ([]domain.MovieCredit, error) {
+	return nil, nil
+}
+
+func (m *mockMovieCreditRepositoryForLinker) DeleteByMovieMetadataID(ctx context.Context, movieMetadataID int64) error {
+	return nil
+}
+
+// Mock MovieCertificationRepository for testing linkers
+type mockMovieCertificationRepositoryForLinker struct{}
+
+func (m *mockMovieCertificationRepositoryForLinker) Create(ctx context.Context, certification *domain.MovieCertification) error {
+	return nil
+}
+
+func (m *mockMovieCertificationRepositoryForLinker) CreateBatch(ctx context.Context, certifications []*domain.MovieCertification) error {
+	return nil
+}
+
+func (m *mockMovieCertificationRepositoryForLinker) GetByMovieMetadataID(ctx context.Context, movieMetadataID int64) ([]domain.MovieCertification, error) {
+	return nil, nil
+}
+
+func (m *mockMovieCertificationRepositoryForLinker) GetByMovieMetadataIDAndCountry(ctx context.Context, movieMetadataID int64, country string) (*domain.MovieCertification, error) {
+	return nil, nil
+}
+
+func (m *mockMovieCertificationRepositoryForLinker) DeleteByMovieMetadataID(ctx context.Context, movieMetadataID int64) error {
+	return nil
 }
 
 func (m *mockCandidateRepoFull) Create(ctx context.Context, candidate *domain.MetadataCandidate) error {
@@ -219,15 +317,14 @@ func TestLinkMetadata_MediaNotFound(t *testing.T) {
 		},
 	}
 
+	tmdbClient := &mockTMDBClient{}
+	movieLinker := createTestMovieLinker(tmdbClient, &mockMovieMetadataRepository{}, &mockMovieCreditRepositoryForLinker{}, &mockMovieCertificationRepositoryForLinker{})
+	episodeLinker := createTestEpisodeLinker(tmdbClient, &mockSeriesMetadataRepository{}, &mockSeasonMetadataRepository{}, &mockEpisodeMetadataRepository{})
+
 	uc := NewLinkMetadataUseCase(
-		testConfig(),
-		&mockTMDBClient{},
-		nil,
+		movieLinker,
+		episodeLinker,
 		mediaRepo,
-		&mockMovieMetadataRepository{},
-		&mockSeriesMetadataRepository{},
-		&mockSeasonMetadataRepository{},
-		&mockEpisodeMetadataRepository{},
 		&mockCandidateRepoFull{},
 	)
 
@@ -252,15 +349,14 @@ func TestLinkMetadata_CandidateNotFound(t *testing.T) {
 		},
 	}
 
+	tmdbClient := &mockTMDBClient{}
+	movieLinker := createTestMovieLinker(tmdbClient, &mockMovieMetadataRepository{}, &mockMovieCreditRepositoryForLinker{}, &mockMovieCertificationRepositoryForLinker{})
+	episodeLinker := createTestEpisodeLinker(tmdbClient, &mockSeriesMetadataRepository{}, &mockSeasonMetadataRepository{}, &mockEpisodeMetadataRepository{})
+
 	uc := NewLinkMetadataUseCase(
-		testConfig(),
-		&mockTMDBClient{},
-		nil,
+		movieLinker,
+		episodeLinker,
 		mediaRepo,
-		&mockMovieMetadataRepository{},
-		&mockSeriesMetadataRepository{},
-		&mockSeasonMetadataRepository{},
-		&mockEpisodeMetadataRepository{},
 		candidateRepo,
 	)
 
@@ -289,15 +385,14 @@ func TestLinkMetadata_CandidateWrongMedia(t *testing.T) {
 		},
 	}
 
+	tmdbClient := &mockTMDBClient{}
+	movieLinker := createTestMovieLinker(tmdbClient, &mockMovieMetadataRepository{}, &mockMovieCreditRepositoryForLinker{}, &mockMovieCertificationRepositoryForLinker{})
+	episodeLinker := createTestEpisodeLinker(tmdbClient, &mockSeriesMetadataRepository{}, &mockSeasonMetadataRepository{}, &mockEpisodeMetadataRepository{})
+
 	uc := NewLinkMetadataUseCase(
-		testConfig(),
-		&mockTMDBClient{},
-		nil,
+		movieLinker,
+		episodeLinker,
 		mediaRepo,
-		&mockMovieMetadataRepository{},
-		&mockSeriesMetadataRepository{},
-		&mockSeasonMetadataRepository{},
-		&mockEpisodeMetadataRepository{},
 		candidateRepo,
 	)
 
@@ -359,15 +454,13 @@ func TestLinkMetadata_MovieSuccess(t *testing.T) {
 		},
 	}
 
+	movieLinker := createTestMovieLinker(tmdbClient, movieRepo, &mockMovieCreditRepositoryForLinker{}, &mockMovieCertificationRepositoryForLinker{})
+	episodeLinker := createTestEpisodeLinker(tmdbClient, &mockSeriesMetadataRepository{}, &mockSeasonMetadataRepository{}, &mockEpisodeMetadataRepository{})
+
 	uc := NewLinkMetadataUseCase(
-		testConfig(),
-		tmdbClient,
-		nil,
+		movieLinker,
+		episodeLinker,
 		mediaRepo,
-		movieRepo,
-		&mockSeriesMetadataRepository{},
-		&mockSeasonMetadataRepository{},
-		&mockEpisodeMetadataRepository{},
 		candidateRepo,
 	)
 
@@ -477,15 +570,13 @@ func TestLinkMetadata_SeriesSuccess(t *testing.T) {
 		},
 	}
 
+	movieLinker := createTestMovieLinker(tmdbClient, &mockMovieMetadataRepository{}, &mockMovieCreditRepositoryForLinker{}, &mockMovieCertificationRepositoryForLinker{})
+	episodeLinker := createTestEpisodeLinker(tmdbClient, seriesRepo, seasonRepo, episodeRepo)
+
 	uc := NewLinkMetadataUseCase(
-		testConfig(),
-		tmdbClient,
-		nil,
+		movieLinker,
+		episodeLinker,
 		mediaRepo,
-		&mockMovieMetadataRepository{},
-		seriesRepo,
-		seasonRepo,
-		episodeRepo,
 		candidateRepo,
 	)
 
@@ -812,15 +903,14 @@ func TestLinkFromSearch_MediaNotFound(t *testing.T) {
 		},
 	}
 
+	tmdbClient := &mockTMDBClient{}
+	movieLinker := createTestMovieLinker(tmdbClient, &mockMovieMetadataRepository{}, &mockMovieCreditRepositoryForLinker{}, &mockMovieCertificationRepositoryForLinker{})
+	episodeLinker := createTestEpisodeLinker(tmdbClient, &mockSeriesMetadataRepository{}, &mockSeasonMetadataRepository{}, &mockEpisodeMetadataRepository{})
+
 	uc := NewLinkFromSearchUseCase(
-		testConfig(),
-		&mockTMDBClient{},
-		nil,
+		movieLinker,
+		episodeLinker,
 		mediaRepo,
-		&mockMovieMetadataRepository{},
-		&mockSeriesMetadataRepository{},
-		&mockSeasonMetadataRepository{},
-		&mockEpisodeMetadataRepository{},
 		&mockCandidateRepoFull{},
 	)
 
@@ -876,15 +966,13 @@ func TestLinkFromSearch_MovieSuccess(t *testing.T) {
 		},
 	}
 
+	movieLinker := createTestMovieLinker(tmdbClient, movieRepo, &mockMovieCreditRepositoryForLinker{}, &mockMovieCertificationRepositoryForLinker{})
+	episodeLinker := createTestEpisodeLinker(tmdbClient, &mockSeriesMetadataRepository{}, &mockSeasonMetadataRepository{}, &mockEpisodeMetadataRepository{})
+
 	uc := NewLinkFromSearchUseCase(
-		testConfig(),
-		tmdbClient,
-		nil,
+		movieLinker,
+		episodeLinker,
 		mediaRepo,
-		movieRepo,
-		&mockSeriesMetadataRepository{},
-		&mockSeasonMetadataRepository{},
-		&mockEpisodeMetadataRepository{},
 		candidateRepo,
 	)
 
@@ -982,15 +1070,13 @@ func TestLinkFromSearch_SeriesSuccess(t *testing.T) {
 		},
 	}
 
+	movieLinker := createTestMovieLinker(tmdbClient, &mockMovieMetadataRepository{}, &mockMovieCreditRepositoryForLinker{}, &mockMovieCertificationRepositoryForLinker{})
+	episodeLinker := createTestEpisodeLinker(tmdbClient, seriesRepo, seasonRepo, episodeRepo)
+
 	uc := NewLinkFromSearchUseCase(
-		testConfig(),
-		tmdbClient,
-		nil,
+		movieLinker,
+		episodeLinker,
 		mediaRepo,
-		&mockMovieMetadataRepository{},
-		seriesRepo,
-		seasonRepo,
-		episodeRepo,
 		candidateRepo,
 	)
 
