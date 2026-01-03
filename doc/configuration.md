@@ -150,6 +150,16 @@ tmdb:
   requests_per_10s: 35            # Rate limiting
 ```
 
+### Database Rebuild
+
+```yaml
+rebuild:
+  allow_rebuild: false          # Safety flag - must be true to enable --rebuild-from-dump
+  tmdb_requests_per_10s: 15     # Conservative rate limit during rebuild
+```
+
+See [Database Rebuild](rebuild.md) for usage guide.
+
 ## Environment Variables
 
 Override config values with environment variables:

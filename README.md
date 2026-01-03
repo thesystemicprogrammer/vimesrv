@@ -38,6 +38,7 @@ Default credentials: `admin` / `admin123`
 | [Configuration](doc/configuration.md) | YAML config and environment variables    |
 | [Architecture](doc/architecture.md)   | Clean architecture and project structure |
 | [Features](doc/features.md)           | Library scan, transcoding, metadata, PWA |
+| [Database Rebuild](doc/rebuild.md)    | Backup and restore for upgrades          |
 | [Development](doc/development.md)     | Testing, linting, and contributing       |
 | [Deployment](doc/deployment.md)       | Production setup and security            |
 
