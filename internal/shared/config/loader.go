@@ -174,6 +174,10 @@ func setDefaults(v *viper.Viper) {
 
 	// Library defaults
 	v.SetDefault("library.recently_added_count", 20)
+
+	// Rebuild defaults
+	v.SetDefault("rebuild.allow_rebuild", false)
+	v.SetDefault("rebuild.tmdb_requests_per_10s", 15)
 }
 
 // bindEnvVars binds environment variables to viper keys

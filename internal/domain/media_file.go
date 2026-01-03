@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // Media file status constants
 const (
@@ -184,4 +187,23 @@ func (m *MediaFile) NeedsEnrichment() bool {
 // AwaitingUserSelection returns true if this media file has candidates waiting for user selection
 func (m *MediaFile) AwaitingUserSelection() bool {
 	return m.EnrichmentStatus == EnrichmentStatusCandidatesFound
+}
+
+// DeriveIDFromFingerprint creates a deterministic, UUID-formatted ID from a fingerprint.
+// The fingerprint is a 128-char hex string (BLAKE2b-512).
+// Returns a 36-char string formatted as: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+// This ensures the same file content always produces the same media ID,
+// enabling database rebuilds while preserving transcode paths and API URLs.
+func DeriveIDFromFingerprint(fingerprint string) string {
+	if len(fingerprint) < 32 {
+		// Fallback for short fingerprints (shouldn't happen in practice)
+		return fingerprint
+	}
+	return fmt.Sprintf("%s-%s-%s-%s-%s",
+		fingerprint[0:8],
+		fingerprint[8:12],
+		fingerprint[12:16],
+		fingerprint[16:20],
+		fingerprint[20:32],
+	)
 }

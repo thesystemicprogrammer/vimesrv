@@ -38,6 +38,10 @@ func (m *mockMediaRepository) Update(ctx context.Context, media *domain.MediaFil
 	return nil
 }
 
+func (m *mockMediaRepository) List(ctx context.Context, page, perPage int) ([]*domain.MediaFile, int, error) {
+	return nil, 0, nil
+}
+
 // MockTranscodeRepository for testing
 type mockTranscodeRepository struct {
 	GetByMediaIDFn func(ctx context.Context, mediaID string) ([]*domain.Transcode, error)

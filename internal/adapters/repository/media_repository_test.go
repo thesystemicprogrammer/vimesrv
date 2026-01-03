@@ -56,6 +56,7 @@ func createTestMediaFile() *domain.MediaFile {
 		SubtitleTracks:    1,
 		SubtitleLanguages: []string{"eng", "spa"},
 		Status:            domain.MediaStatusReady,
+		EnrichmentStatus:  domain.EnrichmentStatusPending,
 		CreatedAt:         now,
 		UpdatedAt:         now,
 		ScannedAt:         now,

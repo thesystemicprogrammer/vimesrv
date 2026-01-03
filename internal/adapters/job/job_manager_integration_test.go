@@ -360,7 +360,7 @@ func TestJobManager_ScheduleUpsertAndExecution(t *testing.T) {
 	ctx := context.Background()
 	scheduleID, err := deps.UpsertScheduleUseCase.Execute(ctx, usecasejob.UpsertScheduleInput{
 		Name:     "test-schedule",
-		CronSpec: "* * * * *", // Every minute
+		CronSpec: "0 * * * * *", // Every minute (at :00 seconds)
 		JobType:  "scheduled-job",
 		Priority: 5,
 		Enabled:  true,
@@ -371,7 +371,7 @@ func TestJobManager_ScheduleUpsertAndExecution(t *testing.T) {
 	// Verify schedule was created
 	schedule := getScheduleByName(t, deps.DB, "test-schedule")
 	assert.Equal(t, "test-schedule", schedule.Name)
-	assert.Equal(t, "* * * * *", schedule.CronSpec)
+	assert.Equal(t, "0 * * * * *", schedule.CronSpec)
 	assert.True(t, schedule.Enabled)
 	assert.True(t, schedule.NextRunAt.Valid, "next_run_at should be set")
 
@@ -508,7 +508,7 @@ func TestJobManager_ScheduleDisabledIgnored(t *testing.T) {
 	// Create disabled schedule
 	scheduleID, err := deps.UpsertScheduleUseCase.Execute(ctx, usecasejob.UpsertScheduleInput{
 		Name:     "disabled-schedule",
-		CronSpec: "* * * * *",
+		CronSpec: "0 * * * * *",
 		JobType:  "disabled-job",
 		Enabled:  false, // Disabled
 	})
@@ -723,7 +723,7 @@ func TestJobManager_RestartWithDueScheduledJobs(t *testing.T) {
 	// Create schedule
 	scheduleID, err := deps.UpsertScheduleUseCase.Execute(ctx, usecasejob.UpsertScheduleInput{
 		Name:     "missed-schedule",
-		CronSpec: "* * * * *",
+		CronSpec: "0 * * * * *",
 		JobType:  "missed-job",
 		Enabled:  true,
 	})

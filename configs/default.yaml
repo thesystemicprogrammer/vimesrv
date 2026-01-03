@@ -137,3 +137,10 @@ websocket:
   pong_timeout_seconds: 10
   write_timeout_seconds: 10
   max_message_size_bytes: 512
+
+# Database rebuild configuration
+# Use --prepare-rebuild to export users and metadata links before a breaking upgrade
+# Use --rebuild-from-dump to restore from the exported data after upgrade
+rebuild:
+  allow_rebuild: false # Must be set to true to enable --rebuild-from-dump
+  tmdb_requests_per_10s: 15 # Conservative rate limit during rebuild (default TMDB limit is 35)

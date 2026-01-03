@@ -213,3 +213,39 @@ func (fs *OSFileSystem) WriteFile(path string, data []byte) error {
 
 	return nil
 }
+
+// ReadFile reads the contents of a file
+func (fs *OSFileSystem) ReadFile(path string) ([]byte, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file: %w", err)
+	}
+	return data, nil
+}
+
+// ReadDir reads a directory and returns its entries
+func (fs *OSFileSystem) ReadDir(path string) ([]os.DirEntry, error) {
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read directory: %w", err)
+	}
+	return entries, nil
+}
+
+// ListFiles returns files matching a glob pattern within a directory
+func (fs *OSFileSystem) ListFiles(dir, pattern string) ([]string, error) {
+	fullPattern := filepath.Join(dir, pattern)
+	matches, err := filepath.Glob(fullPattern)
+	if err != nil {
+		return nil, fmt.Errorf("failed to glob files: %w", err)
+	}
+	return matches, nil
+}
+
+// Rename renames (moves) a file from oldPath to newPath
+func (fs *OSFileSystem) Rename(oldPath, newPath string) error {
+	if err := os.Rename(oldPath, newPath); err != nil {
+		return fmt.Errorf("failed to rename file: %w", err)
+	}
+	return nil
+}

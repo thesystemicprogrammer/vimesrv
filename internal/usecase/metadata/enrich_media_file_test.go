@@ -86,6 +86,42 @@ func (m *mockTMDBClient) GetImageURL(path string, size string) string {
 	return "https://image.tmdb.org/t/p/" + size + path
 }
 
+func (m *mockTMDBClient) GetMovieCredits(ctx context.Context, movieID int) (*ports.TMDBMovieCredits, error) {
+	return nil, nil
+}
+
+func (m *mockTMDBClient) GetSeriesAggregateCredits(ctx context.Context, seriesID int) (*ports.TMDBSeriesAggregateCredits, error) {
+	return nil, nil
+}
+
+func (m *mockTMDBClient) GetMovieReleaseDates(ctx context.Context, movieID int) (*ports.TMDBReleaseDatesResponse, error) {
+	return nil, nil
+}
+
+func (m *mockTMDBClient) GetSimilarMovies(ctx context.Context, movieID int, language string) (*ports.TMDBSimilarMoviesResponse, error) {
+	return nil, nil
+}
+
+func (m *mockTMDBClient) GetSimilarSeries(ctx context.Context, seriesID int, language string) (*ports.TMDBSimilarSeriesResponse, error) {
+	return nil, nil
+}
+
+func (m *mockTMDBClient) GetCollectionDetails(ctx context.Context, collectionID int, language string) (*ports.TMDBCollectionDetails, error) {
+	return nil, nil
+}
+
+func (m *mockTMDBClient) GetCollectionTranslations(ctx context.Context, collectionID int) (*ports.TMDBCollectionTranslationsResponse, error) {
+	return nil, nil
+}
+
+func (m *mockTMDBClient) GetMovieTranslations(ctx context.Context, movieID int) (*ports.TMDBMovieTranslationsResponse, error) {
+	return nil, nil
+}
+
+func (m *mockTMDBClient) GetSeriesTranslations(ctx context.Context, seriesID int) (*ports.TMDBSeriesTranslationsResponse, error) {
+	return nil, nil
+}
+
 type mockImageDownloader struct {
 	downloadImageFunc        func(ctx context.Context, tmdbPath string, imageType string, id int) (string, error)
 	downloadSeasonImageFunc  func(ctx context.Context, tmdbPath string, seriesID int, seasonNumber int) (string, error)
@@ -228,6 +264,22 @@ func (m *mockMovieMetadataRepository) UpsertTranslation(ctx context.Context, tra
 	return nil
 }
 
+func (m *mockMovieMetadataRepository) ListIDsWithoutTranslation(ctx context.Context, language string) ([]ports.MovieMetadataForTranslation, error) {
+	return nil, nil
+}
+
+func (m *mockMovieMetadataRepository) SetFullCreditsFetched(ctx context.Context, movieMetadataID int64) error {
+	return nil
+}
+
+func (m *mockMovieMetadataRepository) HasFullCreditsFetched(ctx context.Context, movieMetadataID int64) (bool, error) {
+	return false, nil
+}
+
+func (m *mockMovieMetadataRepository) GetTMDBIDByID(ctx context.Context, movieMetadataID int64) (int, error) {
+	return 0, nil
+}
+
 type mockSeriesMetadataRepository struct {
 	getByTMDBIDFunc       func(ctx context.Context, tmdbID int) (*domain.SeriesMetadata, error)
 	createFunc            func(ctx context.Context, metadata *domain.SeriesMetadata) error
@@ -286,6 +338,22 @@ func (m *mockSeriesMetadataRepository) GetTranslations(ctx context.Context, seri
 
 func (m *mockSeriesMetadataRepository) UpsertTranslation(ctx context.Context, translation *domain.SeriesMetadataTranslation) error {
 	return nil
+}
+
+func (m *mockSeriesMetadataRepository) ListIDsWithoutTranslation(ctx context.Context, language string) ([]ports.SeriesMetadataForTranslation, error) {
+	return nil, nil
+}
+
+func (m *mockSeriesMetadataRepository) SetFullCreditsFetched(ctx context.Context, seriesMetadataID int64) error {
+	return nil
+}
+
+func (m *mockSeriesMetadataRepository) HasFullCreditsFetched(ctx context.Context, seriesMetadataID int64) (bool, error) {
+	return false, nil
+}
+
+func (m *mockSeriesMetadataRepository) GetTMDBIDByID(ctx context.Context, seriesMetadataID int64) (int, error) {
+	return 0, nil
 }
 
 type mockSeasonMetadataRepository struct {
@@ -348,6 +416,10 @@ func (m *mockSeasonMetadataRepository) UpsertTranslation(ctx context.Context, tr
 	return nil
 }
 
+func (m *mockSeasonMetadataRepository) ListIDsWithoutTranslation(ctx context.Context, language string) ([]ports.SeasonMetadataForTranslation, error) {
+	return nil, nil
+}
+
 type mockEpisodeMetadataRepository struct {
 	getBySeasonAndNumberFunc func(ctx context.Context, seasonID int64, episodeNumber int) (*domain.EpisodeMetadata, error)
 	createFunc               func(ctx context.Context, metadata *domain.EpisodeMetadata) error
@@ -402,6 +474,10 @@ func (m *mockEpisodeMetadataRepository) GetTranslations(ctx context.Context, epi
 
 func (m *mockEpisodeMetadataRepository) UpsertTranslation(ctx context.Context, translation *domain.EpisodeMetadataTranslation) error {
 	return nil
+}
+
+func (m *mockEpisodeMetadataRepository) ListIDsWithoutTranslation(ctx context.Context, language string) ([]ports.EpisodeMetadataForTranslation, error) {
+	return nil, nil
 }
 
 type mockMetadataCandidateRepository struct {
@@ -492,6 +568,8 @@ func TestEnrichMediaFile_MediaNotFound(t *testing.T) {
 		&mockSeasonMetadataRepository{},
 		&mockEpisodeMetadataRepository{},
 		&mockMetadataCandidateRepository{},
+		nil,
+		nil,
 	)
 
 	_, err := uc.Execute(context.Background(), EnrichMediaFileInput{MediaID: "not-found"})
@@ -524,6 +602,8 @@ func TestEnrichMediaFile_AlreadyProcessed(t *testing.T) {
 		&mockSeasonMetadataRepository{},
 		&mockEpisodeMetadataRepository{},
 		&mockMetadataCandidateRepository{},
+		nil,
+		nil,
 	)
 
 	output, err := uc.Execute(context.Background(), EnrichMediaFileInput{MediaID: "test-id"})
@@ -583,6 +663,8 @@ func TestEnrichMediaFile_MovieNoResults(t *testing.T) {
 		&mockSeasonMetadataRepository{},
 		&mockEpisodeMetadataRepository{},
 		&mockMetadataCandidateRepository{},
+		nil,
+		nil,
 	)
 
 	output, err := uc.Execute(context.Background(), EnrichMediaFileInput{MediaID: "test-id"})
@@ -594,9 +676,6 @@ func TestEnrichMediaFile_MovieNoResults(t *testing.T) {
 	}
 	if output.EnrichmentStatus != domain.EnrichmentStatusManualRequired {
 		t.Errorf("Expected status %s, got %s", domain.EnrichmentStatusManualRequired, output.EnrichmentStatus)
-	}
-	if output.AutoLinked {
-		t.Error("Expected AutoLinked to be false")
 	}
 }
 
@@ -675,6 +754,8 @@ func TestEnrichMediaFile_MovieAutoLink(t *testing.T) {
 		&mockSeasonMetadataRepository{},
 		&mockEpisodeMetadataRepository{},
 		&mockMetadataCandidateRepository{},
+		nil,
+		nil,
 	)
 
 	output, err := uc.Execute(context.Background(), EnrichMediaFileInput{MediaID: "test-id"})
@@ -687,9 +768,6 @@ func TestEnrichMediaFile_MovieAutoLink(t *testing.T) {
 	}
 	if output.EnrichmentStatus != domain.EnrichmentStatusAutoLinked {
 		t.Errorf("Expected status %s, got %s", domain.EnrichmentStatusAutoLinked, output.EnrichmentStatus)
-	}
-	if !output.AutoLinked {
-		t.Error("Expected AutoLinked to be true")
 	}
 	if output.MetadataType != domain.MetadataTypeMovie {
 		t.Errorf("Expected metadata type %s, got %s", domain.MetadataTypeMovie, output.MetadataType)
@@ -773,6 +851,8 @@ func TestEnrichMediaFile_MovieCandidatesFound(t *testing.T) {
 		&mockSeasonMetadataRepository{},
 		&mockEpisodeMetadataRepository{},
 		candidateRepo,
+		nil,
+		nil,
 	)
 
 	output, err := uc.Execute(context.Background(), EnrichMediaFileInput{MediaID: "test-id"})
@@ -782,9 +862,6 @@ func TestEnrichMediaFile_MovieCandidatesFound(t *testing.T) {
 
 	if output.EnrichmentStatus != domain.EnrichmentStatusCandidatesFound {
 		t.Errorf("Expected status %s, got %s", domain.EnrichmentStatusCandidatesFound, output.EnrichmentStatus)
-	}
-	if output.AutoLinked {
-		t.Error("Expected AutoLinked to be false")
 	}
 	if len(storedCandidates) != 2 {
 		t.Errorf("Expected 2 candidates, got %d", len(storedCandidates))
@@ -910,6 +987,8 @@ func TestEnrichMediaFile_SeriesAutoLink(t *testing.T) {
 		seasonRepo,
 		episodeRepo,
 		&mockMetadataCandidateRepository{},
+		nil,
+		nil,
 	)
 
 	output, err := uc.Execute(context.Background(), EnrichMediaFileInput{MediaID: "test-id"})
@@ -922,9 +1001,6 @@ func TestEnrichMediaFile_SeriesAutoLink(t *testing.T) {
 	}
 	if output.EnrichmentStatus != domain.EnrichmentStatusAutoLinked {
 		t.Errorf("Expected status %s, got %s", domain.EnrichmentStatusAutoLinked, output.EnrichmentStatus)
-	}
-	if !output.AutoLinked {
-		t.Error("Expected AutoLinked to be true")
 	}
 	if output.MetadataType != domain.MetadataTypeEpisode {
 		t.Errorf("Expected metadata type %s, got %s", domain.MetadataTypeEpisode, output.MetadataType)
@@ -970,6 +1046,8 @@ func TestEnrichMediaFile_TMDBSearchError(t *testing.T) {
 		&mockSeasonMetadataRepository{},
 		&mockEpisodeMetadataRepository{},
 		&mockMetadataCandidateRepository{},
+		nil,
+		nil,
 	)
 
 	_, err := uc.Execute(context.Background(), EnrichMediaFileInput{MediaID: "test-id"})
@@ -1055,6 +1133,8 @@ func TestEnrichMediaFile_ReuseExistingMovieMetadata(t *testing.T) {
 		&mockSeasonMetadataRepository{},
 		&mockEpisodeMetadataRepository{},
 		&mockMetadataCandidateRepository{},
+		nil,
+		nil,
 	)
 
 	output, err := uc.Execute(context.Background(), EnrichMediaFileInput{MediaID: "test-id"})

@@ -17,6 +17,7 @@ type Config struct {
 	TMDB        TMDBConfig        `mapstructure:"tmdb"`
 	Library     LibraryConfig     `mapstructure:"library"`
 	WebSocket   WebSocketConfig   `mapstructure:"websocket"`
+	Rebuild     RebuildConfig     `mapstructure:"rebuild"`
 }
 
 // AuthConfig holds authentication configuration
@@ -119,6 +120,18 @@ type WebSocketConfig struct {
 
 type LibraryConfig struct {
 	RecentlyAddedCount int `mapstructure:"recently_added_count"`
+}
+
+// RebuildConfig holds configuration for database rebuild functionality
+type RebuildConfig struct {
+	// AllowRebuild must be true to enable the --rebuild-from-dump flag.
+	// This is a safety measure to prevent accidental database wipes.
+	AllowRebuild bool `mapstructure:"allow_rebuild"`
+
+	// TMDBRequestsPer10s is the rate limit for TMDB API requests during rebuild.
+	// This is intentionally lower than the normal rate limit to avoid hitting TMDB limits
+	// when re-linking a large library. Default is 15 (vs 35 for normal operation).
+	TMDBRequestsPer10s int `mapstructure:"tmdb_requests_per_10s"`
 }
 
 func (c *Config) Validate() error {

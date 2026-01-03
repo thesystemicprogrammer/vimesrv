@@ -92,6 +92,42 @@ func (m *integrationTestTMDBClient) GetImageURL(path, size string) string {
 	return "https://image.tmdb.org/t/p/" + size + path
 }
 
+func (m *integrationTestTMDBClient) GetMovieCredits(ctx context.Context, tmdbID int) (*ports.TMDBMovieCredits, error) {
+	return nil, nil
+}
+
+func (m *integrationTestTMDBClient) GetSeriesAggregateCredits(ctx context.Context, tmdbID int) (*ports.TMDBSeriesAggregateCredits, error) {
+	return nil, nil
+}
+
+func (m *integrationTestTMDBClient) GetMovieReleaseDates(ctx context.Context, tmdbID int) (*ports.TMDBReleaseDatesResponse, error) {
+	return nil, nil
+}
+
+func (m *integrationTestTMDBClient) GetSimilarMovies(ctx context.Context, tmdbID int, language string) (*ports.TMDBSimilarMoviesResponse, error) {
+	return nil, nil
+}
+
+func (m *integrationTestTMDBClient) GetSimilarSeries(ctx context.Context, tmdbID int, language string) (*ports.TMDBSimilarSeriesResponse, error) {
+	return nil, nil
+}
+
+func (m *integrationTestTMDBClient) GetCollectionDetails(ctx context.Context, collectionID int, language string) (*ports.TMDBCollectionDetails, error) {
+	return nil, nil
+}
+
+func (m *integrationTestTMDBClient) GetCollectionTranslations(ctx context.Context, collectionID int) (*ports.TMDBCollectionTranslationsResponse, error) {
+	return nil, nil
+}
+
+func (m *integrationTestTMDBClient) GetMovieTranslations(ctx context.Context, tmdbID int) (*ports.TMDBMovieTranslationsResponse, error) {
+	return nil, nil
+}
+
+func (m *integrationTestTMDBClient) GetSeriesTranslations(ctx context.Context, tmdbID int) (*ports.TMDBSeriesTranslationsResponse, error) {
+	return nil, nil
+}
+
 // integrationTestFilenameParser is a mock filename parser
 type integrationTestFilenameParser struct {
 	parsedResult *ports.ParsedFilename
@@ -219,6 +255,8 @@ func TestEnrichMediaFile_Integration_AutoLinkMovie(t *testing.T) {
 		seasonMetadataRepo,
 		episodeMetadataRepo,
 		candidateRepo,
+		nil,
+		nil,
 	)
 
 	// Execute enrichment
@@ -228,7 +266,6 @@ func TestEnrichMediaFile_Integration_AutoLinkMovie(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, domain.EnrichmentStatusAutoLinked, output.EnrichmentStatus)
 	assert.Equal(t, domain.MetadataTypeMovie, output.MetadataType)
-	assert.True(t, output.AutoLinked)
 
 	// Verify media file was updated in database
 	var enrichmentStatus, metadataType string
@@ -339,6 +376,8 @@ func TestEnrichMediaFile_Integration_CandidatesFound(t *testing.T) {
 		seasonMetadataRepo,
 		episodeMetadataRepo,
 		candidateRepo,
+		nil,
+		nil,
 	)
 
 	// Execute enrichment

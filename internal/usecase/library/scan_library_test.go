@@ -103,6 +103,40 @@ func (m *MockFileSystemService) GetFileSize(path string) (int64, error) {
 	return args.Get(0).(int64), args.Error(1)
 }
 
+func (m *MockFileSystemService) WriteFile(path string, data []byte) error {
+	args := m.Called(path, data)
+	return args.Error(0)
+}
+
+func (m *MockFileSystemService) ReadFile(path string) ([]byte, error) {
+	args := m.Called(path)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]byte), args.Error(1)
+}
+
+func (m *MockFileSystemService) ReadDir(path string) ([]os.DirEntry, error) {
+	args := m.Called(path)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]os.DirEntry), args.Error(1)
+}
+
+func (m *MockFileSystemService) ListFiles(dir, pattern string) ([]string, error) {
+	args := m.Called(dir, pattern)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]string), args.Error(1)
+}
+
+func (m *MockFileSystemService) Rename(oldPath, newPath string) error {
+	args := m.Called(oldPath, newPath)
+	return args.Error(0)
+}
+
 type MockMediaRepository struct {
 	mock.Mock
 }
@@ -136,6 +170,14 @@ func (m *MockMediaRepository) Get(ctx context.Context, id string) (*domain.Media
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*domain.MediaFile), args.Error(1)
+}
+
+func (m *MockMediaRepository) List(ctx context.Context, page, perPage int) ([]*domain.MediaFile, int, error) {
+	args := m.Called(ctx, page, perPage)
+	if args.Get(0) == nil {
+		return nil, args.Int(1), args.Error(2)
+	}
+	return args.Get(0).([]*domain.MediaFile), args.Int(1), args.Error(2)
 }
 
 // Helper to create test config
@@ -305,7 +347,8 @@ func TestScanLibraryUseCase_Execute_SuccessfulImport(t *testing.T) {
 	cfg := testConfig()
 	ctx := context.Background()
 	filePath := "/library/staging/video.mp4"
-	fingerprint := "abc123def456"
+	// Fingerprint must be at least 32 chars for DeriveIDFromFingerprint to produce a 36-char UUID
+	fingerprint := "abc123def456789012345678901234567890"
 
 	metadata := &ports.VideoMetadata{
 		Duration:          120,
@@ -379,7 +422,8 @@ func TestScanLibraryUseCase_Execute_DatabaseError_Rollback(t *testing.T) {
 	cfg := testConfig()
 	ctx := context.Background()
 	filePath := "/library/staging/video.mp4"
-	fingerprint := "abc123def456"
+	// Fingerprint must be at least 32 chars for DeriveIDFromFingerprint to produce a 36-char UUID
+	fingerprint := "abc123def456789012345678901234567890"
 
 	metadata := &ports.VideoMetadata{
 		Duration:   120,

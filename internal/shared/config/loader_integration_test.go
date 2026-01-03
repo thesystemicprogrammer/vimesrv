@@ -400,6 +400,9 @@ tmdb:
   poster_size: "w500"
   backdrop_size: "w1280"
   requests_per_10s: 35
+  max_cast_members: 10
+  similar_content_count: 5
+  cache_ttl_hours: 24
 `, tempDir, tempDir, tempDir)
 
 	configPath := createTestConfigYAML(t, tempDir, yamlContent)
@@ -657,6 +660,9 @@ tmdb:
   poster_size: "w342"
   backdrop_size: "w780"
   requests_per_10s: 30
+  max_cast_members: 10
+  similar_content_count: 5
+  cache_ttl_hours: 24
 `, tempDir, tempDir, tempDir)
 
 	configPath := createTestConfigYAML(t, tempDir, yamlContent)
@@ -719,6 +725,9 @@ tmdb:
   poster_size: "w500"
   backdrop_size: "w1280"
   requests_per_10s: 35
+  max_cast_members: 10
+  similar_content_count: 5
+  cache_ttl_hours: 24
 `, tempDir, tempDir, tempDir)
 
 	configPath := createTestConfigYAML(t, tempDir, yamlContent)
@@ -906,6 +915,9 @@ tmdb:
   poster_size: "`+size+`"
   backdrop_size: "w1280"
   requests_per_10s: 35
+  max_cast_members: 10
+  similar_content_count: 5
+  cache_ttl_hours: 24
 `, tempDir, tempDir, tempDir)
 			configPath := createTestConfigYAML(t, tempDir, yamlContent)
 			cfg, err := Load(configPath)
@@ -961,6 +973,9 @@ tmdb:
   poster_size: "w500"
   backdrop_size: "`+size+`"
   requests_per_10s: 35
+  max_cast_members: 10
+  similar_content_count: 5
+  cache_ttl_hours: 24
 `, tempDir, tempDir, tempDir)
 			configPath := createTestConfigYAML(t, tempDir, yamlContent)
 			cfg, err := Load(configPath)

@@ -85,13 +85,13 @@ func createTestHandlerWithMocks(
 	// For testing, we'll need to create a handler with nil use cases and test the nil check behavior,
 	// or we need to refactor the handler to accept interfaces.
 	// For now, we'll test the TMDB disabled response when use cases are nil.
-	return NewMetadataHandler(nil, nil, nil, nil, nil, nil)
+	return NewMetadataHandler(nil, nil, nil, nil, nil, nil, nil, nil)
 }
 
 // --- Tests for GetCandidates ---
 
 func TestMetadataHandler_GetCandidates_TMDBDisabled(t *testing.T) {
-	handler := NewMetadataHandler(nil, nil, nil, nil, nil, nil)
+	handler := NewMetadataHandler(nil, nil, nil, nil, nil, nil, nil, nil)
 
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -108,7 +108,7 @@ func TestMetadataHandler_GetCandidates_TMDBDisabled(t *testing.T) {
 // --- Tests for LinkMetadata ---
 
 func TestMetadataHandler_LinkMetadata_TMDBDisabled(t *testing.T) {
-	handler := NewMetadataHandler(nil, nil, nil, nil, nil, nil)
+	handler := NewMetadataHandler(nil, nil, nil, nil, nil, nil, nil, nil)
 
 	body := `{"candidate_id": 123}`
 	w := httptest.NewRecorder()
@@ -124,7 +124,7 @@ func TestMetadataHandler_LinkMetadata_TMDBDisabled(t *testing.T) {
 }
 
 func TestMetadataHandler_LinkMetadata_InvalidRequest(t *testing.T) {
-	handler := NewMetadataHandler(nil, nil, nil, nil, nil, nil)
+	handler := NewMetadataHandler(nil, nil, nil, nil, nil, nil, nil, nil)
 
 	// Missing candidate_id
 	body := `{}`
@@ -141,7 +141,7 @@ func TestMetadataHandler_LinkMetadata_InvalidRequest(t *testing.T) {
 }
 
 func TestMetadataHandler_LinkMetadata_InvalidJSON(t *testing.T) {
-	handler := NewMetadataHandler(nil, nil, nil, nil, nil, nil)
+	handler := NewMetadataHandler(nil, nil, nil, nil, nil, nil, nil, nil)
 
 	body := `{invalid json`
 	w := httptest.NewRecorder()
@@ -159,7 +159,7 @@ func TestMetadataHandler_LinkMetadata_InvalidJSON(t *testing.T) {
 // --- Tests for SearchMetadata ---
 
 func TestMetadataHandler_SearchMetadata_TMDBDisabled(t *testing.T) {
-	handler := NewMetadataHandler(nil, nil, nil, nil, nil, nil)
+	handler := NewMetadataHandler(nil, nil, nil, nil, nil, nil, nil, nil)
 
 	body := `{"query": "Matrix"}`
 	w := httptest.NewRecorder()
@@ -175,7 +175,7 @@ func TestMetadataHandler_SearchMetadata_TMDBDisabled(t *testing.T) {
 }
 
 func TestMetadataHandler_SearchMetadata_InvalidRequest(t *testing.T) {
-	handler := NewMetadataHandler(nil, nil, nil, nil, nil, nil)
+	handler := NewMetadataHandler(nil, nil, nil, nil, nil, nil, nil, nil)
 
 	// Missing query (required)
 	body := `{}`
@@ -194,7 +194,7 @@ func TestMetadataHandler_SearchMetadata_InvalidRequest(t *testing.T) {
 // --- Tests for LinkFromSearch ---
 
 func TestMetadataHandler_LinkFromSearch_TMDBDisabled(t *testing.T) {
-	handler := NewMetadataHandler(nil, nil, nil, nil, nil, nil)
+	handler := NewMetadataHandler(nil, nil, nil, nil, nil, nil, nil, nil)
 
 	body := `{"tmdb_id": 603, "media_type": "movie"}`
 	w := httptest.NewRecorder()
@@ -210,7 +210,7 @@ func TestMetadataHandler_LinkFromSearch_TMDBDisabled(t *testing.T) {
 }
 
 func TestMetadataHandler_LinkFromSearch_InvalidRequest_MissingTMDBID(t *testing.T) {
-	handler := NewMetadataHandler(nil, nil, nil, nil, nil, nil)
+	handler := NewMetadataHandler(nil, nil, nil, nil, nil, nil, nil, nil)
 
 	body := `{"media_type": "movie"}`
 	w := httptest.NewRecorder()
@@ -226,7 +226,7 @@ func TestMetadataHandler_LinkFromSearch_InvalidRequest_MissingTMDBID(t *testing.
 }
 
 func TestMetadataHandler_LinkFromSearch_InvalidRequest_MissingMediaType(t *testing.T) {
-	handler := NewMetadataHandler(nil, nil, nil, nil, nil, nil)
+	handler := NewMetadataHandler(nil, nil, nil, nil, nil, nil, nil, nil)
 
 	body := `{"tmdb_id": 603}`
 	w := httptest.NewRecorder()
@@ -242,7 +242,7 @@ func TestMetadataHandler_LinkFromSearch_InvalidRequest_MissingMediaType(t *testi
 }
 
 func TestMetadataHandler_LinkFromSearch_InvalidMediaType(t *testing.T) {
-	handler := NewMetadataHandler(nil, nil, nil, nil, nil, nil)
+	handler := NewMetadataHandler(nil, nil, nil, nil, nil, nil, nil, nil)
 
 	body := `{"tmdb_id": 603, "media_type": "invalid"}`
 	w := httptest.NewRecorder()
@@ -261,7 +261,7 @@ func TestMetadataHandler_LinkFromSearch_InvalidMediaType(t *testing.T) {
 // --- Tests for SkipEnrichment ---
 
 func TestMetadataHandler_SkipEnrichment_TMDBDisabled(t *testing.T) {
-	handler := NewMetadataHandler(nil, nil, nil, nil, nil, nil)
+	handler := NewMetadataHandler(nil, nil, nil, nil, nil, nil, nil, nil)
 
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -277,7 +277,7 @@ func TestMetadataHandler_SkipEnrichment_TMDBDisabled(t *testing.T) {
 // --- Tests for ResetEnrichment ---
 
 func TestMetadataHandler_ResetEnrichment_TMDBDisabled(t *testing.T) {
-	handler := NewMetadataHandler(nil, nil, nil, nil, nil, nil)
+	handler := NewMetadataHandler(nil, nil, nil, nil, nil, nil, nil, nil)
 
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -293,7 +293,7 @@ func TestMetadataHandler_ResetEnrichment_TMDBDisabled(t *testing.T) {
 // --- Tests for RegisterRoutes ---
 
 func TestMetadataHandler_RegisterRoutes(t *testing.T) {
-	handler := NewMetadataHandler(nil, nil, nil, nil, nil, nil)
+	handler := NewMetadataHandler(nil, nil, nil, nil, nil, nil, nil, nil)
 
 	router := gin.New()
 	group := router.Group("/api/v1")
@@ -464,7 +464,7 @@ func TestLinkFromSearchRequest_JSONBinding(t *testing.T) {
 // For now, we demonstrate the pattern with a note about future improvements.
 
 func TestMetadataHandler_GetCandidates_QueryParams(t *testing.T) {
-	handler := NewMetadataHandler(nil, nil, nil, nil, nil, nil)
+	handler := NewMetadataHandler(nil, nil, nil, nil, nil, nil, nil, nil)
 
 	tests := []struct {
 		name            string
@@ -508,7 +508,7 @@ func TestMetadataHandler_GetCandidates_QueryParams(t *testing.T) {
 // --- Error response format tests ---
 
 func TestMetadataHandler_ErrorResponseFormat(t *testing.T) {
-	handler := NewMetadataHandler(nil, nil, nil, nil, nil, nil)
+	handler := NewMetadataHandler(nil, nil, nil, nil, nil, nil, nil, nil)
 
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)

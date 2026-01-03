@@ -3,6 +3,7 @@ package library
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -135,6 +136,26 @@ func (m *MockFileSystemService) GetFileSize(path string) (int64, error) {
 	return 1024, nil
 }
 
+func (m *MockFileSystemService) WriteFile(path string, data []byte) error {
+	return nil
+}
+
+func (m *MockFileSystemService) ReadFile(path string) ([]byte, error) {
+	return nil, nil
+}
+
+func (m *MockFileSystemService) ReadDir(path string) ([]os.DirEntry, error) {
+	return nil, nil
+}
+
+func (m *MockFileSystemService) ListFiles(dir, pattern string) ([]string, error) {
+	return nil, nil
+}
+
+func (m *MockFileSystemService) Rename(oldPath, newPath string) error {
+	return nil
+}
+
 // MockMediaRepository for testing
 type MockMediaRepository struct {
 	CreateFn              func(ctx context.Context, media *domain.MediaFile) error
@@ -173,6 +194,10 @@ func (m *MockMediaRepository) Update(ctx context.Context, media *domain.MediaFil
 
 func (m *MockMediaRepository) Get(ctx context.Context, id string) (*domain.MediaFile, error) {
 	return nil, nil
+}
+
+func (m *MockMediaRepository) List(ctx context.Context, page, perPage int) ([]*domain.MediaFile, int, error) {
+	return nil, 0, nil
 }
 
 // TestNewScanLibraryJobHandler tests the handler constructor

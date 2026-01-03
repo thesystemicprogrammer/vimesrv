@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -108,6 +109,10 @@ func (m *MockMediaRepository) Get(ctx context.Context, id string) (*domain.Media
 	}, nil
 }
 
+func (m *MockMediaRepository) List(ctx context.Context, page, perPage int) ([]*domain.MediaFile, int, error) {
+	return nil, 0, nil
+}
+
 // MockTranscoder for testing
 type MockTranscoder struct {
 	IsAvailableFn           func() error
@@ -189,6 +194,22 @@ func (m *MockFileSystemService) WriteFile(path string, data []byte) error {
 	if m.WriteFileFn != nil {
 		return m.WriteFileFn(path, data)
 	}
+	return nil
+}
+
+func (m *MockFileSystemService) ReadFile(path string) ([]byte, error) {
+	return nil, nil
+}
+
+func (m *MockFileSystemService) ReadDir(path string) ([]os.DirEntry, error) {
+	return nil, nil
+}
+
+func (m *MockFileSystemService) ListFiles(dir, pattern string) ([]string, error) {
+	return nil, nil
+}
+
+func (m *MockFileSystemService) Rename(oldPath, newPath string) error {
 	return nil
 }
 

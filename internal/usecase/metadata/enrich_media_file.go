@@ -27,7 +27,6 @@ type EnrichMediaFileOutput struct {
 	EnrichmentStatus string
 	MetadataType     string
 	CandidateCount   int
-	AutoLinked       bool
 	Message          string
 }
 
@@ -171,7 +170,6 @@ func (uc *EnrichMediaFileUseCase) enrichAsMovie(ctx context.Context, media *doma
 			EnrichmentStatus: domain.EnrichmentStatusManualRequired,
 			MetadataType:     domain.MetadataTypeNone,
 			CandidateCount:   0,
-			AutoLinked:       false,
 			Message:          "No matches found",
 		}, nil
 	}
@@ -222,7 +220,6 @@ func (uc *EnrichMediaFileUseCase) enrichAsSeries(ctx context.Context, media *dom
 			EnrichmentStatus: domain.EnrichmentStatusManualRequired,
 			MetadataType:     domain.MetadataTypeNone,
 			CandidateCount:   0,
-			AutoLinked:       false,
 			Message:          "No matches found",
 		}, nil
 	}
@@ -458,7 +455,6 @@ func (uc *EnrichMediaFileUseCase) autoLinkMovie(ctx context.Context, media *doma
 		EnrichmentStatus: domain.EnrichmentStatusAutoLinked,
 		MetadataType:     domain.MetadataTypeMovie,
 		CandidateCount:   1,
-		AutoLinked:       true,
 		Message:          fmt.Sprintf("Auto-linked to movie: %s (%d)", candidate.Title, candidate.ConfidenceScore),
 	}, nil
 }
@@ -521,7 +517,6 @@ func (uc *EnrichMediaFileUseCase) autoLinkSeries(ctx context.Context, media *dom
 		EnrichmentStatus: domain.EnrichmentStatusAutoLinked,
 		MetadataType:     domain.MetadataTypeEpisode,
 		CandidateCount:   1,
-		AutoLinked:       true,
 		Message:          fmt.Sprintf("Auto-linked to %s S%02dE%02d (%d)", candidate.Title, parsed.SeasonNumber, parsed.EpisodeNumber, candidate.ConfidenceScore),
 	}, nil
 }
@@ -539,7 +534,6 @@ func (uc *EnrichMediaFileUseCase) storeCandidates(ctx context.Context, media *do
 			EnrichmentStatus: domain.EnrichmentStatusManualRequired,
 			MetadataType:     domain.MetadataTypeNone,
 			CandidateCount:   0,
-			AutoLinked:       false,
 			Message:          "No candidates found",
 		}, nil
 	}
@@ -571,7 +565,6 @@ func (uc *EnrichMediaFileUseCase) storeCandidates(ctx context.Context, media *do
 		EnrichmentStatus: domain.EnrichmentStatusCandidatesFound,
 		MetadataType:     domain.MetadataTypeNone,
 		CandidateCount:   len(candidates),
-		AutoLinked:       false,
 		Message:          fmt.Sprintf("Found %d candidates, awaiting selection", len(candidates)),
 	}, nil
 }
@@ -968,6 +961,10 @@ func (uc *EnrichMediaFileUseCase) fetchAndStoreMovieCredits(ctx context.Context,
 		return fmt.Errorf("failed to get movie credits: %w", err)
 	}
 
+	if credits == nil {
+		return nil // No credits available
+	}
+
 	var creditsToStore []*domain.MovieCredit
 
 	// Store top N cast members based on config
@@ -1049,6 +1046,10 @@ func (uc *EnrichMediaFileUseCase) fetchAndStoreCertifications(ctx context.Contex
 	releaseDates, err := uc.tmdbClient.GetMovieReleaseDates(ctx, tmdbID)
 	if err != nil {
 		return fmt.Errorf("failed to get movie release dates: %w", err)
+	}
+
+	if releaseDates == nil {
+		return nil // No release dates available
 	}
 
 	var certsToStore []*domain.MovieCertification

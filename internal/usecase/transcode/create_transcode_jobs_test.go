@@ -45,6 +45,10 @@ func (m *MockMediaRepository) Get(ctx context.Context, id string) (*domain.Media
 	}, nil
 }
 
+func (m *MockMediaRepository) List(ctx context.Context, page, perPage int) ([]*domain.MediaFile, int, error) {
+	return nil, 0, nil
+}
+
 // MockTranscodeRepository for testing
 type MockTranscodeRepository struct {
 	CreatedTranscodes []*domain.Transcode
@@ -127,6 +131,10 @@ func (m *MockJobRepository) FindStuckJobs(ctx context.Context, threshold time.Du
 
 func (m *MockJobRepository) ResetStuckJob(ctx context.Context, jobID int64) error {
 	return nil
+}
+
+func (m *MockJobRepository) ExistsPendingJobByType(ctx context.Context, jobType string, payload string) (bool, error) {
+	return false, nil
 }
 
 // MockFFProbeService for testing

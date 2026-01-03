@@ -1,6 +1,9 @@
 package ports
 
-import "path/filepath"
+import (
+	"os"
+	"path/filepath"
+)
 
 // FileSystemService provides filesystem operations
 type FileSystemService interface {
@@ -29,4 +32,16 @@ type FileSystemService interface {
 	// WriteFile writes data to a file
 	// Creates parent directories if they don't exist
 	WriteFile(path string, data []byte) error
+
+	// ReadFile reads the contents of a file
+	ReadFile(path string) ([]byte, error)
+
+	// ReadDir reads a directory and returns its entries
+	ReadDir(path string) ([]os.DirEntry, error)
+
+	// ListFiles returns files matching a glob pattern within a directory
+	ListFiles(dir, pattern string) ([]string, error)
+
+	// Rename renames (moves) a file from oldPath to newPath
+	Rename(oldPath, newPath string) error
 }

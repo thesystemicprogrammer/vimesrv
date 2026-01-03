@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/thesystemicprogrammer/vimesrv/internal/domain"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/config"
@@ -188,8 +187,10 @@ func (uc *ScanLibraryUseCase) processFile(ctx context.Context, filePath string, 
 	// Get original filename
 	originalFilename := filepath.Base(filePath)
 
-	// Generate UUID for the media file
-	id := uuid.New().String()
+	// Generate deterministic ID from fingerprint
+	// This ensures the same file content always produces the same media ID,
+	// enabling database rebuilds while preserving transcode paths and API URLs.
+	id := domain.DeriveIDFromFingerprint(fingerprint)
 
 	// Create target directory: {media_path}/{uuid}/
 	targetDir := filepath.Join(uc.config.MediaPath, id)
@@ -312,6 +313,7 @@ func (uc *ScanLibraryUseCase) deleteFile(filePath string) {
 // enqueueEnrichmentJob enqueues a metadata enrichment job for the given media file
 func (uc *ScanLibraryUseCase) enqueueEnrichmentJob(ctx context.Context, mediaID string) error {
 	payload := EnrichMetadataJobPayload{MediaID: mediaID}
+
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal enrichment job payload: %w", err)
