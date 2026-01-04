@@ -1,6 +1,7 @@
 package http
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -16,21 +17,24 @@ import (
 
 // MediaHandler handles media API endpoints
 type MediaHandler struct {
-	listMediaUC *media.ListMediaUseCase
-	getMediaUC  *media.GetMediaUseCase
-	config      *config.Config
+	listMediaUC   *media.ListMediaUseCase
+	getMediaUC    *media.GetMediaUseCase
+	deleteMediaUC *media.DeleteMediaUseCase
+	config        *config.Config
 }
 
 // NewMediaHandler creates a new media handler
 func NewMediaHandler(
 	listMediaUC *media.ListMediaUseCase,
 	getMediaUC *media.GetMediaUseCase,
+	deleteMediaUC *media.DeleteMediaUseCase,
 	config *config.Config,
 ) *MediaHandler {
 	return &MediaHandler{
-		listMediaUC: listMediaUC,
-		getMediaUC:  getMediaUC,
-		config:      config,
+		listMediaUC:   listMediaUC,
+		getMediaUC:    getMediaUC,
+		deleteMediaUC: deleteMediaUC,
+		config:        config,
 	}
 }
 
@@ -39,6 +43,42 @@ func (h *MediaHandler) RegisterRoutes(router *gin.RouterGroup) {
 	router.GET("/media", h.ListMedia)
 	router.GET("/media/:id", h.GetMedia)
 	logger.Debug().Msg("Media routes registered")
+}
+
+// RegisterAdminRoutes registers admin-only media routes (delete operations)
+func (h *MediaHandler) RegisterAdminRoutes(router *gin.RouterGroup) {
+	adminGroup := router.Group("/media")
+	adminGroup.Use(h.requireAdmin())
+	{
+		adminGroup.DELETE("/:id", h.DeleteMedia)
+	}
+	logger.Debug().Msg("Media admin routes registered")
+}
+
+// requireAdmin middleware checks if the user has admin role
+func (h *MediaHandler) requireAdmin() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		role, exists := c.Get("role")
+		if !exists {
+			c.AbortWithStatusJSON(http.StatusForbidden, server.ErrorResponse(
+				"FORBIDDEN",
+				"Access denied",
+				"",
+			))
+			return
+		}
+
+		if role != string(shared.RoleAdmin) {
+			c.AbortWithStatusJSON(http.StatusForbidden, server.ErrorResponse(
+				"FORBIDDEN",
+				"Admin access required",
+				"",
+			))
+			return
+		}
+
+		c.Next()
+	}
 }
 
 // MediaDetailResponse represents the detailed media response for a single item
@@ -201,4 +241,45 @@ func (h *MediaHandler) buildMediaDetailResponse(result *media.GetMediaOutput) Me
 		SubtitleStreams:    subtitleStreams,
 		AvailableQualities: qualities,
 	}
+}
+
+// DeleteMedia handles DELETE /api/v1/media/:id (admin only)
+// Moves source file to trash and permanently deletes transcoded files
+func (h *MediaHandler) DeleteMedia(c *gin.Context) {
+	id := c.Param("id")
+
+	logger.Info().
+		Str("media_id", id).
+		Msg("deleting media")
+
+	err := h.deleteMediaUC.Execute(c.Request.Context(), media.DeleteMediaInput{
+		MediaID: id,
+	})
+	if err != nil {
+		if errors.Is(err, shared.ErrMediaNotFound) {
+			c.JSON(http.StatusNotFound, server.ErrorResponse(
+				"MEDIA_NOT_FOUND",
+				"Media not found",
+				err.Error(),
+			))
+			return
+		}
+		if errors.Is(err, shared.ErrMediaHasRunningJobs) {
+			c.JSON(http.StatusConflict, server.ErrorResponse(
+				"MEDIA_HAS_RUNNING_JOBS",
+				"Cannot delete media with running transcode jobs",
+				"Wait for transcode jobs to complete before deleting",
+			))
+			return
+		}
+		logger.Error().Err(err).Str("media_id", id).Msg("failed to delete media")
+		c.JSON(http.StatusInternalServerError, server.ErrorResponse(
+			"DELETE_FAILED",
+			"Failed to delete media",
+			err.Error(),
+		))
+		return
+	}
+
+	c.JSON(http.StatusOK, server.SuccessResponse(gin.H{"deleted": true}))
 }

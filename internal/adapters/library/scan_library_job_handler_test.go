@@ -162,6 +162,10 @@ func (m *MockFileSystemService) CopyFileWithProgress(src, dst string, callback p
 	return nil
 }
 
+func (m *MockFileSystemService) RemoveDir(path string) error {
+	return nil
+}
+
 // MockMediaRepository for testing
 type MockMediaRepository struct {
 	CreateFn              func(ctx context.Context, media *domain.MediaFile) error
@@ -204,6 +208,14 @@ func (m *MockMediaRepository) Get(ctx context.Context, id string) (*domain.Media
 
 func (m *MockMediaRepository) List(ctx context.Context, page, perPage int) ([]*domain.MediaFile, int, error) {
 	return nil, 0, nil
+}
+
+func (m *MockMediaRepository) Delete(ctx context.Context, id string) error {
+	return nil
+}
+
+func (m *MockMediaRepository) FindByEpisodeMetadataIDs(ctx context.Context, episodeMetadataIDs []int64) ([]*domain.MediaFile, error) {
+	return nil, nil
 }
 
 // TestNewScanLibraryJobHandler tests the handler constructor

@@ -52,8 +52,9 @@ func NewTranscode(id, mediaID, quality string, trackType TrackType, trackIndex i
 }
 
 // MarkProcessing marks the transcode as currently processing
-func (t *Transcode) MarkProcessing() {
+func (t *Transcode) MarkProcessing(outputPath string) {
 	t.Status = TranscodeProcessing
+	t.OutputPath = outputPath
 	t.UpdatedAt = time.Now()
 }
 

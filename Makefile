@@ -68,7 +68,7 @@ check-pwa-freshness: ## Check if PWA build is up-to-date with sources
 		echo "ERROR: PWA not built. Run 'make pwa-build' first."; \
 		exit 1; \
 	fi
-	@stale_file=$$(find web/pwa/src -type f -newer web/pwa/dist -print -quit 2>/dev/null); \
+	@stale_file=$$(find web/pwa/src -type f -newer web/pwa/dist/vimesrv-client -print -quit 2>/dev/null); \
 	if [ -n "$$stale_file" ]; then \
 		echo "ERROR: PWA sources are newer than build (e.g., $$stale_file)"; \
 		echo "Run 'make pwa-build' to rebuild the frontend."; \

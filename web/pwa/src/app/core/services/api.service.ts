@@ -411,7 +411,18 @@ export interface ChangePasswordRequest {
 
 // Job types
 export type JobStatus = 'queued' | 'running' | 'succeeded' | 'dead';
-export type JobType = 'scan_library' | 'transcode_video' | 'transcode_audio' | 'enrich_metadata' | 'fetch_translations';
+export type JobType = 'scan_library' | 'transcode_video' | 'transcode_audio' | 'transcode_subtitle' | 'enrich_metadata' | 'fetch_translations';
+
+export interface JobProgress {
+  frame?: number;
+  fps?: number;
+  bitrate?: string;
+  total_size?: number;
+  time?: string;
+  speed?: string;
+  percentage: number;
+  message?: string;
+}
 
 export interface Job {
   id: number;
@@ -422,6 +433,8 @@ export interface Job {
   attempts: number;
   max_attempts: number;
   last_error?: string;
+  worker_id?: string;
+  progress?: JobProgress;
   created_at: string;
   started_at?: string;
   finished_at?: string;
@@ -750,6 +763,44 @@ export class ApiService {
     return this.http.get<ApiResponse<JobListResponse>>(
       `${this.baseUrl}/jobs`,
       { params }
+    );
+  }
+
+  // Delete endpoints (admin only)
+
+  /**
+   * Delete a single media file (admin only)
+   * - Moves source file to trash
+   * - Permanently deletes transcoded files
+   * - Blocks if media has running transcode jobs
+   */
+  deleteMedia(mediaId: string): Observable<ApiResponse<{ deleted: boolean }>> {
+    return this.http.delete<ApiResponse<{ deleted: boolean }>>(
+      `${this.baseUrl}/media/${mediaId}`
+    );
+  }
+
+  /**
+   * Delete all media files for a season (admin only)
+   * - Moves source files to trash
+   * - Permanently deletes transcoded files
+   * - Blocks if any media has running transcode jobs
+   */
+  deleteSeason(seasonId: number): Observable<ApiResponse<{ deleted: boolean; deleted_media_count: number }>> {
+    return this.http.delete<ApiResponse<{ deleted: boolean; deleted_media_count: number }>>(
+      `${this.baseUrl}/library/seasons/${seasonId}`
+    );
+  }
+
+  /**
+   * Delete all media files for a series (admin only)
+   * - Moves source files to trash
+   * - Permanently deletes transcoded files
+   * - Blocks if any media has running transcode jobs
+   */
+  deleteSeries(seriesId: number): Observable<ApiResponse<{ deleted: boolean; deleted_media_count: number; deleted_season_count: number }>> {
+    return this.http.delete<ApiResponse<{ deleted: boolean; deleted_media_count: number; deleted_season_count: number }>>(
+      `${this.baseUrl}/library/series/${seriesId}`
     );
   }
 

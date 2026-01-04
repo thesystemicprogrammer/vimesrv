@@ -109,22 +109,9 @@ func (uc *CreateTranscodeJobsUseCase) Execute(ctx context.Context, input CreateT
 // TranscodeJobPayload is the payload for transcode jobs
 type TranscodeJobPayload struct {
 	TranscodeID   string `json:"transcode_id"`
+	Filename      string `json:"filename"`
 	Language      string `json:"language,omitempty"`
 	ChannelLayout string `json:"channel_layout,omitempty"`
-}
-
-// createTranscodeJob creates a job for a transcode record
-func (uc *CreateTranscodeJobsUseCase) createTranscodeJob(ctx context.Context, transcodeID string) error {
-	_, err := uc.enqueueJobUseCase.Execute(ctx, job.EnqueueJobInput{
-		Type:     shared.JobTypeTranscodeVideo,
-		Payload:  TranscodeJobPayload{TranscodeID: transcodeID},
-		Priority: shared.JobPriorityTranscode,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to enqueue transcode job: %w", err)
-	}
-
-	return nil
 }
 
 // createVideoTranscodeJobs creates transcode jobs for each video quality profile.
@@ -149,7 +136,15 @@ func (uc *CreateTranscodeJobsUseCase) createVideoTranscodeJobs(ctx context.Conte
 		}
 
 		// Create job for this transcode
-		if err := uc.createTranscodeJob(ctx, transcodeID); err != nil {
+		_, err := uc.enqueueJobUseCase.Execute(ctx, job.EnqueueJobInput{
+			Type: shared.JobTypeTranscodeVideo,
+			Payload: TranscodeJobPayload{
+				TranscodeID: transcodeID,
+				Filename:    media.Filename,
+			},
+			Priority: shared.JobPriorityTranscode,
+		})
+		if err != nil {
 			return 0, fmt.Errorf("failed to create video transcode job: %w", err)
 		}
 
@@ -206,9 +201,10 @@ func (uc *CreateTranscodeJobsUseCase) createAudioTranscodeJobs(ctx context.Conte
 
 		// Create job with extended payload including language and channel layout
 		_, err = uc.enqueueJobUseCase.Execute(ctx, job.EnqueueJobInput{
-			Type: shared.JobTypeTranscodeVideo, // Audio uses same job type
+			Type: shared.JobTypeTranscodeAudio,
 			Payload: TranscodeJobPayload{
 				TranscodeID:   transcodeID,
+				Filename:      media.Filename,
 				Language:      audioStream.Language,
 				ChannelLayout: audioStream.ChannelLayout,
 			},
@@ -267,8 +263,17 @@ func (uc *CreateTranscodeJobsUseCase) createSubtitleTranscodeJobs(ctx context.Co
 			return 0, fmt.Errorf("failed to create subtitle transcode record: %w", err)
 		}
 
-		// Create job for this transcode
-		if err := uc.createTranscodeJob(ctx, transcodeID); err != nil {
+		// Create job for this transcode with language
+		_, err = uc.enqueueJobUseCase.Execute(ctx, job.EnqueueJobInput{
+			Type: shared.JobTypeTranscodeSubtitle,
+			Payload: TranscodeJobPayload{
+				TranscodeID: transcodeID,
+				Filename:    media.Filename,
+				Language:    subtitleStream.Language,
+			},
+			Priority: shared.JobPriorityTranscode,
+		})
+		if err != nil {
 			return 0, fmt.Errorf("failed to create subtitle transcode job: %w", err)
 		}
 

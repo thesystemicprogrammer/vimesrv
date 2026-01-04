@@ -130,6 +130,39 @@ func (r *TranscodeRepository) GetByMediaID(ctx context.Context, mediaID string) 
 	return transcodes, nil
 }
 
+// GetProcessingByMediaID retrieves all transcodes with 'processing' status for a media file
+func (r *TranscodeRepository) GetProcessingByMediaID(ctx context.Context, mediaID string) ([]*domain.Transcode, error) {
+	query := `
+		SELECT 
+			id, media_id, quality, track_type, track_index, status,
+			output_path, created_at, updated_at
+		FROM transcodes
+		WHERE media_id = ? AND status = 'processing'
+		ORDER BY track_type, track_index
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, mediaID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query processing transcodes: %w", err)
+	}
+	defer rows.Close()
+
+	var transcodes []*domain.Transcode
+	for rows.Next() {
+		transcode, err := r.scanTranscodeRow(rows)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan transcode: %w", err)
+		}
+		transcodes = append(transcodes, transcode)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating transcodes: %w", err)
+	}
+
+	return transcodes, nil
+}
+
 // UpdateStatus updates the status of a transcode
 func (r *TranscodeRepository) UpdateStatus(ctx context.Context, id string, status domain.TranscodeStatus) error {
 	query := `
@@ -157,16 +190,17 @@ func (r *TranscodeRepository) UpdateStatus(ctx context.Context, id string, statu
 
 // UpdateProgress is removed - progress tracking is done in the jobs table via payload
 
-// MarkProcessing marks a transcode as currently processing
-func (r *TranscodeRepository) MarkProcessing(ctx context.Context, id string) error {
+// MarkProcessing marks a transcode as currently processing and sets the output path
+func (r *TranscodeRepository) MarkProcessing(ctx context.Context, id string, outputPath string) error {
 	query := `
 		UPDATE transcodes 
 		SET status = 'processing', 
+		    output_path = ?,
 		    updated_at = CURRENT_TIMESTAMP
 		WHERE id = ?
 	`
 
-	result, err := r.db.ExecContext(ctx, query, id)
+	result, err := r.db.ExecContext(ctx, query, outputPath, id)
 	if err != nil {
 		return fmt.Errorf("failed to mark transcode as processing: %w", err)
 	}

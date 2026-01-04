@@ -42,6 +42,14 @@ func (m *mockMediaRepository) List(ctx context.Context, page, perPage int) ([]*d
 	return nil, 0, nil
 }
 
+func (m *mockMediaRepository) Delete(ctx context.Context, id string) error {
+	return nil
+}
+
+func (m *mockMediaRepository) FindByEpisodeMetadataIDs(ctx context.Context, episodeMetadataIDs []int64) ([]*domain.MediaFile, error) {
+	return nil, nil
+}
+
 // MockTranscodeRepository for testing
 type mockTranscodeRepository struct {
 	GetByMediaIDFn func(ctx context.Context, mediaID string) ([]*domain.Transcode, error)
@@ -66,7 +74,7 @@ func (m *mockTranscodeRepository) UpdateStatus(ctx context.Context, id string, s
 	return nil
 }
 
-func (m *mockTranscodeRepository) MarkProcessing(ctx context.Context, id string) error {
+func (m *mockTranscodeRepository) MarkProcessing(ctx context.Context, id string, outputPath string) error {
 	return nil
 }
 
@@ -83,6 +91,10 @@ func (m *mockTranscodeRepository) Delete(ctx context.Context, id string) error {
 }
 
 func (m *mockTranscodeRepository) ListPending(ctx context.Context, limit int) ([]*domain.Transcode, error) {
+	return nil, nil
+}
+
+func (m *mockTranscodeRepository) GetProcessingByMediaID(ctx context.Context, mediaID string) ([]*domain.Transcode, error) {
 	return nil, nil
 }
 

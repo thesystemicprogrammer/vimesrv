@@ -7,16 +7,20 @@ import { WebSocketService, JobStartedPayload, JobProgressPayload, JobCompletedPa
 
 type FilterTab = 'all' | 'running' | 'queued' | 'completed' | 'failed';
 
-interface JobWithProgress extends Job {
-  progress?: {
-    percentage?: number;
-    frame?: number;
-    fps?: number;
-    bitrate?: string;
-    time?: string;
-    speed?: string;
-    message?: string;
-  };
+// Local progress type that allows optional percentage (for display purposes)
+interface LocalJobProgress {
+  percentage?: number;
+  frame?: number;
+  fps?: number;
+  bitrate?: string;
+  time?: string;
+  speed?: string;
+  message?: string;
+}
+
+// Omit the original progress and replace with our local version
+interface JobWithProgress extends Omit<Job, 'progress'> {
+  progress?: LocalJobProgress;
 }
 
 @Component({
@@ -125,7 +129,10 @@ interface JobWithProgress extends Job {
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"/>
                         </svg>
                         <svg *ngSwitchCase="'transcode_audio'" class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"/>
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/>
+                        </svg>
+                        <svg *ngSwitchCase="'transcode_subtitle'" class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"/>
                         </svg>
                         <svg *ngSwitchCase="'scan_library'" class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
@@ -142,10 +149,15 @@ interface JobWithProgress extends Job {
                       <h3 class="text-white font-medium">
                         {{ getJobTypeLabel(job.type) }}
                         @if (getTranscodeInfo(job); as info) {
-                          <span class="text-slate-400 text-sm ml-1">({{ info }})</span>
+                          <span class="text-slate-400 ml-1">({{ info }})</span>
                         }
                       </h3>
-                      <p class="text-sm text-slate-400">{{ 'jobs.jobId' | translate }}: {{ job.id }}</p>
+                      <p class="text-sm text-slate-400">
+                        {{ 'jobs.jobId' | translate }}: {{ job.id }}
+                        @if (job.worker_id) {
+                          <span class="ml-2">| {{ 'jobs.workerId' | translate }}: {{ truncateWorkerId(job.worker_id) }}</span>
+                        }
+                      </p>
                     </div>
                   </div>
                   <!-- Status Badge -->
@@ -240,10 +252,13 @@ interface JobWithProgress extends Job {
                         <span class="text-slate-500">{{ 'jobs.language' | translate }}:</span> {{ details }}
                       }
                       @case ('transcode_video') {
-                        <span class="text-slate-500">{{ 'jobs.transcodeId' | translate }}:</span> {{ details }}
+                        <span class="text-slate-500">{{ 'jobs.file' | translate }}:</span> {{ details }}
                       }
                       @case ('transcode_audio') {
-                        <span class="text-slate-500">{{ 'jobs.transcodeId' | translate }}:</span> {{ details }}
+                        <span class="text-slate-500">{{ 'jobs.file' | translate }}:</span> {{ details }}
+                      }
+                      @case ('transcode_subtitle') {
+                        <span class="text-slate-500">{{ 'jobs.file' | translate }}:</span> {{ details }}
                       }
                     }
                   </div>
@@ -410,7 +425,14 @@ export class JobsComponent implements OnInit, OnDestroy {
           if (existing) {
             return jobs.map(j => 
               j.id === payload.job_id 
-                ? { ...j, status: 'running' as JobStatus, attempts: payload.attempt }
+                ? { 
+                    ...j, 
+                    status: 'running' as JobStatus, 
+                    attempts: payload.attempt,
+                    worker_id: payload.worker_id,
+                    started_at: payload.started_at,
+                    updated_at: payload.updated_at
+                  }
                 : j
             );
           }
@@ -422,9 +444,10 @@ export class JobsComponent implements OnInit, OnDestroy {
             priority: 0,
             attempts: payload.attempt,
             max_attempts: payload.max_attempts,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            started_at: new Date().toISOString()
+            worker_id: payload.worker_id,
+            created_at: payload.started_at || payload.updated_at,
+            updated_at: payload.updated_at,
+            started_at: payload.started_at
           };
           return [newJob, ...jobs];
         });
@@ -461,7 +484,15 @@ export class JobsComponent implements OnInit, OnDestroy {
         this.jobs.update(jobs => 
           jobs.map(j => 
             j.id === payload.job_id 
-              ? { ...j, status: 'succeeded' as JobStatus, progress: undefined }
+              ? { 
+                  ...j, 
+                  status: 'succeeded' as JobStatus, 
+                  progress: undefined,
+                  worker_id: payload.worker_id,
+                  started_at: payload.started_at || j.started_at,
+                  finished_at: payload.finished_at,
+                  updated_at: payload.updated_at
+                }
               : j
           )
         );
@@ -474,7 +505,16 @@ export class JobsComponent implements OnInit, OnDestroy {
         this.jobs.update(jobs => 
           jobs.map(j => 
             j.id === payload.job_id 
-              ? { ...j, status: 'dead' as JobStatus, last_error: payload.error_message, progress: undefined }
+              ? { 
+                  ...j, 
+                  status: 'dead' as JobStatus, 
+                  last_error: payload.error_message, 
+                  progress: undefined,
+                  worker_id: payload.worker_id,
+                  started_at: payload.started_at || j.started_at,
+                  finished_at: payload.finished_at,
+                  updated_at: payload.updated_at
+                }
               : j
           )
         );
@@ -487,7 +527,14 @@ export class JobsComponent implements OnInit, OnDestroy {
         this.jobs.update(jobs => 
           jobs.map(j => 
             j.id === payload.job_id 
-              ? { ...j, status: 'queued' as JobStatus, attempts: payload.attempt, progress: undefined }
+              ? { 
+                  ...j, 
+                  status: 'queued' as JobStatus, 
+                  attempts: payload.attempt, 
+                  progress: undefined,
+                  worker_id: payload.worker_id,
+                  updated_at: payload.updated_at
+                }
               : j
           )
         );
@@ -520,20 +567,45 @@ export class JobsComponent implements OnInit, OnDestroy {
     this.loading.set(true);
     this.api.listJobs({ includeOld: true }).subscribe({
       next: (response) => {
-        // Preserve progress from currently running jobs
+        // Preserve progress from currently running jobs (websocket updates)
+        // to avoid overwriting newer progress with stale API data
         const existingJobs = this.jobs();
-        const progressMap = new Map<number, JobWithProgress['progress']>();
+        const localProgressMap = new Map<number, JobWithProgress['progress']>();
         existingJobs.forEach(job => {
           if (job.status === 'running' && job.progress) {
-            progressMap.set(job.id, job.progress);
+            localProgressMap.set(job.id, job.progress);
           }
         });
 
-        // Merge new jobs with existing progress for running jobs
-        const newJobs: JobWithProgress[] = (response.data.jobs || []).map(job => ({
-          ...job,
-          progress: job.status === 'running' ? progressMap.get(job.id) : undefined
-        }));
+        // Merge new jobs with progress:
+        // - Use API progress if available (from server cache)
+        // - Otherwise use local progress (from websocket updates)
+        const newJobs: JobWithProgress[] = (response.data.jobs || []).map(job => {
+          if (job.status !== 'running') {
+            return { ...job, progress: undefined };
+          }
+          // Prefer local progress (more recent from websocket) over API progress
+          const localProgress = localProgressMap.get(job.id);
+          if (localProgress) {
+            return { ...job, progress: localProgress };
+          }
+          // Use API progress if available (from server cache)
+          if (job.progress) {
+            return {
+              ...job,
+              progress: {
+                percentage: job.progress.percentage,
+                frame: job.progress.frame,
+                fps: job.progress.fps,
+                bitrate: job.progress.bitrate,
+                time: job.progress.time,
+                speed: job.progress.speed,
+                message: job.progress.message
+              }
+            };
+          }
+          return { ...job, progress: undefined };
+        });
 
         this.jobs.set(newJobs);
         this.loading.set(false);
@@ -599,7 +671,7 @@ export class JobsComponent implements OnInit, OnDestroy {
   }
 
   isTranscodeJob(type: string): boolean {
-    return type === 'transcode_video' || type === 'transcode_audio';
+    return type === 'transcode_video' || type === 'transcode_audio' || type === 'transcode_subtitle';
   }
 
   getTranscodeInfo(job: JobWithProgress): string | null {
@@ -631,6 +703,15 @@ export class JobsComponent implements OnInit, OnDestroy {
       return parts.length > 0 ? parts.join(', ') : null;
     }
 
+    if (job.type === 'transcode_subtitle') {
+      // Get language from payload and convert to display name
+      const language = job.payload?.['language'] as string;
+      if (language) {
+        return this.getLanguageName(language);
+      }
+      return null;
+    }
+
     return null;
   }
 
@@ -638,6 +719,7 @@ export class JobsComponent implements OnInit, OnDestroy {
     const labels: Record<string, string> = {
       'transcode_video': this.translate.instant('jobs.typeTranscodeVideo'),
       'transcode_audio': this.translate.instant('jobs.typeTranscodeAudio'),
+      'transcode_subtitle': this.translate.instant('jobs.typeTranscodeSubtitle'),
       'scan_library': this.translate.instant('jobs.typeScanLibrary'),
       'enrich_metadata': this.translate.instant('jobs.typeEnrichMetadata'),
       'fetch_translations': this.translate.instant('jobs.typeFetchTranslations')
@@ -691,7 +773,8 @@ export class JobsComponent implements OnInit, OnDestroy {
         return this.getLanguageName(payload['language'] as string);
       case 'transcode_video':
       case 'transcode_audio':
-        return (payload['transcode_id'] as string) || null;
+      case 'transcode_subtitle':
+        return (payload['filename'] as string) || null;
       default:
         return null;
     }
@@ -705,5 +788,11 @@ export class JobsComponent implements OnInit, OnDestroy {
     } catch {
       return code;
     }
+  }
+
+  truncateWorkerId(workerId: string): string {
+    if (!workerId) return '';
+    if (workerId.length <= 10) return workerId;
+    return workerId.substring(0, 10) + '...';
   }
 }

@@ -43,12 +43,21 @@ func (m *MockMediaRepository) Get(ctx context.Context, id string) (*domain.Media
 	}
 	return &domain.MediaFile{
 		ID:       id,
+		Filename: "test.mp4",
 		FilePath: "/media/test.mp4",
 	}, nil
 }
 
 func (m *MockMediaRepository) List(ctx context.Context, page, perPage int) ([]*domain.MediaFile, int, error) {
 	return nil, 0, nil
+}
+
+func (m *MockMediaRepository) Delete(ctx context.Context, id string) error {
+	return nil
+}
+
+func (m *MockMediaRepository) FindByEpisodeMetadataIDs(ctx context.Context, episodeMetadataIDs []int64) ([]*domain.MediaFile, error) {
+	return nil, nil
 }
 
 // MockTranscodeRepository for testing
@@ -77,7 +86,7 @@ func (m *MockTranscodeRepository) UpdateStatus(ctx context.Context, id string, s
 	return nil
 }
 
-func (m *MockTranscodeRepository) MarkProcessing(ctx context.Context, id string) error {
+func (m *MockTranscodeRepository) MarkProcessing(ctx context.Context, id string, outputPath string) error {
 	return nil
 }
 
@@ -94,6 +103,10 @@ func (m *MockTranscodeRepository) Delete(ctx context.Context, id string) error {
 }
 
 func (m *MockTranscodeRepository) ListPending(ctx context.Context, limit int) ([]*domain.Transcode, error) {
+	return nil, nil
+}
+
+func (m *MockTranscodeRepository) GetProcessingByMediaID(ctx context.Context, mediaID string) ([]*domain.Transcode, error) {
 	return nil, nil
 }
 
@@ -268,6 +281,7 @@ func TestCreateTranscodeJobsUseCase_Execute_Success(t *testing.T) {
 		GetFn: func(ctx context.Context, id string) (*domain.MediaFile, error) {
 			return &domain.MediaFile{
 				ID:       id,
+				Filename: "test.mp4",
 				FilePath: "/media/test.mp4",
 			}, nil
 		},
@@ -361,28 +375,48 @@ func TestCreateTranscodeJobsUseCase_Execute_Success(t *testing.T) {
 	}
 	assert.Equal(t, 1, subtitleCount)
 
-	// Verify jobs created
+	// Verify jobs created with correct types
 	assert.Equal(t, 5, len(mockJobRepo.EnqueuedJobs))
+
+	// Count job types
+	videoJobCount := 0
+	audioJobCount := 0
+	subtitleJobCount := 0
 	for _, job := range mockJobRepo.EnqueuedJobs {
-		assert.Equal(t, "transcode_video", job.Type)
 		assert.NotNil(t, job.Payload)
 
-		// Verify payload contains transcode_id
+		// Verify payload contains transcode_id and filename
 		var payload struct {
 			TranscodeID   string `json:"transcode_id"`
+			Filename      string `json:"filename"`
 			Language      string `json:"language,omitempty"`
 			ChannelLayout string `json:"channel_layout,omitempty"`
 		}
 		err := json.Unmarshal(job.Payload, &payload)
 		require.NoError(t, err)
 		assert.NotEmpty(t, payload.TranscodeID)
+		assert.NotEmpty(t, payload.Filename, "All transcode jobs should have filename")
 
-		// Verify audio jobs have language and channel_layout
-		if strings.Contains(payload.TranscodeID, "-audio-") {
+		switch job.Type {
+		case "transcode_video":
+			videoJobCount++
+			assert.True(t, strings.Contains(payload.TranscodeID, "-video-"), "Video job transcode_id should contain -video-")
+		case "transcode_audio":
+			audioJobCount++
+			assert.True(t, strings.Contains(payload.TranscodeID, "-audio-"), "Audio job transcode_id should contain -audio-")
 			assert.NotEmpty(t, payload.Language, "Audio job should have language")
 			assert.NotEmpty(t, payload.ChannelLayout, "Audio job should have channel_layout")
+		case "transcode_subtitle":
+			subtitleJobCount++
+			assert.True(t, strings.Contains(payload.TranscodeID, "-subtitle-"), "Subtitle job transcode_id should contain -subtitle-")
+			assert.NotEmpty(t, payload.Language, "Subtitle job should have language")
+		default:
+			t.Errorf("Unexpected job type: %s", job.Type)
 		}
 	}
+	assert.Equal(t, 2, videoJobCount, "Should have 2 video jobs")
+	assert.Equal(t, 2, audioJobCount, "Should have 2 audio jobs")
+	assert.Equal(t, 1, subtitleJobCount, "Should have 1 subtitle job")
 }
 
 // TestCreateTranscodeJobsUseCase_Execute_NoAudioOrSubtitles tests with video only

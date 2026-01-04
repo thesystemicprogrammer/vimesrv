@@ -371,3 +371,76 @@ func (r *MediaRepository) Update(ctx context.Context, media *domain.MediaFile) e
 
 	return nil
 }
+
+// Delete removes a media file record by its ID.
+// Related records (audio_streams, subtitle_streams, transcodes, metadata_candidates)
+// are automatically deleted via CASCADE.
+func (r *MediaRepository) Delete(ctx context.Context, id string) error {
+	query := `DELETE FROM media_files WHERE id = ?`
+
+	result, err := r.db.ExecContext(ctx, query, id)
+	if err != nil {
+		return fmt.Errorf("failed to delete media file: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("media file not found with id: %s", id)
+	}
+
+	return nil
+}
+
+// FindByEpisodeMetadataIDs retrieves all media files linked to any of the given episode metadata IDs
+func (r *MediaRepository) FindByEpisodeMetadataIDs(ctx context.Context, episodeMetadataIDs []int64) ([]*domain.MediaFile, error) {
+	if len(episodeMetadataIDs) == 0 {
+		return []*domain.MediaFile{}, nil
+	}
+
+	// Build placeholders for IN clause
+	placeholders := ""
+	args := make([]interface{}, len(episodeMetadataIDs))
+	for i, id := range episodeMetadataIDs {
+		if i > 0 {
+			placeholders += ", "
+		}
+		placeholders += "?"
+		args[i] = id
+	}
+
+	query := fmt.Sprintf(`
+		SELECT 
+			id, fingerprint, file_path, original_filename, filename,
+			title, duration, file_size, format, video_codec, audio_codecs,
+			resolution, width, height, bitrate, audio_tracks, subtitle_tracks,
+			subtitle_languages, status, created_at, updated_at, scanned_at,
+			enrichment_status, metadata_type, movie_metadata_id, episode_metadata_id, edition
+		FROM media_files
+		WHERE episode_metadata_id IN (%s)
+	`, placeholders)
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query media files by episode metadata IDs: %w", err)
+	}
+	defer rows.Close()
+
+	var mediaFiles []*domain.MediaFile
+	for rows.Next() {
+		media, err := r.scanMediaRow(rows)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan media file: %w", err)
+		}
+		mediaFiles = append(mediaFiles, media)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating media files: %w", err)
+	}
+
+	return mediaFiles, nil
+}

@@ -38,10 +38,7 @@ echo ""
 
 # Step 1: Build PWA
 echo "[1/6] Building PWA..."
-cd "$PROJECT_ROOT/web/pwa"
-npm run build
-cd "$PROJECT_ROOT"
-echo "PWA build complete."
+make build-prod-pwa
 echo ""
 
 # Step 2: Build production server

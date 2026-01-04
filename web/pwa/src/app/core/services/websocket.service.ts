@@ -35,6 +35,9 @@ export interface JobStartedPayload {
   payload?: unknown;
   attempt: number;
   max_attempts: number;
+  worker_id?: string;
+  started_at?: string;
+  updated_at: string;
 }
 
 export interface JobProgressPayload {
@@ -53,6 +56,10 @@ export interface JobCompletedPayload {
   job_id: number;
   job_type: string;
   payload?: unknown;
+  worker_id?: string;
+  started_at?: string;
+  finished_at?: string;
+  updated_at: string;
 }
 
 export interface JobFailedPayload {
@@ -60,6 +67,10 @@ export interface JobFailedPayload {
   job_type: string;
   payload?: unknown;
   error_message: string;
+  worker_id?: string;
+  started_at?: string;
+  finished_at?: string;
+  updated_at: string;
 }
 
 export interface JobRetryingPayload {
@@ -68,6 +79,8 @@ export interface JobRetryingPayload {
   payload?: unknown;
   attempt: number;
   max_attempts: number;
+  worker_id?: string;
+  updated_at: string;
 }
 
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting';

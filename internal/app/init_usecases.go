@@ -25,6 +25,7 @@ type UseCases struct {
 	ProcessTranscodeUseCase    *transcode.ProcessTranscodeUseCase
 	GetMediaUseCase            *media.GetMediaUseCase
 	ListMediaUseCase           *media.ListMediaUseCase
+	DeleteMediaUseCase         *media.DeleteMediaUseCase
 	// Metadata enrichment use cases
 	EnrichMediaFileUseCase *metadata.EnrichMediaFileUseCase
 	GetCandidatesUseCase   *metadata.GetCandidatesUseCase
@@ -47,6 +48,8 @@ type UseCases struct {
 	GetMovieCollectionUseCase *library.GetMovieCollectionUseCase
 	ListGenresUseCase         *library.ListGenresUseCase
 	SearchLibraryUseCase      *library.SearchLibraryUseCase
+	DeleteSeasonUseCase       *library.DeleteSeasonUseCase
+	DeleteSeriesUseCase       *library.DeleteSeriesUseCase
 	// User management use cases
 	CreateUserUseCase     *user.CreateUserUseCase
 	ListUsersUseCase      *user.ListUsersUseCase
@@ -268,7 +271,13 @@ func initUseCases(cfg *config.Config, adapters *Adapters) *UseCases {
 			adapters.AudioStreamRepository,
 			adapters.SubtitleStreamRepository,
 		),
-		ListMediaUseCase:       media.NewListMediaUseCase(adapters.MediaRepository),
+		ListMediaUseCase: media.NewListMediaUseCase(adapters.MediaRepository),
+		DeleteMediaUseCase: media.NewDeleteMediaUseCase(
+			adapters.MediaRepository,
+			adapters.TranscodeRepository,
+			adapters.FileSystemService,
+			cfg,
+		),
 		EnrichMediaFileUseCase: enrichMediaFileUseCase,
 		GetCandidatesUseCase:   getCandidatesUseCase,
 		LinkMetadataUseCase:    linkMetadataUseCase,
@@ -290,6 +299,23 @@ func initUseCases(cfg *config.Config, adapters *Adapters) *UseCases {
 		GetMovieCollectionUseCase: getMovieCollectionUseCase,
 		ListGenresUseCase:         library.NewListGenresUseCase(adapters.LibraryRepository),
 		SearchLibraryUseCase:      library.NewSearchLibraryUseCase(adapters.SearchRepository, adapters.LibraryRepository),
+		DeleteSeasonUseCase: library.NewDeleteSeasonUseCase(
+			adapters.SeasonMetadataRepository,
+			adapters.EpisodeMetadataRepository,
+			adapters.MediaRepository,
+			adapters.TranscodeRepository,
+			adapters.FileSystemService,
+			cfg,
+		),
+		DeleteSeriesUseCase: library.NewDeleteSeriesUseCase(
+			adapters.SeriesMetadataRepository,
+			adapters.SeasonMetadataRepository,
+			adapters.EpisodeMetadataRepository,
+			adapters.MediaRepository,
+			adapters.TranscodeRepository,
+			adapters.FileSystemService,
+			cfg,
+		),
 		// User management use cases
 		CreateUserUseCase:     user.NewCreateUserUseCase(adapters.UserRepository),
 		ListUsersUseCase:      user.NewListUsersUseCase(adapters.UserRepository),

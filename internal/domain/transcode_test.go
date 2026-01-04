@@ -40,11 +40,15 @@ func TestNewTranscode(t *testing.T) {
 func TestTranscode_MarkProcessing(t *testing.T) {
 	transcode := NewTranscode("test-1", "media-1", "360p", TrackTypeVideo, 0)
 	before := time.Now()
+	outputPath := "/path/to/output"
 
-	transcode.MarkProcessing()
+	transcode.MarkProcessing(outputPath)
 
 	if transcode.Status != TranscodeProcessing {
 		t.Errorf("expected Status %s, got %s", TranscodeProcessing, transcode.Status)
+	}
+	if transcode.OutputPath != outputPath {
+		t.Errorf("expected OutputPath %s, got %s", outputPath, transcode.OutputPath)
 	}
 	if transcode.UpdatedAt.Before(before) {
 		t.Error("expected UpdatedAt to be updated")

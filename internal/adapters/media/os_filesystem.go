@@ -267,3 +267,11 @@ func (fs *OSFileSystem) Rename(oldPath, newPath string) error {
 	}
 	return nil
 }
+
+// RemoveDir removes a directory and all its contents recursively
+func (fs *OSFileSystem) RemoveDir(path string) error {
+	if err := os.RemoveAll(path); err != nil {
+		return fmt.Errorf("failed to remove directory: %w", err)
+	}
+	return nil
+}

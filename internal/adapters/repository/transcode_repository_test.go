@@ -163,7 +163,7 @@ func TestTranscodeRepository_MarkProcessing(t *testing.T) {
 		t.Fatalf("Failed to create transcode: %v", err)
 	}
 
-	err = repo.MarkProcessing(ctx, transcode.ID)
+	err = repo.MarkProcessing(ctx, transcode.ID, "/tmp/output/test")
 	if err != nil {
 		t.Fatalf("Failed to mark as processing: %v", err)
 	}
@@ -175,6 +175,9 @@ func TestTranscodeRepository_MarkProcessing(t *testing.T) {
 
 	if retrieved.Status != domain.TranscodeProcessing {
 		t.Errorf("Expected Status %s, got %s", domain.TranscodeProcessing, retrieved.Status)
+	}
+	if retrieved.OutputPath != "/tmp/output/test" {
+		t.Errorf("Expected OutputPath /tmp/output/test, got %s", retrieved.OutputPath)
 	}
 }
 
@@ -311,7 +314,7 @@ func TestTranscodeRepository_ListPending(t *testing.T) {
 	}
 
 	// Mark one as processing
-	err = repo.MarkProcessing(ctx, processingTranscode.ID)
+	err = repo.MarkProcessing(ctx, processingTranscode.ID, "/tmp/output/processing")
 	if err != nil {
 		t.Fatalf("Failed to mark as processing: %v", err)
 	}

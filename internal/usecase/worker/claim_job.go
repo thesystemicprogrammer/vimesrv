@@ -126,15 +126,19 @@ func (uc *ClaimJobForWorkerUseCase) Execute(ctx context.Context, workerID string
 		return nil, err
 	}
 
-	// 7. Mark transcode as processing
-	if err := uc.transcodeRepo.MarkProcessing(ctx, transcode.ID); err != nil {
+	// 7. Build output paths - relative for worker, absolute for database
+	relativeOutputPath := uc.buildOutputPath(media, transcode)
+	absoluteOutputPath := filepath.Join(uc.config.Media.MediaPath, relativeOutputPath)
+
+	// 8. Mark transcode as processing and store the absolute output path
+	if err := uc.transcodeRepo.MarkProcessing(ctx, transcode.ID, absoluteOutputPath); err != nil {
 		logger.Warn().Err(err).Str("transcode_id", transcode.ID).Msg("failed to mark transcode as processing")
 	}
 
-	// 8. Increment worker's active job count
+	// 9. Increment worker's active job count
 	uc.workerRegistry.IncrementActiveJobs(workerID)
 
-	// 9. Notify job started
+	// 10. Notify job started
 	uc.jobNotifier.NotifyJobStarted(job)
 
 	logger.Info().
@@ -145,15 +149,16 @@ func (uc *ClaimJobForWorkerUseCase) Execute(ctx context.Context, workerID string
 		Str("quality", transcode.Quality).
 		Msg("Worker claimed transcode job")
 
-	// 10. Return complete WorkerJob
+	// 11. Return complete WorkerJob with relative paths
+	// Workers will prepend their own media_path to these relative paths
 	return &WorkerJob{
 		JobID:            job.ID,
 		TranscodeID:      transcode.ID,
 		TrackType:        string(transcode.TrackType),
 		TrackIndex:       transcode.TrackIndex,
 		Quality:          transcode.Quality,
-		InputPath:        media.FilePath,
-		OutputPath:       uc.buildOutputPath(media, transcode),
+		InputPath:        uc.toRelativePath(media.FilePath),
+		OutputPath:       relativeOutputPath,
 		MediaDuration:    float64(media.Duration),
 		TranscodeOptions: opts,
 	}, nil
@@ -236,11 +241,26 @@ func (uc *ClaimJobForWorkerUseCase) buildTranscodeOptions(transcode *domain.Tran
 	return opts, nil
 }
 
-// buildOutputPath constructs the output path for transcode output
+// toRelativePath converts an absolute file path to a path relative to the server's media_path.
+// Workers will prepend their own media_path to resolve the full path on their filesystem.
+func (uc *ClaimJobForWorkerUseCase) toRelativePath(absolutePath string) string {
+	mediaPath := uc.config.Media.MediaPath
+	if strings.HasPrefix(absolutePath, mediaPath) {
+		rel := strings.TrimPrefix(absolutePath, mediaPath)
+		return strings.TrimPrefix(rel, "/")
+	}
+	// Path doesn't start with media_path, return as-is (shouldn't happen in practice)
+	return absolutePath
+}
+
+// buildOutputPath constructs the output path for transcode output.
+// Returns a relative path that workers will prepend their media_path to.
 func (uc *ClaimJobForWorkerUseCase) buildOutputPath(media *domain.MediaFile, transcode *domain.Transcode) string {
-	// Get base path from config pattern
+	// Get relative base path from config pattern (replace {media_path} with empty, {media_id} with actual ID)
 	pattern := uc.config.Media.TranscodeOutputPattern
-	basePath := strings.ReplaceAll(pattern, "{media_path}", uc.config.Media.MediaPath)
+	// Remove {media_path} prefix to get relative path
+	basePath := strings.ReplaceAll(pattern, "{media_path}/", "")
+	basePath = strings.ReplaceAll(basePath, "{media_path}", "")
 	basePath = strings.ReplaceAll(basePath, "{media_id}", media.ID)
 
 	// Build track-specific path

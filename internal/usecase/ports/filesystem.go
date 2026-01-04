@@ -56,4 +56,7 @@ type FileSystemService interface {
 
 	// Rename renames (moves) a file from oldPath to newPath
 	Rename(oldPath, newPath string) error
+
+	// RemoveDir removes a directory and all its contents recursively
+	RemoveDir(path string) error
 }

@@ -159,12 +159,11 @@ func TestCountOutputFiles(t *testing.T) {
 }
 
 func TestBuildTranscodeOptions(t *testing.T) {
-	// Create a minimal worker for testing with empty config (no path translation)
+	// Create a minimal worker for testing with path resolution
 	w := &Worker{
 		config: &config.Config{
 			Media: config.MediaConfig{
-				MediaPath:       "/local/media",
-				ServerMediaPath: "", // No translation
+				MediaPath: "/local/media",
 			},
 		},
 	}
@@ -176,8 +175,8 @@ func TestBuildTranscodeOptions(t *testing.T) {
 			TrackType:   "video",
 			TrackIndex:  0,
 			Quality:     "1080p",
-			InputPath:   "/media/movie.mkv",
-			OutputPath:  "/transcodes/abc123/1080p/video",
+			InputPath:   "abc123/movie.mkv",
+			OutputPath:  "abc123/transcoded/1080p/video",
 			TranscodeOptions: client.WorkerTranscodeOptions{
 				Width:       1920,
 				Height:      1080,
@@ -191,11 +190,14 @@ func TestBuildTranscodeOptions(t *testing.T) {
 
 		opts := w.buildTranscodeOptions(job)
 
-		if opts.InputPath != job.InputPath {
-			t.Errorf("InputPath = %s, want %s", opts.InputPath, job.InputPath)
+		expectedInputPath := "/local/media/abc123/movie.mkv"
+		expectedOutputPath := "/local/media/abc123/transcoded/1080p/video"
+
+		if opts.InputPath != expectedInputPath {
+			t.Errorf("InputPath = %s, want %s", opts.InputPath, expectedInputPath)
 		}
-		if opts.OutputPath != job.OutputPath {
-			t.Errorf("OutputPath = %s, want %s", opts.OutputPath, job.OutputPath)
+		if opts.OutputPath != expectedOutputPath {
+			t.Errorf("OutputPath = %s, want %s", opts.OutputPath, expectedOutputPath)
 		}
 		if opts.SourceStreamIndex != job.TrackIndex {
 			t.Errorf("SourceStreamIndex = %d, want %d", opts.SourceStreamIndex, job.TrackIndex)
@@ -239,8 +241,8 @@ func TestBuildTranscodeOptions(t *testing.T) {
 			TranscodeID: "abc123",
 			TrackType:   "audio",
 			TrackIndex:  1,
-			InputPath:   "/media/movie.mkv",
-			OutputPath:  "/transcodes/abc123/audio-0",
+			InputPath:   "abc123/movie.mkv",
+			OutputPath:  "abc123/transcoded/audio-0",
 			TranscodeOptions: client.WorkerTranscodeOptions{
 				AudioCodec:   "aac",
 				AudioBitrate: 128000,
@@ -277,8 +279,8 @@ func TestBuildTranscodeOptions(t *testing.T) {
 			TranscodeID: "abc123",
 			TrackType:   "subtitle",
 			TrackIndex:  2,
-			InputPath:   "/media/movie.mkv",
-			OutputPath:  "/transcodes/abc123/subtitle-0.vtt",
+			InputPath:   "abc123/movie.mkv",
+			OutputPath:  "abc123/transcoded/subtitle-0.vtt",
 			TranscodeOptions: client.WorkerTranscodeOptions{
 				SegmentTime: 4,
 			},
@@ -358,55 +360,36 @@ func TestWorkerTranscodeOptionsMapping(t *testing.T) {
 	}
 }
 
-func TestTranslatePath(t *testing.T) {
+func TestResolvePath(t *testing.T) {
 	tests := []struct {
-		name            string
-		serverMediaPath string
-		localMediaPath  string
-		inputPath       string
-		expectedPath    string
+		name         string
+		mediaPath    string
+		relativePath string
+		expectedPath string
 	}{
 		{
-			name:            "no translation when server_media_path is empty",
-			serverMediaPath: "",
-			localMediaPath:  "/local/media",
-			inputPath:       "/srv/media/abc123/movie.mkv",
-			expectedPath:    "/srv/media/abc123/movie.mkv",
+			name:         "simple relative path",
+			mediaPath:    "/mnt/media",
+			relativePath: "abc123/movie.mkv",
+			expectedPath: "/mnt/media/abc123/movie.mkv",
 		},
 		{
-			name:            "translates matching prefix",
-			serverMediaPath: "/srv/media",
-			localMediaPath:  "/mnt/nfs/media",
-			inputPath:       "/srv/media/abc123/movie.mkv",
-			expectedPath:    "/mnt/nfs/media/abc123/movie.mkv",
+			name:         "nested output path",
+			mediaPath:    "/mnt/media",
+			relativePath: "abc123/transcoded/1080p/video",
+			expectedPath: "/mnt/media/abc123/transcoded/1080p/video",
 		},
 		{
-			name:            "translates exact match",
-			serverMediaPath: "/srv/media",
-			localMediaPath:  "/mnt/nfs/media",
-			inputPath:       "/srv/media",
-			expectedPath:    "/mnt/nfs/media",
+			name:         "media path with trailing slash handled by filepath.Join",
+			mediaPath:    "/mnt/media/",
+			relativePath: "abc123/movie.mkv",
+			expectedPath: "/mnt/media/abc123/movie.mkv",
 		},
 		{
-			name:            "does not translate non-matching path",
-			serverMediaPath: "/srv/media",
-			localMediaPath:  "/mnt/nfs/media",
-			inputPath:       "/other/path/movie.mkv",
-			expectedPath:    "/other/path/movie.mkv",
-		},
-		{
-			name:            "handles nested paths correctly",
-			serverMediaPath: "/mnt/video/vimesrv/library/media",
-			localMediaPath:  "/nfs/vimesrv/media",
-			inputPath:       "/mnt/video/vimesrv/library/media/884cc0da/IT_Welcome.mkv",
-			expectedPath:    "/nfs/vimesrv/media/884cc0da/IT_Welcome.mkv",
-		},
-		{
-			name:            "does not match partial directory names",
-			serverMediaPath: "/srv/media",
-			localMediaPath:  "/mnt/nfs/media",
-			inputPath:       "/srv/media2/movie.mkv",
-			expectedPath:    "/srv/media2/movie.mkv",
+			name:         "deep media path",
+			mediaPath:    "/mnt/video/server01/library",
+			relativePath: "abc123-def4-5678/movie.mkv",
+			expectedPath: "/mnt/video/server01/library/abc123-def4-5678/movie.mkv",
 		},
 	}
 
@@ -415,26 +398,24 @@ func TestTranslatePath(t *testing.T) {
 			w := &Worker{
 				config: &config.Config{
 					Media: config.MediaConfig{
-						MediaPath:       tt.localMediaPath,
-						ServerMediaPath: tt.serverMediaPath,
+						MediaPath: tt.mediaPath,
 					},
 				},
 			}
 
-			result := w.translatePath(tt.inputPath)
+			result := w.resolvePath(tt.relativePath)
 			if result != tt.expectedPath {
-				t.Errorf("translatePath(%q) = %q, want %q", tt.inputPath, result, tt.expectedPath)
+				t.Errorf("resolvePath(%q) = %q, want %q", tt.relativePath, result, tt.expectedPath)
 			}
 		})
 	}
 }
 
-func TestBuildTranscodeOptionsWithPathTranslation(t *testing.T) {
+func TestBuildTranscodeOptionsWithPathResolution(t *testing.T) {
 	w := &Worker{
 		config: &config.Config{
 			Media: config.MediaConfig{
-				MediaPath:       "/nfs/media",
-				ServerMediaPath: "/srv/media",
+				MediaPath: "/nfs/media",
 			},
 		},
 	}
@@ -445,8 +426,8 @@ func TestBuildTranscodeOptionsWithPathTranslation(t *testing.T) {
 		TrackType:   "video",
 		TrackIndex:  0,
 		Quality:     "1080p",
-		InputPath:   "/srv/media/abc123/movie.mkv",
-		OutputPath:  "/srv/media/abc123/transcoded/1080p/video",
+		InputPath:   "abc123/movie.mkv",
+		OutputPath:  "abc123/transcoded/1080p/video",
 		TranscodeOptions: client.WorkerTranscodeOptions{
 			Width:       1920,
 			Height:      1080,

@@ -18,7 +18,7 @@ import (
 // MockTranscodeRepository for testing
 type MockTranscodeRepository struct {
 	GetFn            func(ctx context.Context, id string) (*domain.Transcode, error)
-	MarkProcessingFn func(ctx context.Context, id string) error
+	MarkProcessingFn func(ctx context.Context, id string, outputPath string) error
 	MarkCompletedFn  func(ctx context.Context, id string, outputPath string) error
 	MarkFailedFn     func(ctx context.Context, id string) error
 }
@@ -49,9 +49,9 @@ func (m *MockTranscodeRepository) UpdateStatus(ctx context.Context, id string, s
 	return nil
 }
 
-func (m *MockTranscodeRepository) MarkProcessing(ctx context.Context, id string) error {
+func (m *MockTranscodeRepository) MarkProcessing(ctx context.Context, id string, outputPath string) error {
 	if m.MarkProcessingFn != nil {
-		return m.MarkProcessingFn(ctx, id)
+		return m.MarkProcessingFn(ctx, id, outputPath)
 	}
 	return nil
 }
@@ -75,6 +75,10 @@ func (m *MockTranscodeRepository) Delete(ctx context.Context, id string) error {
 }
 
 func (m *MockTranscodeRepository) ListPending(ctx context.Context, limit int) ([]*domain.Transcode, error) {
+	return nil, nil
+}
+
+func (m *MockTranscodeRepository) GetProcessingByMediaID(ctx context.Context, mediaID string) ([]*domain.Transcode, error) {
 	return nil, nil
 }
 
@@ -111,6 +115,14 @@ func (m *MockMediaRepository) Get(ctx context.Context, id string) (*domain.Media
 
 func (m *MockMediaRepository) List(ctx context.Context, page, perPage int) ([]*domain.MediaFile, int, error) {
 	return nil, 0, nil
+}
+
+func (m *MockMediaRepository) Delete(ctx context.Context, id string) error {
+	return nil
+}
+
+func (m *MockMediaRepository) FindByEpisodeMetadataIDs(ctx context.Context, episodeMetadataIDs []int64) ([]*domain.MediaFile, error) {
+	return nil, nil
 }
 
 // MockTranscoder for testing
@@ -214,6 +226,10 @@ func (m *MockFileSystemService) Rename(oldPath, newPath string) error {
 }
 
 func (m *MockFileSystemService) CopyFileWithProgress(src, dst string, callback ports.CopyProgressCallback) error {
+	return nil
+}
+
+func (m *MockFileSystemService) RemoveDir(path string) error {
 	return nil
 }
 

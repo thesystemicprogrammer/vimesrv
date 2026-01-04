@@ -157,8 +157,11 @@ func (uc *ProcessTranscodeUseCase) Execute(ctx context.Context, input ProcessTra
 		return nil, fmt.Errorf("failed to find media: %w", err)
 	}
 
-	// Mark transcode as processing
-	if err := uc.transcodeRepo.MarkProcessing(ctx, transcode.ID); err != nil {
+	// Build output path
+	outputPath := uc.buildOutputPath(media, transcode)
+
+	// Mark transcode as processing with the output path
+	if err := uc.transcodeRepo.MarkProcessing(ctx, transcode.ID, outputPath); err != nil {
 		return nil, fmt.Errorf("failed to mark transcode as processing: %w", err)
 	}
 
@@ -167,9 +170,6 @@ func (uc *ProcessTranscodeUseCase) Execute(ctx context.Context, input ProcessTra
 	if err != nil {
 		return nil, fmt.Errorf("failed to refresh transcode: %w", err)
 	}
-
-	// Build output path
-	outputPath := uc.buildOutputPath(media, transcode)
 
 	// Log transcode start with details
 	logEvent := logger.Info().

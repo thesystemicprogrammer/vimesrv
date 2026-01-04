@@ -32,4 +32,7 @@ var (
 
 	// ErrTranscodingInProgress is returned when attempting an operation on a job that is still processing
 	ErrTranscodingInProgress = errors.New("transcoding in progress")
+
+	// ErrMediaHasRunningJobs is returned when attempting to delete media that has running transcode jobs
+	ErrMediaHasRunningJobs = errors.New("media has running transcode jobs")
 )

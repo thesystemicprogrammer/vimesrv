@@ -12,9 +12,11 @@ func registerJobs(useCases *UseCases, adapters *Adapters) {
 	scanLibraryJobHandler := library.NewScanLibraryJobHandler(useCases.ScanLibraryUseCase)
 	adapters.HandlerRegistry.Register(shared.JobTypeScanLibrary, scanLibraryJobHandler)
 
-	// Transcode Video
-	transcodeVideoJobHandler := transcode.NewTranscodeVideoJobHandler(useCases.ProcessTranscodeUseCase)
-	adapters.HandlerRegistry.Register(shared.JobTypeTranscodeVideo, transcodeVideoJobHandler)
+	// Transcode jobs - all use the same handler since they process via transcode_id
+	transcodeJobHandler := transcode.NewTranscodeVideoJobHandler(useCases.ProcessTranscodeUseCase)
+	adapters.HandlerRegistry.Register(shared.JobTypeTranscodeVideo, transcodeJobHandler)
+	adapters.HandlerRegistry.Register(shared.JobTypeTranscodeAudio, transcodeJobHandler)
+	adapters.HandlerRegistry.Register(shared.JobTypeTranscodeSubtitle, transcodeJobHandler)
 
 	// Enrich Metadata (only if TMDB is enabled)
 	if useCases.EnrichMediaFileUseCase != nil {

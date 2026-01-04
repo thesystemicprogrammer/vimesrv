@@ -208,6 +208,14 @@ func (m *mockMediaRepository) List(ctx context.Context, page, perPage int) ([]*d
 	return nil, 0, nil
 }
 
+func (m *mockMediaRepository) Delete(ctx context.Context, id string) error {
+	return nil
+}
+
+func (m *mockMediaRepository) FindByEpisodeMetadataIDs(ctx context.Context, episodeMetadataIDs []int64) ([]*domain.MediaFile, error) {
+	return nil, nil
+}
+
 type mockMovieMetadataRepository struct {
 	getByTMDBIDFunc       func(ctx context.Context, tmdbID int) (*domain.MovieMetadata, error)
 	createFunc            func(ctx context.Context, metadata *domain.MovieMetadata) error

@@ -187,6 +187,22 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
 
       <!-- Season selector and episodes -->
       <div class="container mx-auto px-4 py-6">
+        <!-- Admin action buttons -->
+        @if (auth.isAdmin()) {
+          <div class="flex items-center gap-3 mb-4">
+            <button
+              (click)="confirmDeleteSeries()"
+              [disabled]="deleting()"
+              class="flex items-center gap-2 px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-sm rounded-lg transition disabled:opacity-50"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+              </svg>
+              Delete Series
+            </button>
+          </div>
+        }
+
         <!-- Season dropdown -->
         @if (seasons().length > 0) {
           <div class="flex items-center gap-4 mb-6">
@@ -203,6 +219,21 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
                 </option>
               }
             </select>
+
+            <!-- Delete Season button (admin only) -->
+            @if (auth.isAdmin() && selectedSeason()) {
+              <button
+                (click)="confirmDeleteSeason()"
+                [disabled]="deleting()"
+                class="flex items-center gap-2 px-3 py-2 bg-red-600/80 hover:bg-red-600 text-white text-sm rounded-lg transition disabled:opacity-50"
+                title="Delete all episodes in this season"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                </svg>
+                Delete Season
+              </button>
+            }
           </div>
 
           <!-- Episode list -->
@@ -305,6 +336,20 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
                               </svg>
                             }
+                          </button>
+                        }
+
+                        <!-- Delete Episode button (admin only, only for episodes with media) -->
+                        @if (episode.media_id && auth.isAdmin()) {
+                          <button
+                            (click)="confirmDeleteEpisode(episode)"
+                            [disabled]="deleting()"
+                            class="p-2 bg-red-600/80 hover:bg-red-600 text-white rounded-lg transition disabled:opacity-50"
+                            title="Delete Episode"
+                          >
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                            </svg>
                           </button>
                         }
                       </div>
@@ -425,6 +470,63 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
       (matched)="onMetadataChanged()"
       (skipped)="onMetadataChanged()"
     />
+
+    <!-- Delete Confirmation Modal -->
+    @if (deleteType()) {
+      <div class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+        <div class="bg-slate-800 rounded-lg max-w-md w-full p-6">
+          <h3 class="text-xl font-bold text-white mb-4">
+            @switch (deleteType()) {
+              @case ('episode') { Delete Episode }
+              @case ('season') { Delete Season }
+              @case ('series') { Delete Series }
+            }
+          </h3>
+          <p class="text-slate-300 mb-2">
+            Are you sure you want to delete <strong>{{ deleteTarget()?.name }}</strong>?
+          </p>
+          <p class="text-slate-400 text-sm mb-4">
+            @switch (deleteType()) {
+              @case ('episode') {
+                The source file will be moved to trash. Transcoded files will be permanently deleted.
+              }
+              @case ('season') {
+                All episode media files in this season will be deleted. Source files will be moved to trash.
+              }
+              @case ('series') {
+                All episode media files in this series will be deleted. Source files will be moved to trash.
+              }
+            }
+          </p>
+          
+          @if (deleteError()) {
+            <div class="bg-red-500/10 border border-red-500 text-red-400 px-3 py-2 rounded text-sm mb-4">
+              {{ deleteError() }}
+            </div>
+          }
+          
+          <div class="flex justify-end gap-3">
+            <button
+              (click)="cancelDelete()"
+              [disabled]="deleting()"
+              class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              (click)="executeDelete()"
+              [disabled]="deleting()"
+              class="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition disabled:opacity-50"
+            >
+              @if (deleting()) {
+                <div class="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
+              }
+              Delete
+            </button>
+          </div>
+        </div>
+      </div>
+    }
   `,
   styles: [`
     .line-clamp-2 {
@@ -439,7 +541,7 @@ export class SeriesDetailComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly api = inject(ApiService);
-  private readonly auth = inject(AuthService);
+  readonly auth = inject(AuthService);
 
   private seriesId: number | null = null;
   private languageSubscription: Subscription | null = null;
@@ -461,6 +563,12 @@ export class SeriesDetailComponent implements OnInit, OnDestroy {
   selectedMedia = signal<UnmatchedMediaSummary | null>(null);
   selectedEpisode = signal<EpisodeSummary | null>(null);
   resettingMetadata = signal(false);
+
+  // Delete state
+  deleteType = signal<'episode' | 'season' | 'series' | null>(null);
+  deleteTarget = signal<{ name: string; id: string | number } | null>(null);
+  deleting = signal(false);
+  deleteError = signal<string | null>(null);
 
   seasons = computed(() => {
     const s = this.series();
@@ -670,5 +778,99 @@ export class SeriesDetailComponent implements OnInit, OnDestroy {
       this.loadSeries(this.seriesId, currentSeason);
     }
     this.selectedEpisode.set(null);
+  }
+
+  // Delete confirmation methods
+  confirmDeleteEpisode(episode: EpisodeSummary): void {
+    if (!episode.media_id) return;
+    
+    const s = this.series();
+    this.deleteType.set('episode');
+    this.deleteTarget.set({
+      name: `S${episode.season_number}E${episode.episode_number}: ${episode.name}`,
+      id: episode.media_id
+    });
+    this.deleteError.set(null);
+  }
+
+  confirmDeleteSeason(): void {
+    const season = this.selectedSeason();
+    if (!season) return;
+    
+    this.deleteType.set('season');
+    this.deleteTarget.set({
+      name: season.name || `Season ${season.season_number}`,
+      id: season.season_metadata_id
+    });
+    this.deleteError.set(null);
+  }
+
+  confirmDeleteSeries(): void {
+    const s = this.series();
+    if (!s) return;
+    
+    this.deleteType.set('series');
+    this.deleteTarget.set({
+      name: s.name,
+      id: s.series_metadata_id
+    });
+    this.deleteError.set(null);
+  }
+
+  cancelDelete(): void {
+    this.deleteType.set(null);
+    this.deleteTarget.set(null);
+    this.deleteError.set(null);
+  }
+
+  executeDelete(): void {
+    const type = this.deleteType();
+    const target = this.deleteTarget();
+    if (!type || !target) return;
+
+    this.deleting.set(true);
+    this.deleteError.set(null);
+
+    let deleteObs;
+    switch (type) {
+      case 'episode':
+        deleteObs = this.api.deleteMedia(target.id as string);
+        break;
+      case 'season':
+        deleteObs = this.api.deleteSeason(target.id as number);
+        break;
+      case 'series':
+        deleteObs = this.api.deleteSeries(target.id as number);
+        break;
+    }
+
+    deleteObs.subscribe({
+      next: () => {
+        this.deleting.set(false);
+        this.deleteType.set(null);
+        this.deleteTarget.set(null);
+        
+        if (type === 'series') {
+          // Navigate back to library after deleting series
+          this.router.navigate(['/library']);
+        } else {
+          // Reload the series to reflect changes
+          if (this.seriesId) {
+            const currentSeason = this.selectedSeasonNumber();
+            this.loadSeries(this.seriesId, currentSeason);
+          }
+        }
+      },
+      error: (err) => {
+        this.deleting.set(false);
+        const message = err.error?.error?.message || 'Failed to delete';
+        // Check for running jobs error (409 Conflict)
+        if (err.status === 409) {
+          this.deleteError.set('Cannot delete: transcoding is in progress. Please wait for it to complete.');
+        } else {
+          this.deleteError.set(message);
+        }
+      }
+    });
   }
 }

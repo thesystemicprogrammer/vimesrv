@@ -39,6 +39,8 @@ func (r UserRole) IsValid() bool {
 const (
 	JobTypeScanLibrary       = "scan_library"
 	JobTypeTranscodeVideo    = "transcode_video"
+	JobTypeTranscodeAudio    = "transcode_audio"
+	JobTypeTranscodeSubtitle = "transcode_subtitle"
 	JobTypeEnrichMetadata    = "enrich_metadata"
 	JobTypeFetchTranslations = "fetch_translations"
 )

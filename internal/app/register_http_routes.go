@@ -56,8 +56,9 @@ func registerHTTPHandlers(useCases *UseCases, adapters *Adapters, httpServer *se
 		scanLibraryHttpHandler.RegisterRoutes(apiGroup)
 
 		// Media API
-		mediaHandler := http.NewMediaHandler(useCases.ListMediaUseCase, useCases.GetMediaUseCase, cfg)
+		mediaHandler := http.NewMediaHandler(useCases.ListMediaUseCase, useCases.GetMediaUseCase, useCases.DeleteMediaUseCase, cfg)
 		mediaHandler.RegisterRoutes(apiGroup)
+		mediaHandler.RegisterAdminRoutes(apiGroup)
 
 		// Metadata Enrichment API (if TMDB is enabled)
 		metadataHandler := http.NewMetadataHandler(
@@ -84,11 +85,14 @@ func registerHTTPHandlers(useCases *UseCases, adapters *Adapters, httpServer *se
 			useCases.ListUnmatchedUseCase,
 			useCases.ListGenresUseCase,
 			useCases.SearchLibraryUseCase,
+			useCases.DeleteSeasonUseCase,
+			useCases.DeleteSeriesUseCase,
 		)
 		libraryHandler.RegisterRoutes(apiGroup)
+		libraryHandler.RegisterAdminRoutes(apiGroup)
 
 		// Job API (admin/manager only)
-		jobHandler := http.NewJobHandler(useCases.ListJobsUseCase)
+		jobHandler := http.NewJobHandler(useCases.ListJobsUseCase, adapters.ProgressCache)
 		jobHandler.RegisterRoutes(apiGroup)
 	}
 

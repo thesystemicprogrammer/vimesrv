@@ -16,6 +16,9 @@ Whenever I discover something odd or something I don't understand, I write it do
 - Translation fetching in TMDB: Is it consistent or could it be improved simpliyfied?
 - Translation fetching in TMDB: Is it consistent or could it be improved simpliyfied?
 - Not all texts are translated (buttons, director, overview)
+- Metadata fetch job started even though no TMBD was set to false
+- Manually add metadata in case we can't find anything
+- if worker activated but no worker register -> don't start job alread
 -
 
 # Tasks

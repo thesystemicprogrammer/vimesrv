@@ -10,22 +10,37 @@ import (
 	"github.com/thesystemicprogrammer/vimesrv/internal/infrastructure/server"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared"
 	usecasejob "github.com/thesystemicprogrammer/vimesrv/internal/usecase/job"
+	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/ports"
 )
+
+// JobProgressDTO represents job progress in API responses
+type JobProgressDTO struct {
+	Frame      int64   `json:"frame,omitempty"`
+	FPS        float64 `json:"fps,omitempty"`
+	Bitrate    string  `json:"bitrate,omitempty"`
+	TotalSize  int64   `json:"total_size,omitempty"`
+	Time       string  `json:"time,omitempty"`
+	Speed      string  `json:"speed,omitempty"`
+	Percentage float64 `json:"percentage"`
+	Message    string  `json:"message,omitempty"`
+}
 
 // JobDTO represents a job in the API response
 type JobDTO struct {
-	ID          int64       `json:"id"`
-	Type        string      `json:"type"`
-	Status      string      `json:"status"`
-	Payload     interface{} `json:"payload,omitempty"`
-	Priority    int         `json:"priority"`
-	Attempts    int         `json:"attempts"`
-	MaxAttempts int         `json:"max_attempts"`
-	LastError   *string     `json:"last_error,omitempty"`
-	CreatedAt   time.Time   `json:"created_at"`
-	StartedAt   *time.Time  `json:"started_at,omitempty"`
-	FinishedAt  *time.Time  `json:"finished_at,omitempty"`
-	UpdatedAt   time.Time   `json:"updated_at"`
+	ID          int64           `json:"id"`
+	Type        string          `json:"type"`
+	Status      string          `json:"status"`
+	Payload     interface{}     `json:"payload,omitempty"`
+	Priority    int             `json:"priority"`
+	Attempts    int             `json:"attempts"`
+	MaxAttempts int             `json:"max_attempts"`
+	LastError   *string         `json:"last_error,omitempty"`
+	WorkerID    *string         `json:"worker_id,omitempty"`
+	Progress    *JobProgressDTO `json:"progress,omitempty"`
+	CreatedAt   time.Time       `json:"created_at"`
+	StartedAt   *time.Time      `json:"started_at,omitempty"`
+	FinishedAt  *time.Time      `json:"finished_at,omitempty"`
+	UpdatedAt   time.Time       `json:"updated_at"`
 }
 
 // JobListResponse is the response for listing jobs
@@ -37,12 +52,14 @@ type JobListResponse struct {
 // JobHandler handles job-related HTTP requests
 type JobHandler struct {
 	listJobsUseCase *usecasejob.ListJobsUseCase
+	progressCache   ports.ProgressCache
 }
 
 // NewJobHandler creates a new JobHandler
-func NewJobHandler(listJobsUseCase *usecasejob.ListJobsUseCase) *JobHandler {
+func NewJobHandler(listJobsUseCase *usecasejob.ListJobsUseCase, progressCache ports.ProgressCache) *JobHandler {
 	return &JobHandler{
 		listJobsUseCase: listJobsUseCase,
+		progressCache:   progressCache,
 	}
 }
 
@@ -85,6 +102,12 @@ func (h *JobHandler) ListJobs(c *gin.Context) {
 	}
 
 	// Convert to DTOs
+	// Get all progress data upfront for efficient batch lookup
+	var progressMap map[int64]ports.JobProgress
+	if h.progressCache != nil {
+		progressMap = h.progressCache.GetAll()
+	}
+
 	jobs := make([]JobDTO, 0, len(output.Jobs))
 	for _, job := range output.Jobs {
 		dto := JobDTO{
@@ -110,11 +133,30 @@ func (h *JobHandler) ListJobs(c *gin.Context) {
 		if job.LastError.Valid {
 			dto.LastError = &job.LastError.String
 		}
+		if job.WorkerID.Valid {
+			dto.WorkerID = &job.WorkerID.String
+		}
 		if job.StartedAt.Valid {
 			dto.StartedAt = &job.StartedAt.Time
 		}
 		if job.FinishedAt.Valid {
 			dto.FinishedAt = &job.FinishedAt.Time
+		}
+
+		// Include progress for running jobs from cache
+		if string(job.Status) == "running" && progressMap != nil {
+			if progress, ok := progressMap[job.ID]; ok {
+				dto.Progress = &JobProgressDTO{
+					Frame:      progress.Frame,
+					FPS:        progress.FPS,
+					Bitrate:    progress.Bitrate,
+					TotalSize:  progress.TotalSize,
+					Time:       progress.Time,
+					Speed:      progress.Speed,
+					Percentage: progress.Percentage,
+					Message:    progress.Message,
+				}
+			}
 		}
 
 		jobs = append(jobs, dto)

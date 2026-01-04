@@ -154,6 +154,13 @@ func (app *Application) Shutdown() error {
 		logger.Info().Msg("WebSocket hub stopped successfully")
 	}
 
+	// Step 1b: Stop progress cache cleanup goroutine
+	if app.adapters.ProgressCache != nil {
+		logger.Info().Msg("stopping progress cache")
+		app.adapters.ProgressCache.Stop()
+		logger.Info().Msg("progress cache stopped successfully")
+	}
+
 	// Step 2: Shutdown HTTP server (prevents new requests/job creation)
 	logger.Info().Msg("shutting down HTTP server")
 	if err := app.httpServer.Shutdown(ctx); err != nil {

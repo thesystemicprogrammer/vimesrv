@@ -1,6 +1,7 @@
 package http
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -24,6 +25,8 @@ type LibraryHandler struct {
 	listUnmatchedUC    *library.ListUnmatchedUseCase
 	listGenresUC       *library.ListGenresUseCase
 	searchLibraryUC    *library.SearchLibraryUseCase
+	deleteSeasonUC     *library.DeleteSeasonUseCase
+	deleteSeriesUC     *library.DeleteSeriesUseCase
 }
 
 // NewLibraryHandler creates a new library handler
@@ -38,6 +41,8 @@ func NewLibraryHandler(
 	listUnmatchedUC *library.ListUnmatchedUseCase,
 	listGenresUC *library.ListGenresUseCase,
 	searchLibraryUC *library.SearchLibraryUseCase,
+	deleteSeasonUC *library.DeleteSeasonUseCase,
+	deleteSeriesUC *library.DeleteSeriesUseCase,
 ) *LibraryHandler {
 	return &LibraryHandler{
 		listMoviesUC:       listMoviesUC,
@@ -50,6 +55,8 @@ func NewLibraryHandler(
 		listUnmatchedUC:    listUnmatchedUC,
 		listGenresUC:       listGenresUC,
 		searchLibraryUC:    searchLibraryUC,
+		deleteSeasonUC:     deleteSeasonUC,
+		deleteSeriesUC:     deleteSeriesUC,
 	}
 }
 
@@ -481,4 +488,130 @@ func (h *LibraryHandler) SearchLibrary(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, server.SuccessResponse(result))
+}
+
+// RegisterAdminRoutes registers admin-only library routes (delete operations)
+func (h *LibraryHandler) RegisterAdminRoutes(router *gin.RouterGroup) {
+	adminGroup := router.Group("/library")
+	adminGroup.Use(h.requireAdmin())
+	{
+		adminGroup.DELETE("/seasons/:id", h.DeleteSeason)
+		adminGroup.DELETE("/series/:id", h.DeleteSeries)
+	}
+	logger.Debug().Msg("Library admin routes registered")
+}
+
+// requireAdmin middleware checks if the user has admin role
+func (h *LibraryHandler) requireAdmin() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		role, exists := c.Get("role")
+		if !exists {
+			c.AbortWithStatusJSON(http.StatusForbidden, server.ErrorResponse(
+				"FORBIDDEN",
+				"Access denied",
+				"",
+			))
+			return
+		}
+
+		if role != string(shared.RoleAdmin) {
+			c.AbortWithStatusJSON(http.StatusForbidden, server.ErrorResponse(
+				"FORBIDDEN",
+				"Admin access required",
+				"",
+			))
+			return
+		}
+
+		c.Next()
+	}
+}
+
+// DeleteSeason handles DELETE /api/v1/library/seasons/:id (admin only)
+// Deletes all media files associated with a season
+func (h *LibraryHandler) DeleteSeason(c *gin.Context) {
+	seasonID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, server.ErrorResponse(
+			"INVALID_ID",
+			"Invalid season ID",
+			"Season ID must be a valid integer",
+		))
+		return
+	}
+
+	logger.Info().
+		Int64("season_id", seasonID).
+		Msg("deleting season media")
+
+	result, err := h.deleteSeasonUC.Execute(c.Request.Context(), library.DeleteSeasonInput{
+		SeasonID: seasonID,
+	})
+	if err != nil {
+		if errors.Is(err, shared.ErrMediaHasRunningJobs) {
+			c.JSON(http.StatusConflict, server.ErrorResponse(
+				"MEDIA_HAS_RUNNING_JOBS",
+				"Cannot delete season with running transcode jobs",
+				"Wait for transcode jobs to complete before deleting",
+			))
+			return
+		}
+		logger.Error().Err(err).Int64("season_id", seasonID).Msg("failed to delete season")
+		c.JSON(http.StatusInternalServerError, server.ErrorResponse(
+			"DELETE_FAILED",
+			"Failed to delete season",
+			err.Error(),
+		))
+		return
+	}
+
+	c.JSON(http.StatusOK, server.SuccessResponse(gin.H{
+		"deleted":             true,
+		"deleted_media_count": result.DeletedMediaCount,
+	}))
+}
+
+// DeleteSeries handles DELETE /api/v1/library/series/:id (admin only)
+// Deletes all media files associated with a series (all seasons)
+func (h *LibraryHandler) DeleteSeries(c *gin.Context) {
+	seriesID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, server.ErrorResponse(
+			"INVALID_ID",
+			"Invalid series ID",
+			"Series ID must be a valid integer",
+		))
+		return
+	}
+
+	logger.Info().
+		Int64("series_id", seriesID).
+		Msg("deleting series media")
+
+	result, err := h.deleteSeriesUC.Execute(c.Request.Context(), library.DeleteSeriesInput{
+		SeriesID: seriesID,
+	})
+	if err != nil {
+		if errors.Is(err, shared.ErrMediaHasRunningJobs) {
+			c.JSON(http.StatusConflict, server.ErrorResponse(
+				"MEDIA_HAS_RUNNING_JOBS",
+				"Cannot delete series with running transcode jobs",
+				"Wait for transcode jobs to complete before deleting",
+			))
+			return
+		}
+		logger.Error().Err(err).Int64("series_id", seriesID).Msg("failed to delete series")
+		c.JSON(http.StatusInternalServerError, server.ErrorResponse(
+			"DELETE_FAILED",
+			"Failed to delete series",
+			err.Error(),
+		))
+		return
+	}
+
+	c.JSON(http.StatusOK, server.SuccessResponse(gin.H{
+		"deleted":              true,
+		"deleted_media_count":  result.DeletedMediaCount,
+		"deleted_season_count": result.DeletedSeasonCount,
+	}))
 }

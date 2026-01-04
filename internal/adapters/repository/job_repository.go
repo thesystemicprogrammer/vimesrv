@@ -393,8 +393,9 @@ func (repo *JobRepository) Get(ctx context.Context, jobID int64) (*domain.Job, e
 	return job, nil
 }
 
-// ClaimNextTranscodeJob atomically claims the next queued transcode_video job
+// ClaimNextTranscodeJob atomically claims the next queued transcode job
 // for processing by a distributed worker. Returns (nil, nil) if no jobs available.
+// Handles all transcode job types: video, audio, and subtitle.
 func (repo *JobRepository) ClaimNextTranscodeJob(ctx context.Context, workerID string) (*domain.Job, error) {
 	const command = `
 	UPDATE jobs
@@ -405,7 +406,7 @@ func (repo *JobRepository) ClaimNextTranscodeJob(ctx context.Context, workerID s
 	    updated_at=CURRENT_TIMESTAMP
 	WHERE id = (
 	  SELECT id FROM jobs
-	  WHERE status='queued' AND type='transcode_video' AND run_at <= CURRENT_TIMESTAMP
+	  WHERE status='queued' AND type IN ('transcode_video', 'transcode_audio', 'transcode_subtitle') AND run_at <= CURRENT_TIMESTAMP
 	  ORDER BY priority DESC, run_at ASC, id ASC
 	  LIMIT 1
 	)
@@ -422,11 +423,12 @@ func (repo *JobRepository) ClaimNextTranscodeJob(ctx context.Context, workerID s
 	return job, nil
 }
 
-// CountQueuedTranscodeJobs returns the number of queued transcode_video jobs
+// CountQueuedTranscodeJobs returns the number of queued transcode jobs
+// Counts all transcode job types: video, audio, and subtitle.
 func (repo *JobRepository) CountQueuedTranscodeJobs(ctx context.Context) (int, error) {
 	const query = `
 	SELECT COUNT(*) FROM jobs
-	WHERE status = 'queued' AND type = 'transcode_video'
+	WHERE status = 'queued' AND type IN ('transcode_video', 'transcode_audio', 'transcode_subtitle')
 	`
 	var count int
 	if err := repo.db.QueryRowContext(ctx, query).Scan(&count); err != nil {

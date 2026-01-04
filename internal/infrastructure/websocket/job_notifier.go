@@ -30,6 +30,9 @@ type JobStartedPayload struct {
 	Payload     json.RawMessage `json:"payload,omitempty"`
 	Attempt     int             `json:"attempt"`
 	MaxAttempts int             `json:"max_attempts"`
+	WorkerID    string          `json:"worker_id,omitempty"`
+	StartedAt   string          `json:"started_at,omitempty"`
+	UpdatedAt   string          `json:"updated_at"`
 }
 
 // JobProgressPayload is the payload sent during job progress updates
@@ -48,9 +51,13 @@ type JobProgressPayload struct {
 
 // JobCompletedPayload is the payload sent when a job completes successfully
 type JobCompletedPayload struct {
-	JobID   int64           `json:"job_id"`
-	JobType string          `json:"job_type"`
-	Payload json.RawMessage `json:"payload,omitempty"`
+	JobID      int64           `json:"job_id"`
+	JobType    string          `json:"job_type"`
+	Payload    json.RawMessage `json:"payload,omitempty"`
+	WorkerID   string          `json:"worker_id,omitempty"`
+	StartedAt  string          `json:"started_at,omitempty"`
+	FinishedAt string          `json:"finished_at,omitempty"`
+	UpdatedAt  string          `json:"updated_at"`
 }
 
 // JobFailedPayload is the payload sent when a job fails
@@ -59,6 +66,10 @@ type JobFailedPayload struct {
 	JobType      string          `json:"job_type"`
 	Payload      json.RawMessage `json:"payload,omitempty"`
 	ErrorMessage string          `json:"error_message"`
+	WorkerID     string          `json:"worker_id,omitempty"`
+	StartedAt    string          `json:"started_at,omitempty"`
+	FinishedAt   string          `json:"finished_at,omitempty"`
+	UpdatedAt    string          `json:"updated_at"`
 }
 
 // JobRetryingPayload is the payload sent when a job is being retried
@@ -68,6 +79,8 @@ type JobRetryingPayload struct {
 	Payload     json.RawMessage `json:"payload,omitempty"`
 	Attempt     int             `json:"attempt"`
 	MaxAttempts int             `json:"max_attempts"`
+	WorkerID    string          `json:"worker_id,omitempty"`
+	UpdatedAt   string          `json:"updated_at"`
 }
 
 // JobQueuedPayload represents a single queued job in the jobs_queued message
@@ -89,6 +102,7 @@ type JobsQueuedPayload struct {
 type WebSocketJobNotifier struct {
 	hub           *Hub
 	flushInterval time.Duration
+	progressCache *ProgressCache
 
 	// Batching for job_queued notifications
 	pendingMu    sync.Mutex
@@ -98,20 +112,22 @@ type WebSocketJobNotifier struct {
 }
 
 // NewWebSocketJobNotifier creates a new WebSocket-based job notifier
-func NewWebSocketJobNotifier(hub *Hub) *WebSocketJobNotifier {
+func NewWebSocketJobNotifier(hub *Hub, progressCache *ProgressCache) *WebSocketJobNotifier {
 	return &WebSocketJobNotifier{
 		hub:           hub,
 		flushInterval: DefaultQueuedJobsFlushInterval,
 		pendingJobs:   make([]JobQueuedPayload, 0),
+		progressCache: progressCache,
 	}
 }
 
 // NewWebSocketJobNotifierWithInterval creates a new WebSocket-based job notifier with custom flush interval
-func NewWebSocketJobNotifierWithInterval(hub *Hub, flushInterval time.Duration) *WebSocketJobNotifier {
+func NewWebSocketJobNotifierWithInterval(hub *Hub, progressCache *ProgressCache, flushInterval time.Duration) *WebSocketJobNotifier {
 	return &WebSocketJobNotifier{
 		hub:           hub,
 		flushInterval: flushInterval,
 		pendingJobs:   make([]JobQueuedPayload, 0),
+		progressCache: progressCache,
 	}
 }
 
@@ -185,15 +201,24 @@ func (n *WebSocketJobNotifier) NotifyJobStarted(job *domain.Job) {
 		return
 	}
 
+	payload := JobStartedPayload{
+		JobID:       job.ID,
+		JobType:     job.Type,
+		Payload:     job.Payload,
+		Attempt:     job.Attempts,
+		MaxAttempts: job.MaxAttempts,
+		UpdatedAt:   job.UpdatedAt.Format(time.RFC3339),
+	}
+	if job.WorkerID.Valid {
+		payload.WorkerID = job.WorkerID.String
+	}
+	if job.StartedAt.Valid {
+		payload.StartedAt = job.StartedAt.Time.Format(time.RFC3339)
+	}
+
 	msg := Message{
-		Type: MessageTypeJobStarted,
-		Payload: JobStartedPayload{
-			JobID:       job.ID,
-			JobType:     job.Type,
-			Payload:     job.Payload,
-			Attempt:     job.Attempts,
-			MaxAttempts: job.MaxAttempts,
-		},
+		Type:    MessageTypeJobStarted,
+		Payload: payload,
 	}
 
 	n.hub.Broadcast(msg)
@@ -206,6 +231,11 @@ func (n *WebSocketJobNotifier) NotifyJobStarted(job *domain.Job) {
 
 // NotifyJobProgress broadcasts progress updates for a running job
 func (n *WebSocketJobNotifier) NotifyJobProgress(jobID int64, jobType string, progress ports.JobProgress) {
+	// Cache the progress for API retrieval
+	if n.progressCache != nil {
+		n.progressCache.Set(jobID, progress)
+	}
+
 	if n.hub == nil {
 		return
 	}
@@ -232,17 +262,34 @@ func (n *WebSocketJobNotifier) NotifyJobProgress(jobID int64, jobType string, pr
 
 // NotifyJobCompleted broadcasts that a job has completed successfully
 func (n *WebSocketJobNotifier) NotifyJobCompleted(job *domain.Job) {
+	// Remove progress from cache
+	if n.progressCache != nil {
+		n.progressCache.Delete(job.ID)
+	}
+
 	if n.hub == nil {
 		return
 	}
 
+	payload := JobCompletedPayload{
+		JobID:     job.ID,
+		JobType:   job.Type,
+		Payload:   job.Payload,
+		UpdatedAt: job.UpdatedAt.Format(time.RFC3339),
+	}
+	if job.WorkerID.Valid {
+		payload.WorkerID = job.WorkerID.String
+	}
+	if job.StartedAt.Valid {
+		payload.StartedAt = job.StartedAt.Time.Format(time.RFC3339)
+	}
+	if job.FinishedAt.Valid {
+		payload.FinishedAt = job.FinishedAt.Time.Format(time.RFC3339)
+	}
+
 	msg := Message{
-		Type: MessageTypeJobCompleted,
-		Payload: JobCompletedPayload{
-			JobID:   job.ID,
-			JobType: job.Type,
-			Payload: job.Payload,
-		},
+		Type:    MessageTypeJobCompleted,
+		Payload: payload,
 	}
 
 	n.hub.Broadcast(msg)
@@ -254,18 +301,35 @@ func (n *WebSocketJobNotifier) NotifyJobCompleted(job *domain.Job) {
 
 // NotifyJobFailed broadcasts that a job has failed (max attempts exceeded)
 func (n *WebSocketJobNotifier) NotifyJobFailed(job *domain.Job, errorMessage string) {
+	// Remove progress from cache
+	if n.progressCache != nil {
+		n.progressCache.Delete(job.ID)
+	}
+
 	if n.hub == nil {
 		return
 	}
 
+	payload := JobFailedPayload{
+		JobID:        job.ID,
+		JobType:      job.Type,
+		Payload:      job.Payload,
+		ErrorMessage: errorMessage,
+		UpdatedAt:    job.UpdatedAt.Format(time.RFC3339),
+	}
+	if job.WorkerID.Valid {
+		payload.WorkerID = job.WorkerID.String
+	}
+	if job.StartedAt.Valid {
+		payload.StartedAt = job.StartedAt.Time.Format(time.RFC3339)
+	}
+	if job.FinishedAt.Valid {
+		payload.FinishedAt = job.FinishedAt.Time.Format(time.RFC3339)
+	}
+
 	msg := Message{
-		Type: MessageTypeJobFailed,
-		Payload: JobFailedPayload{
-			JobID:        job.ID,
-			JobType:      job.Type,
-			Payload:      job.Payload,
-			ErrorMessage: errorMessage,
-		},
+		Type:    MessageTypeJobFailed,
+		Payload: payload,
 	}
 
 	n.hub.Broadcast(msg)
@@ -282,15 +346,21 @@ func (n *WebSocketJobNotifier) NotifyJobRetrying(job *domain.Job, attempt int, m
 		return
 	}
 
+	payload := JobRetryingPayload{
+		JobID:       job.ID,
+		JobType:     job.Type,
+		Payload:     job.Payload,
+		Attempt:     attempt,
+		MaxAttempts: maxAttempts,
+		UpdatedAt:   job.UpdatedAt.Format(time.RFC3339),
+	}
+	if job.WorkerID.Valid {
+		payload.WorkerID = job.WorkerID.String
+	}
+
 	msg := Message{
-		Type: MessageTypeJobRetrying,
-		Payload: JobRetryingPayload{
-			JobID:       job.ID,
-			JobType:     job.Type,
-			Payload:     job.Payload,
-			Attempt:     attempt,
-			MaxAttempts: maxAttempts,
-		},
+		Type:    MessageTypeJobRetrying,
+		Payload: payload,
 	}
 
 	n.hub.Broadcast(msg)

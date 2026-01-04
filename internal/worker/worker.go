@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -237,8 +238,8 @@ func (w *Worker) processJob(ctx context.Context, job *client.WorkerJob, workerNu
 // buildTranscodeOptions converts a WorkerJob to transcoding.Options
 func (w *Worker) buildTranscodeOptions(job *client.WorkerJob) transcoding.Options {
 	opts := transcoding.Options{
-		InputPath:         w.translatePath(job.InputPath),
-		OutputPath:        w.translatePath(job.OutputPath),
+		InputPath:         w.resolvePath(job.InputPath),
+		OutputPath:        w.resolvePath(job.OutputPath),
 		SourceStreamIndex: job.TrackIndex,
 		SegmentTime:       job.TranscodeOptions.SegmentTime,
 		TrackType:         job.TrackType,
@@ -263,24 +264,10 @@ func (w *Worker) buildTranscodeOptions(job *client.WorkerJob) transcoding.Option
 	return opts
 }
 
-// translatePath converts server paths to local worker paths.
-// If ServerMediaPath is configured, paths from the server are translated
-// by replacing the server's media path prefix with the worker's local media path.
-func (w *Worker) translatePath(serverPath string) string {
-	serverPrefix := w.config.Media.ServerMediaPath
-	if serverPrefix == "" {
-		return serverPath // No translation configured
-	}
-
-	if strings.HasPrefix(serverPath, serverPrefix) {
-		// Ensure we match at a directory boundary
-		// Either the path equals the prefix exactly, or the next character is a path separator
-		remainder := serverPath[len(serverPrefix):]
-		if remainder == "" || remainder[0] == '/' {
-			return w.config.Media.MediaPath + remainder
-		}
-	}
-	return serverPath // Path doesn't match prefix, use as-is
+// resolvePath converts a relative path from the server to an absolute local path
+// by prepending the worker's configured media_path.
+func (w *Worker) resolvePath(relativePath string) string {
+	return filepath.Join(w.config.Media.MediaPath, relativePath)
 }
 
 // heartbeatLoop sends periodic heartbeats when idle

@@ -142,6 +142,11 @@ func (m *MockFileSystemService) CopyFileWithProgress(src, dst string, callback p
 	return args.Error(0)
 }
 
+func (m *MockFileSystemService) RemoveDir(path string) error {
+	args := m.Called(path)
+	return args.Error(0)
+}
+
 type MockMediaRepository struct {
 	mock.Mock
 }
@@ -183,6 +188,19 @@ func (m *MockMediaRepository) List(ctx context.Context, page, perPage int) ([]*d
 		return nil, args.Int(1), args.Error(2)
 	}
 	return args.Get(0).([]*domain.MediaFile), args.Int(1), args.Error(2)
+}
+
+func (m *MockMediaRepository) Delete(ctx context.Context, id string) error {
+	args := m.Called(ctx, id)
+	return args.Error(0)
+}
+
+func (m *MockMediaRepository) FindByEpisodeMetadataIDs(ctx context.Context, episodeMetadataIDs []int64) ([]*domain.MediaFile, error) {
+	args := m.Called(ctx, episodeMetadataIDs)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.MediaFile), args.Error(1)
 }
 
 // Helper to create test config

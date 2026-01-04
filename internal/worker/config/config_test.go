@@ -44,8 +44,6 @@ media:
 	assert.Equal(t, 7200, cfg.Transcoding.TimeoutSeconds)
 	assert.Equal(t, "info", cfg.Logging.Level)
 	assert.Equal(t, "console", cfg.Logging.Format)
-	// Check new default
-	assert.Equal(t, "", cfg.Media.ServerMediaPath)
 }
 
 func TestLoad_CustomValues(t *testing.T) {
@@ -69,7 +67,6 @@ worker:
   progress_interval_seconds: 10
 media:
   media_path: "` + mediaDir + `"
-  server_media_path: "/srv/media"
 transcoding:
   ffmpeg_path: "/usr/local/bin/ffmpeg"
   ffprobe_path: "/usr/local/bin/ffprobe"
@@ -98,7 +95,6 @@ logging:
 	assert.Equal(t, 3600, cfg.Transcoding.TimeoutSeconds)
 	assert.Equal(t, "debug", cfg.Logging.Level)
 	assert.Equal(t, "json", cfg.Logging.Format)
-	assert.Equal(t, "/srv/media", cfg.Media.ServerMediaPath)
 }
 
 func TestServerConfig_Validate(t *testing.T) {
@@ -305,11 +301,6 @@ func TestMediaConfig_Validate(t *testing.T) {
 		{
 			name:      "valid config with existing path",
 			config:    MediaConfig{MediaPath: tmpDir},
-			expectErr: false,
-		},
-		{
-			name:      "valid config with server_media_path",
-			config:    MediaConfig{MediaPath: tmpDir, ServerMediaPath: "/srv/media"},
 			expectErr: false,
 		},
 		{

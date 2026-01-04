@@ -7,7 +7,7 @@
 server:
   # URL of the main vimesrv server
   url: "http://localhost:8080"
-  
+
   # Authentication token - MUST match the server's worker.auth_token
   # This is a shared secret for worker authentication
   # Generate a secure token: openssl rand -hex 32
@@ -17,46 +17,40 @@ server:
 worker:
   # Unique worker ID (leave empty to auto-generate UUID on startup)
   id: ""
-  
+
   # Human-readable name for this worker (shown in logs and UI)
   name: "worker-1"
-  
+
   # How often to poll server for new jobs (in seconds)
   poll_interval_seconds: 5
-  
+
   # How often to send heartbeat when idle (in seconds)
   # Must be less than server's worker.heartbeat_timeout_seconds
   heartbeat_interval_seconds: 30
-  
+
   # Maximum number of concurrent transcode jobs
   # Adjust based on CPU/GPU resources available
   concurrency: 2
-  
+
   # How often to report progress during transcoding (in seconds)
   progress_interval_seconds: 5
 
 # Media library settings
 media:
   # Path to the media library ON THIS WORKER
+  # This path should point to where the media library is mounted locally.
+  # The server sends relative paths which are resolved against this path.
   # IMPORTANT: This directory must exist and be accessible
-  # The worker validates this path exists at startup
-  media_path: "/mnt/nfs/media"
-
-  # Path to the media library AS SEEN BY THE SERVER
-  # Leave empty if both server and worker use the same mount path
-  # If set, server paths are translated: server_media_path → media_path
-  # Example: If server uses /srv/media and worker mounts it at /mnt/nfs/media,
-  # set server_media_path: "/srv/media"
-  server_media_path: ""
+  media_path: "/mnt/nfs/video/library/media"
 
 # Transcoding settings
 transcoding:
   # Path to FFmpeg binary (default: searches PATH)
   ffmpeg_path: "ffmpeg"
-  
+
   # Path to FFprobe binary (default: searches PATH)
   ffprobe_path: "ffprobe"
-  
+
   # Maximum time for a single transcode job (in seconds)
   # Default: 7200 (2 hours)
   timeout_seconds: 7200
@@ -65,6 +59,6 @@ transcoding:
 logging:
   # Log level: debug, info, warn, error
   level: "info"
-  
+
   # Log format: console (human-readable) or json
   format: "console"

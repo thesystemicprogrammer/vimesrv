@@ -166,6 +166,24 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
                   }
                   <span>Change Metadata</span>
                 </button>
+
+                <!-- Delete button (admin only) -->
+                @if (auth.isAdmin()) {
+                  <button
+                    (click)="confirmDelete()"
+                    [disabled]="deleting()"
+                    class="flex items-center gap-2 px-4 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg transition disabled:opacity-50"
+                  >
+                    @if (deleting()) {
+                      <div class="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full"></div>
+                    } @else {
+                      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                      </svg>
+                    }
+                    <span>Delete</span>
+                  </button>
+                }
               </div>
             </div>
           </div>
@@ -549,13 +567,54 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
       (matched)="onMetadataChanged()"
       (skipped)="onMetadataChanged()"
     />
+
+    <!-- Delete Confirmation Modal -->
+    @if (showDeleteConfirm()) {
+      <div class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+        <div class="bg-slate-800 rounded-lg max-w-md w-full p-6">
+          <h3 class="text-xl font-bold text-white mb-4">Delete Movie</h3>
+          <p class="text-slate-300 mb-2">
+            Are you sure you want to delete <strong>{{ movie()?.title }}</strong>?
+          </p>
+          <p class="text-slate-400 text-sm mb-4">
+            The source file will be moved to trash. Transcoded files will be permanently deleted.
+          </p>
+          
+          @if (deleteError()) {
+            <div class="bg-red-500/10 border border-red-500 text-red-400 px-3 py-2 rounded text-sm mb-4">
+              {{ deleteError() }}
+            </div>
+          }
+          
+          <div class="flex justify-end gap-3">
+            <button
+              (click)="cancelDelete()"
+              [disabled]="deleting()"
+              class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              (click)="executeDelete()"
+              [disabled]="deleting()"
+              class="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition disabled:opacity-50"
+            >
+              @if (deleting()) {
+                <div class="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
+              }
+              Delete
+            </button>
+          </div>
+        </div>
+      </div>
+    }
   `
 })
 export class MovieDetailComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly api = inject(ApiService);
-  private readonly auth = inject(AuthService);
+  readonly auth = inject(AuthService);
 
   private mediaId: string | null = null;
   private languageSubscription: Subscription | null = null;
@@ -572,6 +631,11 @@ export class MovieDetailComponent implements OnInit, OnDestroy {
   // Metadata change state
   selectedMedia = signal<UnmatchedMediaSummary | null>(null);
   resettingMetadata = signal(false);
+
+  // Delete state
+  showDeleteConfirm = signal(false);
+  deleting = signal(false);
+  deleteError = signal<string | null>(null);
 
   constructor() {
     // Re-fetch movie details when language changes (skip initial emission)
@@ -735,5 +799,41 @@ export class MovieDetailComponent implements OnInit, OnDestroy {
     if (this.mediaId) {
       this.loadMovie(this.mediaId);
     }
+  }
+
+  confirmDelete(): void {
+    this.deleteError.set(null);
+    this.showDeleteConfirm.set(true);
+  }
+
+  cancelDelete(): void {
+    this.showDeleteConfirm.set(false);
+    this.deleteError.set(null);
+  }
+
+  executeDelete(): void {
+    const m = this.movie();
+    if (!m) return;
+
+    this.deleting.set(true);
+    this.deleteError.set(null);
+
+    this.api.deleteMedia(m.media_id).subscribe({
+      next: () => {
+        this.deleting.set(false);
+        this.showDeleteConfirm.set(false);
+        this.router.navigate(['/library']);
+      },
+      error: (err) => {
+        this.deleting.set(false);
+        const message = err.error?.error?.message || 'Failed to delete movie';
+        // Check for running jobs error (409 Conflict)
+        if (err.status === 409) {
+          this.deleteError.set('Cannot delete: transcoding is in progress. Please wait for it to complete.');
+        } else {
+          this.deleteError.set(message);
+        }
+      }
+    });
   }
 }

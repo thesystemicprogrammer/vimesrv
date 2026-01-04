@@ -28,4 +28,12 @@ type MediaRepository interface {
 
 	// Update updates an existing media file record
 	Update(ctx context.Context, media *domain.MediaFile) error
+
+	// Delete removes a media file record by its ID
+	// Related records (audio_streams, subtitle_streams, transcodes, metadata_candidates)
+	// are automatically deleted via CASCADE
+	Delete(ctx context.Context, id string) error
+
+	// FindByEpisodeMetadataIDs retrieves all media files linked to any of the given episode metadata IDs
+	FindByEpisodeMetadataIDs(ctx context.Context, episodeMetadataIDs []int64) ([]*domain.MediaFile, error)
 }

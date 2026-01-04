@@ -41,9 +41,11 @@ type JobRepository interface {
 
 	// Get retrieves a job by its ID
 	Get(ctx context.Context, jobID int64) (*domain.Job, error)
-	// ClaimNextTranscodeJob atomically claims the next queued transcode_video job
+	// ClaimNextTranscodeJob atomically claims the next queued transcode job
 	// for processing by a distributed worker. Returns (nil, nil) if no jobs available.
+	// Handles all transcode job types: video, audio, and subtitle.
 	ClaimNextTranscodeJob(ctx context.Context, workerID string) (*domain.Job, error)
-	// CountQueuedTranscodeJobs returns the number of queued transcode_video jobs
+	// CountQueuedTranscodeJobs returns the number of queued transcode jobs.
+	// Counts all transcode job types: video, audio, and subtitle.
 	CountQueuedTranscodeJobs(ctx context.Context) (int, error)
 }

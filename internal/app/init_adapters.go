@@ -45,6 +45,7 @@ type Adapters struct {
 	SearchRepository             ports.SearchRepository
 	UserRepository               ports.UserRepository
 	WebSocketHub                 *websocket.Hub
+	ProgressCache                *websocket.ProgressCache
 	JobNotifier                  ports.JobNotifier
 	WorkerRegistry               *workerAdapter.Registry
 }
@@ -83,7 +84,8 @@ func initAdapters(cfg *config.Config, db *database.DB) *Adapters {
 	// Initialize WebSocket hub if enabled
 	if cfg.WebSocket.Enabled {
 		adapters.WebSocketHub = websocket.NewHub()
-		adapters.JobNotifier = websocket.NewWebSocketJobNotifier(adapters.WebSocketHub)
+		adapters.ProgressCache = websocket.NewProgressCache()
+		adapters.JobNotifier = websocket.NewWebSocketJobNotifier(adapters.WebSocketHub, adapters.ProgressCache)
 	} else {
 		// Use no-op notifier when WebSocket is disabled
 		adapters.JobNotifier = &ports.NoOpJobNotifier{}
