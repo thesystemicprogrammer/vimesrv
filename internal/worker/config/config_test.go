@@ -38,7 +38,6 @@ media:
 	assert.Equal(t, "ffmpeg", cfg.Transcoding.FFmpegPath)
 	assert.Equal(t, "ffprobe", cfg.Transcoding.FFprobePath)
 	assert.Equal(t, 7200, cfg.Transcoding.TimeoutSeconds)
-	assert.Equal(t, 4, cfg.Transcoding.SegmentDuration)
 	assert.Equal(t, "info", cfg.Logging.Level)
 	assert.Equal(t, "console", cfg.Logging.Format)
 }
@@ -64,7 +63,6 @@ transcoding:
   ffmpeg_path: "/usr/local/bin/ffmpeg"
   ffprobe_path: "/usr/local/bin/ffprobe"
   timeout_seconds: 3600
-  segment_duration: 6
 logging:
   level: "debug"
   format: "json"
@@ -87,7 +85,6 @@ logging:
 	assert.Equal(t, "/usr/local/bin/ffmpeg", cfg.Transcoding.FFmpegPath)
 	assert.Equal(t, "/usr/local/bin/ffprobe", cfg.Transcoding.FFprobePath)
 	assert.Equal(t, 3600, cfg.Transcoding.TimeoutSeconds)
-	assert.Equal(t, 6, cfg.Transcoding.SegmentDuration)
 	assert.Equal(t, "debug", cfg.Logging.Level)
 	assert.Equal(t, "json", cfg.Logging.Format)
 }
@@ -326,20 +323,18 @@ func TestTranscodingConfig_Validate(t *testing.T) {
 		{
 			name: "valid config",
 			config: TranscodingConfig{
-				FFmpegPath:      "ffmpeg",
-				FFprobePath:     "ffprobe",
-				TimeoutSeconds:  7200,
-				SegmentDuration: 4,
+				FFmpegPath:     "ffmpeg",
+				FFprobePath:    "ffprobe",
+				TimeoutSeconds: 7200,
 			},
 			expectErr: false,
 		},
 		{
 			name: "empty ffmpeg path",
 			config: TranscodingConfig{
-				FFmpegPath:      "",
-				FFprobePath:     "ffprobe",
-				TimeoutSeconds:  7200,
-				SegmentDuration: 4,
+				FFmpegPath:     "",
+				FFprobePath:    "ffprobe",
+				TimeoutSeconds: 7200,
 			},
 			expectErr: true,
 			errMsg:    "ffmpeg_path cannot be empty",
@@ -347,10 +342,9 @@ func TestTranscodingConfig_Validate(t *testing.T) {
 		{
 			name: "empty ffprobe path",
 			config: TranscodingConfig{
-				FFmpegPath:      "ffmpeg",
-				FFprobePath:     "",
-				TimeoutSeconds:  7200,
-				SegmentDuration: 4,
+				FFmpegPath:     "ffmpeg",
+				FFprobePath:    "",
+				TimeoutSeconds: 7200,
 			},
 			expectErr: true,
 			errMsg:    "ffprobe_path cannot be empty",
@@ -358,35 +352,12 @@ func TestTranscodingConfig_Validate(t *testing.T) {
 		{
 			name: "timeout too low",
 			config: TranscodingConfig{
-				FFmpegPath:      "ffmpeg",
-				FFprobePath:     "ffprobe",
-				TimeoutSeconds:  30,
-				SegmentDuration: 4,
+				FFmpegPath:     "ffmpeg",
+				FFprobePath:    "ffprobe",
+				TimeoutSeconds: 30,
 			},
 			expectErr: true,
 			errMsg:    "timeout_seconds must be between 60 and 36000",
-		},
-		{
-			name: "segment duration too low",
-			config: TranscodingConfig{
-				FFmpegPath:      "ffmpeg",
-				FFprobePath:     "ffprobe",
-				TimeoutSeconds:  7200,
-				SegmentDuration: 0,
-			},
-			expectErr: true,
-			errMsg:    "segment_duration must be between 1 and 30",
-		},
-		{
-			name: "segment duration too high",
-			config: TranscodingConfig{
-				FFmpegPath:      "ffmpeg",
-				FFprobePath:     "ffprobe",
-				TimeoutSeconds:  7200,
-				SegmentDuration: 60,
-			},
-			expectErr: true,
-			errMsg:    "segment_duration must be between 1 and 30",
 		},
 	}
 

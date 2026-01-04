@@ -3,11 +3,19 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/spf13/viper"
 )
+
+// defaultConfigPaths is the list of paths to search for config files (in order of priority)
+var defaultConfigPaths = []string{
+	"./configs/worker.yaml",
+	"./worker.yaml",
+	"/etc/vimesrv/worker.yaml",
+}
 
 // Config holds all worker configuration
 type Config struct {
@@ -64,9 +72,6 @@ type TranscodingConfig struct {
 
 	// TimeoutSeconds is the maximum time for a single transcode job
 	TimeoutSeconds int `mapstructure:"timeout_seconds"`
-
-	// SegmentDuration is the segment duration in seconds (must match server)
-	SegmentDuration int `mapstructure:"segment_duration"`
 }
 
 // LoggingConfig contains logging settings
@@ -78,19 +83,29 @@ type LoggingConfig struct {
 	Format string `mapstructure:"format"`
 }
 
-// Load loads worker configuration from the specified file path
+// Load loads worker configuration from the specified file path.
+// If configPath is empty, it searches for config files in default locations:
+//   - ./configs/worker.yaml
+//   - ./worker.yaml
+//   - /etc/vimesrv/worker.yaml
 func Load(configPath string) (*Config, error) {
 	v := viper.New()
 
 	setDefaults(v)
 
-	// Read config file if provided
-	if configPath != "" {
-		v.SetConfigFile(configPath)
+	// Determine which config file to use
+	effectivePath := configPath
+	if effectivePath == "" {
+		effectivePath = discoverConfigFile()
+	}
+
+	// Read config file if found
+	if effectivePath != "" {
+		v.SetConfigFile(effectivePath)
 		v.SetConfigType("yaml")
 
 		if err := v.ReadInConfig(); err != nil {
-			return nil, fmt.Errorf("failed to read config file: %w", err)
+			return nil, fmt.Errorf("failed to read config file %s: %w", effectivePath, err)
 		}
 	}
 
@@ -137,7 +152,6 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("transcoding.ffmpeg_path", "ffmpeg")
 	v.SetDefault("transcoding.ffprobe_path", "ffprobe")
 	v.SetDefault("transcoding.timeout_seconds", 7200)
-	v.SetDefault("transcoding.segment_duration", 4)
 
 	// Logging defaults
 	v.SetDefault("logging.level", "info")
@@ -164,7 +178,6 @@ func bindEnvVars(v *viper.Viper) {
 	v.BindEnv("transcoding.ffmpeg_path", "VIMESRV_WORKER_FFMPEG_PATH")
 	v.BindEnv("transcoding.ffprobe_path", "VIMESRV_WORKER_FFPROBE_PATH")
 	v.BindEnv("transcoding.timeout_seconds", "VIMESRV_WORKER_TRANSCODE_TIMEOUT")
-	v.BindEnv("transcoding.segment_duration", "VIMESRV_WORKER_SEGMENT_DURATION")
 
 	// Logging
 	v.BindEnv("logging.level", "VIMESRV_WORKER_LOG_LEVEL")
@@ -210,7 +223,7 @@ func (s *ServerConfig) Validate() error {
 	}
 
 	if len(s.AuthToken) < 16 {
-		return fmt.Errorf("auth_token must be at least 16 characters for security")
+		return fmt.Errorf("auth_token must be at least 16 characters for security (current: %d chars). Generate one with: openssl rand -hex 16", len(s.AuthToken))
 	}
 
 	return nil
@@ -261,10 +274,6 @@ func (t *TranscodingConfig) Validate() error {
 		return fmt.Errorf("timeout_seconds must be between 60 and 36000 (10 hours), got %d", t.TimeoutSeconds)
 	}
 
-	if t.SegmentDuration < 1 || t.SegmentDuration > 30 {
-		return fmt.Errorf("segment_duration must be between 1 and 30, got %d", t.SegmentDuration)
-	}
-
 	return nil
 }
 
@@ -304,4 +313,15 @@ func normalizePathsToAbsolute(cfg *Config) error {
 	}
 
 	return nil
+}
+
+// discoverConfigFile searches for a config file in default locations
+// and returns the first one found, or empty string if none exist.
+func discoverConfigFile() string {
+	for _, path := range defaultConfigPaths {
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+	return ""
 }

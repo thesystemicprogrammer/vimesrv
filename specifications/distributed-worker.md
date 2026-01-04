@@ -129,7 +129,6 @@ transcoding:
   ffmpeg_path: "ffmpeg"               # Path to ffmpeg binary
   ffprobe_path: "ffprobe"             # Path to ffprobe binary
   timeout_seconds: 7200               # Max time for a single transcode job
-  segment_duration: 4                 # Segment duration (must match server)
 
 logging:
   level: "info"
@@ -169,7 +168,6 @@ type TranscodingConfig struct {
     FFmpegPath      string `mapstructure:"ffmpeg_path"`
     FFprobePath     string `mapstructure:"ffprobe_path"`
     TimeoutSeconds  int    `mapstructure:"timeout_seconds"`
-    SegmentDuration int    `mapstructure:"segment_duration"`
 }
 
 type LoggingConfig struct {

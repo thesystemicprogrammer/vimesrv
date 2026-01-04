@@ -53,10 +53,6 @@ transcoding:
   # Maximum time for a single transcode job (in seconds)
   # Default: 7200 (2 hours)
   timeout_seconds: 7200
-  
-  # Segment duration (in seconds)
-  # IMPORTANT: Must match server's transcoding.segment_duration
-  segment_duration: 4
 
 # Logging settings
 logging:
