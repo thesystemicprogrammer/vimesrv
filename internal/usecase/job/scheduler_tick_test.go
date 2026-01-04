@@ -51,9 +51,12 @@ func (m *MockScheduleRepository) ListDue(ctx context.Context, limit int) ([]*dom
 	return args.Get(0).([]*domain.Schedule), args.Error(1)
 }
 
-func (m *MockScheduleRepository) AdvanceAndEnqueue(ctx context.Context, scheduleID int64, next time.Time, jobProto *domain.Job) error {
+func (m *MockScheduleRepository) AdvanceAndEnqueue(ctx context.Context, scheduleID int64, next time.Time, jobProto *domain.Job) (*domain.Job, error) {
 	args := m.Called(ctx, scheduleID, next, jobProto)
-	return args.Error(0)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.Job), args.Error(1)
 }
 
 // MockCronSchedule is a mock implementation of ports.CronSchedule
@@ -95,7 +98,7 @@ func TestSchedulerTickUseCase_Execute_NoDueSchedules(t *testing.T) {
 	// Clock is called even if no schedules are due (line 37 in scheduler_tick.go)
 	mockClock.On("Now").Return(time.Now())
 
-	uc := NewSchedulerTickUseCase(cfg, mockRepo, mockParser, mockClock)
+	uc := NewSchedulerTickUseCase(cfg, mockRepo, mockParser, mockClock, &ports.NoOpJobNotifier{})
 
 	err := uc.Execute(ctx)
 
@@ -120,7 +123,7 @@ func TestSchedulerTickUseCase_Execute_ListDueError(t *testing.T) {
 	expectedErr := errors.New("database error")
 	mockRepo.On("ListDue", ctx, 10).Return(nil, expectedErr)
 
-	uc := NewSchedulerTickUseCase(cfg, mockRepo, mockParser, mockClock)
+	uc := NewSchedulerTickUseCase(cfg, mockRepo, mockParser, mockClock, &ports.NoOpJobNotifier{})
 
 	err := uc.Execute(ctx)
 
@@ -171,9 +174,9 @@ func TestSchedulerTickUseCase_Execute_SingleSchedule(t *testing.T) {
 			job.MaxAttempts == 5 &&
 			job.ScheduledID.Valid &&
 			job.ScheduledID.Int64 == 1
-	})).Return(nil)
+	})).Return(&domain.Job{ID: 1}, nil)
 
-	uc := NewSchedulerTickUseCase(cfg, mockRepo, mockParser, mockClock)
+	uc := NewSchedulerTickUseCase(cfg, mockRepo, mockParser, mockClock, &ports.NoOpJobNotifier{})
 
 	err := uc.Execute(ctx)
 
@@ -225,16 +228,16 @@ func TestSchedulerTickUseCase_Execute_MultipleSchedules(t *testing.T) {
 	nextRun1 := now.Add(1 * time.Hour)
 	mockParser.On("Parse", "0 * * * *").Return(mockCronSchedule1, nil)
 	mockCronSchedule1.On("Next", now).Return(nextRun1)
-	mockRepo.On("AdvanceAndEnqueue", ctx, int64(1), nextRun1, mock.Anything).Return(nil)
+	mockRepo.On("AdvanceAndEnqueue", ctx, int64(1), nextRun1, mock.Anything).Return(&domain.Job{ID: 1}, nil)
 
 	// Setup for schedule 2
 	mockCronSchedule2 := new(MockCronSchedule)
 	nextRun2 := now.Add(5 * time.Minute)
 	mockParser.On("Parse", "*/5 * * * *").Return(mockCronSchedule2, nil)
 	mockCronSchedule2.On("Next", now).Return(nextRun2)
-	mockRepo.On("AdvanceAndEnqueue", ctx, int64(2), nextRun2, mock.Anything).Return(nil)
+	mockRepo.On("AdvanceAndEnqueue", ctx, int64(2), nextRun2, mock.Anything).Return(&domain.Job{ID: 1}, nil)
 
-	uc := NewSchedulerTickUseCase(cfg, mockRepo, mockParser, mockClock)
+	uc := NewSchedulerTickUseCase(cfg, mockRepo, mockParser, mockClock, &ports.NoOpJobNotifier{})
 
 	err := uc.Execute(ctx)
 
@@ -286,9 +289,9 @@ func TestSchedulerTickUseCase_Execute_InvalidCronSpec(t *testing.T) {
 	nextRun := now.Add(1 * time.Hour)
 	mockParser.On("Parse", "0 * * * *").Return(mockCronSchedule, nil)
 	mockCronSchedule.On("Next", now).Return(nextRun)
-	mockRepo.On("AdvanceAndEnqueue", ctx, int64(2), nextRun, mock.Anything).Return(nil)
+	mockRepo.On("AdvanceAndEnqueue", ctx, int64(2), nextRun, mock.Anything).Return(&domain.Job{ID: 1}, nil)
 
-	uc := NewSchedulerTickUseCase(cfg, mockRepo, mockParser, mockClock)
+	uc := NewSchedulerTickUseCase(cfg, mockRepo, mockParser, mockClock, &ports.NoOpJobNotifier{})
 
 	err := uc.Execute(ctx)
 
@@ -329,9 +332,9 @@ func TestSchedulerTickUseCase_Execute_AdvanceAndEnqueueError(t *testing.T) {
 	mockCronSchedule.On("Next", now).Return(nextRun)
 
 	expectedErr := errors.New("transaction error")
-	mockRepo.On("AdvanceAndEnqueue", ctx, int64(1), nextRun, mock.Anything).Return(expectedErr)
+	mockRepo.On("AdvanceAndEnqueue", ctx, int64(1), nextRun, mock.Anything).Return(nil, expectedErr)
 
-	uc := NewSchedulerTickUseCase(cfg, mockRepo, mockParser, mockClock)
+	uc := NewSchedulerTickUseCase(cfg, mockRepo, mockParser, mockClock, &ports.NoOpJobNotifier{})
 
 	err := uc.Execute(ctx)
 
@@ -356,7 +359,7 @@ func TestSchedulerTickUseCase_Execute_BatchLimit(t *testing.T) {
 	mockRepo.On("ListDue", ctx, 2).Return([]*domain.Schedule{}, nil)
 	mockClock.On("Now").Return(time.Now())
 
-	uc := NewSchedulerTickUseCase(cfg, mockRepo, mockParser, mockClock)
+	uc := NewSchedulerTickUseCase(cfg, mockRepo, mockParser, mockClock, &ports.NoOpJobNotifier{})
 
 	err := uc.Execute(ctx)
 
@@ -397,9 +400,9 @@ func TestSchedulerTickUseCase_Execute_ScheduledIDTracking(t *testing.T) {
 	// Verify scheduled_id is set to 42
 	mockRepo.On("AdvanceAndEnqueue", ctx, int64(42), nextRun, mock.MatchedBy(func(job *domain.Job) bool {
 		return job.ScheduledID.Valid && job.ScheduledID.Int64 == 42
-	})).Return(nil)
+	})).Return(&domain.Job{ID: 1}, nil)
 
-	uc := NewSchedulerTickUseCase(cfg, mockRepo, mockParser, mockClock)
+	uc := NewSchedulerTickUseCase(cfg, mockRepo, mockParser, mockClock, &ports.NoOpJobNotifier{})
 
 	err := uc.Execute(ctx)
 

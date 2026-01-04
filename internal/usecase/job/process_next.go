@@ -6,6 +6,7 @@ import (
 	"runtime/debug"
 	"time"
 
+	"github.com/thesystemicprogrammer/vimesrv/internal/domain"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/logger"
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/ports"
 )
@@ -16,6 +17,7 @@ type ProcessNextJobUseCase struct {
 	backoffStrategy ports.BackoffStrategy
 	clock           ports.Clock
 	jobNotifier     ports.JobNotifier
+	excludeTypes    []string // Job types to exclude from local processing (e.g., worker-exclusive types)
 }
 
 func NewProcessNextJobUseCase(jobRepository ports.JobRepository, handlerResolver ports.HandlerResolver, backoffStrategy ports.BackoffStrategy, clock ports.Clock, jobNotifier ports.JobNotifier) *ProcessNextJobUseCase {
@@ -25,6 +27,19 @@ func NewProcessNextJobUseCase(jobRepository ports.JobRepository, handlerResolver
 		backoffStrategy: backoffStrategy,
 		clock:           clock,
 		jobNotifier:     jobNotifier,
+	}
+}
+
+// WithExcludedTypes returns a copy of the use case with specified job types excluded from local processing.
+// This is used when distributed workers are enabled to prevent local processing of transcode jobs.
+func (uc *ProcessNextJobUseCase) WithExcludedTypes(types []string) *ProcessNextJobUseCase {
+	return &ProcessNextJobUseCase{
+		jobRepository:   uc.jobRepository,
+		handlerResolver: uc.handlerResolver,
+		backoffStrategy: uc.backoffStrategy,
+		clock:           uc.clock,
+		jobNotifier:     uc.jobNotifier,
+		excludeTypes:    types,
 	}
 }
 
@@ -73,7 +88,17 @@ func (uc *ProcessNextJobUseCase) retryStateTransition(ctx context.Context, opera
 }
 
 func (uc *ProcessNextJobUseCase) Execute(ctx context.Context, workerID string) (found bool, err error) {
-	job, ok, claimErr := uc.jobRepository.ClaimNextJobDue(ctx, workerID)
+	var job *domain.Job
+	var ok bool
+	var claimErr error
+
+	// Use appropriate claim method based on excluded types
+	if len(uc.excludeTypes) > 0 {
+		job, ok, claimErr = uc.jobRepository.ClaimNextJobDueExcludingTypes(ctx, workerID, uc.excludeTypes)
+	} else {
+		job, ok, claimErr = uc.jobRepository.ClaimNextJobDue(ctx, workerID)
+	}
+
 	if claimErr != nil {
 		logger.Error().Err(claimErr).Msg("error claiming next due job")
 		return false, claimErr
@@ -81,6 +106,9 @@ func (uc *ProcessNextJobUseCase) Execute(ctx context.Context, workerID string) (
 	if !ok {
 		return false, nil
 	}
+
+	// Notify that job has started processing
+	uc.jobNotifier.NotifyJobStarted(job)
 
 	// Panic safety
 	defer func() {

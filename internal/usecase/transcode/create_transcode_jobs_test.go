@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/thesystemicprogrammer/vimesrv/internal/domain"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/config"
+	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/job"
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/ports"
 )
 
@@ -113,6 +115,10 @@ func (m *MockJobRepository) ClaimNextJobDue(ctx context.Context, workerID string
 	return nil, false, nil
 }
 
+func (m *MockJobRepository) ClaimNextJobDueExcludingTypes(ctx context.Context, workerID string, excludeTypes []string) (*domain.Job, bool, error) {
+	return nil, false, nil
+}
+
 func (m *MockJobRepository) MarkSuccess(ctx context.Context, jobID int64) error {
 	return nil
 }
@@ -135,6 +141,35 @@ func (m *MockJobRepository) ResetStuckJob(ctx context.Context, jobID int64) erro
 
 func (m *MockJobRepository) ExistsPendingJobByType(ctx context.Context, jobType string, payload string) (bool, error) {
 	return false, nil
+}
+
+func (m *MockJobRepository) ListJobs(ctx context.Context, filter ports.JobListFilter) (*ports.JobListResult, error) {
+	return &ports.JobListResult{Jobs: nil, Total: 0}, nil
+}
+
+func (m *MockJobRepository) Get(ctx context.Context, jobID int64) (*domain.Job, error) {
+	return nil, nil
+}
+
+func (m *MockJobRepository) ClaimNextTranscodeJob(ctx context.Context, workerID string) (*domain.Job, error) {
+	return nil, nil
+}
+
+func (m *MockJobRepository) CountQueuedTranscodeJobs(ctx context.Context) (int, error) {
+	return 0, nil
+}
+
+// MockClock for testing
+type MockClock struct{}
+
+func (m *MockClock) Now() time.Time {
+	return time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
+}
+
+// createEnqueueJobUseCase creates an EnqueueJobUseCase with the given mock job repository
+func createEnqueueJobUseCase(mockJobRepo *MockJobRepository) *job.EnqueueJobUseCase {
+	cfg := config.JobConfig{MaxAttempts: 3}
+	return job.NewEnqueueJobUseCase(cfg, mockJobRepo, &MockClock{}, &ports.NoOpJobNotifier{})
 }
 
 // MockFFProbeService for testing
@@ -257,8 +292,8 @@ func TestCreateTranscodeJobsUseCase_Execute_Success(t *testing.T) {
 	mockFFProbe := &MockFFProbeService{
 		GetAudioStreamsFn: func(filePath string) ([]*ports.AudioStreamInfo, error) {
 			return []*ports.AudioStreamInfo{
-				{StreamIndex: 0, Codec: "aac", Language: "eng", Channels: 2},
-				{StreamIndex: 1, Codec: "aac", Language: "spa", Channels: 2},
+				{StreamIndex: 0, Codec: "aac", Language: "eng", Channels: 2, ChannelLayout: "stereo"},
+				{StreamIndex: 1, Codec: "aac", Language: "spa", Channels: 6, ChannelLayout: "5.1(side)"},
 			}, nil
 		},
 		GetSubtitleStreamsFn: func(filePath string) ([]*ports.SubtitleStreamInfo, error) {
@@ -271,7 +306,7 @@ func TestCreateTranscodeJobsUseCase_Execute_Success(t *testing.T) {
 	useCase := NewCreateTranscodeJobsUseCase(
 		mockMediaRepo,
 		mockTranscodeRepo,
-		mockJobRepo,
+		createEnqueueJobUseCase(mockJobRepo),
 		mockAudioStreamRepo,
 		mockSubtitleStreamRepo,
 		mockFFProbe,
@@ -334,11 +369,19 @@ func TestCreateTranscodeJobsUseCase_Execute_Success(t *testing.T) {
 
 		// Verify payload contains transcode_id
 		var payload struct {
-			TranscodeID string `json:"transcode_id"`
+			TranscodeID   string `json:"transcode_id"`
+			Language      string `json:"language,omitempty"`
+			ChannelLayout string `json:"channel_layout,omitempty"`
 		}
 		err := json.Unmarshal(job.Payload, &payload)
 		require.NoError(t, err)
 		assert.NotEmpty(t, payload.TranscodeID)
+
+		// Verify audio jobs have language and channel_layout
+		if strings.Contains(payload.TranscodeID, "-audio-") {
+			assert.NotEmpty(t, payload.Language, "Audio job should have language")
+			assert.NotEmpty(t, payload.ChannelLayout, "Audio job should have channel_layout")
+		}
 	}
 }
 
@@ -372,7 +415,7 @@ func TestCreateTranscodeJobsUseCase_Execute_NoAudioOrSubtitles(t *testing.T) {
 	useCase := NewCreateTranscodeJobsUseCase(
 		mockMediaRepo,
 		mockTranscodeRepo,
-		mockJobRepo,
+		createEnqueueJobUseCase(mockJobRepo),
 		&MockAudioStreamRepository{},
 		&MockSubtitleStreamRepository{},
 		mockFFProbe,
@@ -409,7 +452,7 @@ func TestCreateTranscodeJobsUseCase_Execute_MediaNotFound(t *testing.T) {
 	useCase := NewCreateTranscodeJobsUseCase(
 		mockMediaRepo,
 		&MockTranscodeRepository{},
-		&MockJobRepository{},
+		createEnqueueJobUseCase(&MockJobRepository{}),
 		&MockAudioStreamRepository{},
 		&MockSubtitleStreamRepository{},
 		&MockFFProbeService{},
@@ -441,7 +484,7 @@ func TestCreateTranscodeJobsUseCase_Execute_NoEnabledProfiles(t *testing.T) {
 	useCase := NewCreateTranscodeJobsUseCase(
 		mockMediaRepo,
 		&MockTranscodeRepository{},
-		&MockJobRepository{},
+		createEnqueueJobUseCase(&MockJobRepository{}),
 		&MockAudioStreamRepository{},
 		&MockSubtitleStreamRepository{},
 		&MockFFProbeService{},
@@ -473,14 +516,17 @@ func TestCreateTranscodeJobsUseCase_Execute_TranscodeCreateError(t *testing.T) {
 			return errors.New("database error")
 		},
 	}
+	mockJobRepo := &MockJobRepository{}
+	mockAudioStreamRepo := &MockAudioStreamRepository{}
+	mockSubtitleStreamRepo := &MockSubtitleStreamRepository{}
 	mockFFProbe := &MockFFProbeService{}
 
 	useCase := NewCreateTranscodeJobsUseCase(
 		mockMediaRepo,
 		mockTranscodeRepo,
-		&MockJobRepository{},
-		&MockAudioStreamRepository{},
-		&MockSubtitleStreamRepository{},
+		createEnqueueJobUseCase(mockJobRepo),
+		mockAudioStreamRepo,
+		mockSubtitleStreamRepo,
 		mockFFProbe,
 		cfg,
 	)
@@ -516,7 +562,7 @@ func TestCreateTranscodeJobsUseCase_Execute_JobEnqueueError(t *testing.T) {
 	useCase := NewCreateTranscodeJobsUseCase(
 		mockMediaRepo,
 		mockTranscodeRepo,
-		mockJobRepo,
+		createEnqueueJobUseCase(mockJobRepo),
 		&MockAudioStreamRepository{},
 		&MockSubtitleStreamRepository{},
 		mockFFProbe,
@@ -554,7 +600,7 @@ func TestCreateTranscodeJobsUseCase_Execute_FFProbeError(t *testing.T) {
 	useCase := NewCreateTranscodeJobsUseCase(
 		mockMediaRepo,
 		mockTranscodeRepo,
-		mockJobRepo,
+		createEnqueueJobUseCase(mockJobRepo),
 		&MockAudioStreamRepository{},
 		&MockSubtitleStreamRepository{},
 		mockFFProbe,
@@ -597,7 +643,7 @@ func TestCreateTranscodeJobsUseCase_Execute_SingleQuality(t *testing.T) {
 	useCase := NewCreateTranscodeJobsUseCase(
 		mockMediaRepo,
 		mockTranscodeRepo,
-		mockJobRepo,
+		createEnqueueJobUseCase(mockJobRepo),
 		&MockAudioStreamRepository{},
 		&MockSubtitleStreamRepository{},
 		mockFFProbe,
@@ -653,7 +699,7 @@ func TestCreateTranscodeJobsUseCase_Execute_MultipleSubtitles(t *testing.T) {
 	useCase := NewCreateTranscodeJobsUseCase(
 		mockMediaRepo,
 		mockTranscodeRepo,
-		mockJobRepo,
+		createEnqueueJobUseCase(mockJobRepo),
 		&MockAudioStreamRepository{},
 		&MockSubtitleStreamRepository{},
 		mockFFProbe,

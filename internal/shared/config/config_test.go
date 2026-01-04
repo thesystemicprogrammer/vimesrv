@@ -485,58 +485,101 @@ func TestTranscodingConfig_Validate(t *testing.T) {
 		{
 			name: "valid config",
 			config: TranscodingConfig{
-				SegmentDuration: 4,
-				QualityProfiles: []QualityProfile{validQuality},
+				SegmentDuration:         4,
+				ProgressLogIntervalSecs: 60,
+				QualityProfiles:         []QualityProfile{validQuality},
 			},
 			wantErr: false,
 		},
 		{
 			name: "valid config with multiple qualities",
 			config: TranscodingConfig{
-				SegmentDuration: 6,
-				QualityProfiles: []QualityProfile{validQuality, disabledQuality},
+				SegmentDuration:         6,
+				ProgressLogIntervalSecs: 60,
+				QualityProfiles:         []QualityProfile{validQuality, disabledQuality},
 			},
 			wantErr: false,
 		},
 		{
 			name: "segment_duration zero",
 			config: TranscodingConfig{
-				SegmentDuration: 0,
-				QualityProfiles: []QualityProfile{validQuality},
+				SegmentDuration:         0,
+				ProgressLogIntervalSecs: 60,
+				QualityProfiles:         []QualityProfile{validQuality},
 			},
 			wantErr: true,
 		},
 		{
 			name: "segment_duration negative",
 			config: TranscodingConfig{
-				SegmentDuration: -1,
-				QualityProfiles: []QualityProfile{validQuality},
+				SegmentDuration:         -1,
+				ProgressLogIntervalSecs: 60,
+				QualityProfiles:         []QualityProfile{validQuality},
 			},
 			wantErr: true,
 		},
 		{
 			name: "empty qualities",
 			config: TranscodingConfig{
-				SegmentDuration: 4,
-				QualityProfiles: []QualityProfile{},
+				SegmentDuration:         4,
+				ProgressLogIntervalSecs: 60,
+				QualityProfiles:         []QualityProfile{},
 			},
 			wantErr: true,
 		},
 		{
 			name: "all qualities disabled",
 			config: TranscodingConfig{
-				SegmentDuration: 4,
-				QualityProfiles: []QualityProfile{disabledQuality},
+				SegmentDuration:         4,
+				ProgressLogIntervalSecs: 60,
+				QualityProfiles:         []QualityProfile{disabledQuality},
 			},
 			wantErr: true,
 		},
 		{
 			name: "invalid quality profile",
 			config: TranscodingConfig{
-				SegmentDuration: 4,
-				QualityProfiles: []QualityProfile{invalidQuality},
+				SegmentDuration:         4,
+				ProgressLogIntervalSecs: 60,
+				QualityProfiles:         []QualityProfile{invalidQuality},
 			},
 			wantErr: true,
+		},
+		{
+			name: "progress_log_interval_seconds too low",
+			config: TranscodingConfig{
+				SegmentDuration:         4,
+				ProgressLogIntervalSecs: 9,
+				QualityProfiles:         []QualityProfile{validQuality},
+			},
+			wantErr: true,
+		},
+		{
+			name: "progress_log_interval_seconds too high",
+			config: TranscodingConfig{
+				SegmentDuration:         4,
+				ProgressLogIntervalSecs: 601,
+				QualityProfiles:         []QualityProfile{validQuality},
+			},
+			wantErr: true,
+		},
+		{
+			name: "progress_log_interval_seconds at min boundary",
+			config: TranscodingConfig{
+				SegmentDuration:         4,
+				ProgressLogIntervalSecs: 10,
+				QualityProfiles:         []QualityProfile{validQuality},
+			},
+			wantErr: false,
+		},
+		{
+			name: "progress_log_interval_seconds at max boundary",
+			config: TranscodingConfig{
+				SegmentDuration:         4,
+				ProgressLogIntervalSecs: 600,
+				QualityProfiles:         []QualityProfile{validQuality},
+			},
+			wantErr: false,
 		},
 	}
 
@@ -1109,13 +1152,15 @@ func TestConfig_Validate(t *testing.T) {
 	}
 
 	validTranscodingConfig := TranscodingConfig{
-		SegmentDuration: 4,
-		QualityProfiles: []QualityProfile{validQuality},
+		SegmentDuration:         4,
+		ProgressLogIntervalSecs: 60,
+		QualityProfiles:         []QualityProfile{validQuality},
 	}
 
 	invalidTranscodingConfig := TranscodingConfig{
-		SegmentDuration: 0,
-		QualityProfiles: []QualityProfile{validQuality},
+		SegmentDuration:         0,
+		ProgressLogIntervalSecs: 60,
+		QualityProfiles:         []QualityProfile{validQuality},
 	}
 
 	validDatabaseConfig := DatabaseConfig{

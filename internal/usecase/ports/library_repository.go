@@ -4,6 +4,26 @@ import (
 	"context"
 )
 
+// MovieFilterOptions contains filtering and sorting options for movie listings
+type MovieFilterOptions struct {
+	SortBy    string   // date_added, title, year, rating
+	SortOrder string   // asc, desc
+	Genres    []string // Filter by genre names (AND logic)
+	YearFrom  int      // Filter movies from this year (inclusive)
+	YearTo    int      // Filter movies up to this year (inclusive)
+	MinRating float64  // Filter movies with rating >= this value
+}
+
+// SeriesFilterOptions contains filtering and sorting options for series listings
+type SeriesFilterOptions struct {
+	SortBy    string   // date_added, name, year, rating
+	SortOrder string   // asc, desc
+	Genres    []string // Filter by genre names (AND logic)
+	YearFrom  int      // Filter series from this year (inclusive)
+	YearTo    int      // Filter series up to this year (inclusive)
+	MinRating float64  // Filter series with rating >= this value
+}
+
 // MovieSummary represents a movie with its metadata for library display
 type MovieSummary struct {
 	// Media file info
@@ -218,9 +238,10 @@ type RecentlyAddedItem struct {
 
 // LibraryRepository provides library-focused queries that join media files with metadata
 type LibraryRepository interface {
-	// ListMovies returns movies with their metadata, sorted by most recently added
+	// ListMovies returns movies with their metadata
 	// language is used to select the appropriate translation (e.g., "en", "de")
-	ListMovies(ctx context.Context, language string, limit, offset int) ([]MovieSummary, int, error)
+	// filterOpts contains sorting and filtering options
+	ListMovies(ctx context.Context, language string, limit, offset int, filterOpts MovieFilterOptions) ([]MovieSummary, int, error)
 
 	// GetMovie returns a single movie with full details
 	GetMovie(ctx context.Context, mediaID string, language string) (*MovieSummary, error)
@@ -228,9 +249,10 @@ type LibraryRepository interface {
 	// GetMovieDetail returns a movie with full details including credits and certification
 	GetMovieDetail(ctx context.Context, mediaID string, language string, maxCast int) (*MovieDetail, error)
 
-	// ListSeries returns series with summary info, sorted by name
+	// ListSeries returns series with summary info
 	// Only returns series that have at least one linked episode (or all if includeEmpty is true)
-	ListSeries(ctx context.Context, language string, includeEmpty bool) ([]SeriesSummary, error)
+	// filterOpts contains sorting and filtering options
+	ListSeries(ctx context.Context, language string, includeEmpty bool, limit, offset int, filterOpts SeriesFilterOptions) ([]SeriesSummary, int, error)
 
 	// GetSeriesDetail returns a series with all seasons and episodes
 	GetSeriesDetail(ctx context.Context, seriesID int64, language string) (*SeriesDetail, error)
@@ -242,4 +264,10 @@ type LibraryRepository interface {
 
 	// ListUnmatched returns media files that don't have metadata linked
 	ListUnmatched(ctx context.Context, limit, offset int) ([]UnmatchedMediaSummary, int, error)
+
+	// ListMovieGenres returns all unique genres from movies in the library
+	ListMovieGenres(ctx context.Context) ([]string, error)
+
+	// ListSeriesGenres returns all unique genres from series in the library
+	ListSeriesGenres(ctx context.Context) ([]string, error)
 }

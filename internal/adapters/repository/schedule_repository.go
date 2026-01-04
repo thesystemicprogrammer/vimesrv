@@ -136,11 +136,11 @@ func (repo *ScheduleRepository) ListDue(ctx context.Context, limit int) ([]*doma
 	return out, rows.Err()
 }
 
-func (repo *ScheduleRepository) AdvanceAndEnqueue(ctx context.Context, scheduleID int64, next time.Time, jobProto *domain.Job) error {
+func (repo *ScheduleRepository) AdvanceAndEnqueue(ctx context.Context, scheduleID int64, next time.Time, jobProto *domain.Job) (*domain.Job, error) {
 	tx, err := repo.db.BeginTx(ctx, nil)
 	if err != nil {
 		logger.Error().Err(err).Msg("sql error beginning transaction")
-		return err
+		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
 
@@ -152,23 +152,49 @@ func (repo *ScheduleRepository) AdvanceAndEnqueue(ctx context.Context, scheduleI
 	`, next.UTC(), scheduleID)
 	if err != nil {
 		logger.Error().Err(err).Msg("sql error updating schedules")
-		return err
+		return nil, err
 	}
 	aff, _ := res.RowsAffected()
 	if aff == 0 {
-		return tx.Commit() // someone else advanced it
+		return nil, tx.Commit() // someone else advanced it, return nil job (not an error)
 	}
 
 	// Enqueue job
-	_, err = tx.ExecContext(ctx, `
+	result, err := tx.ExecContext(ctx, `
 	INSERT INTO jobs (type, payload, status, priority, run_at, attempt, max_attempts, scheduled_id, created_at, updated_at)
 	VALUES (?, ?, 'queued', ?, CURRENT_TIMESTAMP, 0, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 	`, jobProto.Type, string(jobProto.Payload), jobProto.Priority, jobProto.MaxAttempts, scheduleID)
 	if err != nil {
 		logger.Error().Err(err).Msg("sql error enqueuing jobs")
-		return err
+		return nil, err
 	}
-	return tx.Commit()
+
+	jobID, err := result.LastInsertId()
+	if err != nil {
+		logger.Error().Err(err).Msg("sql error getting last insert id")
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	// Return the created job with its ID
+	now := time.Now()
+	createdJob := &domain.Job{
+		ID:          jobID,
+		Type:        jobProto.Type,
+		Payload:     jobProto.Payload,
+		Status:      jobProto.Status,
+		Priority:    jobProto.Priority,
+		RunAt:       now,
+		Attempts:    0,
+		MaxAttempts: jobProto.MaxAttempts,
+		ScheduledID: jobProto.ScheduledID,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	return createdJob, nil
 }
 
 func boolToInt(b bool) int {

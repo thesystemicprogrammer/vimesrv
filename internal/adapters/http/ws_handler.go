@@ -89,7 +89,7 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 		// Register client with hub
 		h.hub.Register(client)
 
-		logger.Info().
+		logger.Debug().
 			Str("user_id", userID).
 			Str("username", claims.Username).
 			Msg("WebSocket client connected")
@@ -108,7 +108,7 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 		client := ws.NewClient(h.hub, conn, "anonymous")
 		h.hub.Register(client)
 
-		logger.Info().Msg("WebSocket client connected (auth disabled)")
+		logger.Debug().Msg("WebSocket client connected (auth disabled)")
 
 		go client.WritePump()
 		go client.ReadPump()

@@ -2,13 +2,12 @@ package transcode
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/thesystemicprogrammer/vimesrv/internal/domain"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/config"
+	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/job"
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/ports"
 )
 
@@ -30,7 +29,7 @@ type CreateTranscodeJobsOutput struct {
 type CreateTranscodeJobsUseCase struct {
 	mediaRepo          ports.MediaRepository
 	transcodeRepo      ports.TranscodeRepository
-	jobRepo            ports.JobRepository
+	enqueueJobUseCase  *job.EnqueueJobUseCase
 	audioStreamRepo    ports.AudioStreamRepository
 	subtitleStreamRepo ports.SubtitleStreamRepository
 	ffprobe            ports.FFProbeService
@@ -41,7 +40,7 @@ type CreateTranscodeJobsUseCase struct {
 func NewCreateTranscodeJobsUseCase(
 	mediaRepo ports.MediaRepository,
 	transcodeRepo ports.TranscodeRepository,
-	jobRepo ports.JobRepository,
+	enqueueJobUseCase *job.EnqueueJobUseCase,
 	audioStreamRepo ports.AudioStreamRepository,
 	subtitleStreamRepo ports.SubtitleStreamRepository,
 	ffprobe ports.FFProbeService,
@@ -50,7 +49,7 @@ func NewCreateTranscodeJobsUseCase(
 	return &CreateTranscodeJobsUseCase{
 		mediaRepo:          mediaRepo,
 		transcodeRepo:      transcodeRepo,
-		jobRepo:            jobRepo,
+		enqueueJobUseCase:  enqueueJobUseCase,
 		audioStreamRepo:    audioStreamRepo,
 		subtitleStreamRepo: subtitleStreamRepo,
 		ffprobe:            ffprobe,
@@ -107,31 +106,20 @@ func (uc *CreateTranscodeJobsUseCase) Execute(ctx context.Context, input CreateT
 	}, nil
 }
 
+// TranscodeJobPayload is the payload for transcode jobs
+type TranscodeJobPayload struct {
+	TranscodeID   string `json:"transcode_id"`
+	Language      string `json:"language,omitempty"`
+	ChannelLayout string `json:"channel_layout,omitempty"`
+}
+
 // createTranscodeJob creates a job for a transcode record
 func (uc *CreateTranscodeJobsUseCase) createTranscodeJob(ctx context.Context, transcodeID string) error {
-	// Create job payload
-	payload := struct {
-		TranscodeID string `json:"transcode_id"`
-	}{
-		TranscodeID: transcodeID,
-	}
-
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("failed to marshal job payload: %w", err)
-	}
-
-	// Create job with proper MaxAttempts from config
-	job := &domain.Job{
-		Type:        shared.JobTypeTranscodeVideo,
-		Payload:     payloadBytes,
-		Status:      "queued",
-		Priority:    shared.JobPriorityTranscode,
-		RunAt:       time.Now(),
-		MaxAttempts: uc.config.Job.MaxAttempts, // Set from config
-	}
-
-	_, err = uc.jobRepo.Enqueue(ctx, job)
+	_, err := uc.enqueueJobUseCase.Execute(ctx, job.EnqueueJobInput{
+		Type:     shared.JobTypeTranscodeVideo,
+		Payload:  TranscodeJobPayload{TranscodeID: transcodeID},
+		Priority: shared.JobPriorityTranscode,
+	})
 	if err != nil {
 		return fmt.Errorf("failed to enqueue transcode job: %w", err)
 	}
@@ -216,9 +204,18 @@ func (uc *CreateTranscodeJobsUseCase) createAudioTranscodeJobs(ctx context.Conte
 			return 0, fmt.Errorf("failed to create audio transcode record: %w", err)
 		}
 
-		// Create job for this transcode
-		if err := uc.createTranscodeJob(ctx, transcodeID); err != nil {
-			return 0, fmt.Errorf("failed to create audio transcode job: %w", err)
+		// Create job with extended payload including language and channel layout
+		_, err = uc.enqueueJobUseCase.Execute(ctx, job.EnqueueJobInput{
+			Type: shared.JobTypeTranscodeVideo, // Audio uses same job type
+			Payload: TranscodeJobPayload{
+				TranscodeID:   transcodeID,
+				Language:      audioStream.Language,
+				ChannelLayout: audioStream.ChannelLayout,
+			},
+			Priority: shared.JobPriorityTranscode,
+		})
+		if err != nil {
+			return 0, fmt.Errorf("failed to enqueue audio transcode job: %w", err)
 		}
 
 		audioJobs++

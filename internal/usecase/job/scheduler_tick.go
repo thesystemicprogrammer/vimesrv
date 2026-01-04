@@ -16,14 +16,16 @@ type SchedulerTickUseCase struct {
 	scheduleRepository ports.ScheduleRepository
 	cronParser         ports.CronParser
 	clock              ports.Clock
+	jobNotifier        ports.JobNotifier
 }
 
-func NewSchedulerTickUseCase(config config.JobConfig, scheduleRepository ports.ScheduleRepository, cronParser ports.CronParser, clock ports.Clock) *SchedulerTickUseCase {
+func NewSchedulerTickUseCase(config config.JobConfig, scheduleRepository ports.ScheduleRepository, cronParser ports.CronParser, clock ports.Clock, jobNotifier ports.JobNotifier) *SchedulerTickUseCase {
 	return &SchedulerTickUseCase{
 		config:             config,
 		scheduleRepository: scheduleRepository,
 		cronParser:         cronParser,
 		clock:              clock,
+		jobNotifier:        jobNotifier,
 	}
 }
 
@@ -54,10 +56,15 @@ func (uc *SchedulerTickUseCase) Execute(ctx context.Context) error {
 			MaxAttempts: uc.config.MaxAttempts,
 			ScheduledID: sql.NullInt64{Valid: true, Int64: scheduled.ID},
 		}
-		err = uc.scheduleRepository.AdvanceAndEnqueue(ctx, scheduled.ID, next, job)
+		createdJob, err := uc.scheduleRepository.AdvanceAndEnqueue(ctx, scheduled.ID, next, job)
 		if err != nil {
 			logger.Error().Err(err).Int64("ID", scheduled.ID).Msg("scheduler: advance/enqueue schedule %d: %v")
 			return err
+		}
+
+		// Notify if a job was actually created (not skipped due to race condition)
+		if createdJob != nil && uc.jobNotifier != nil {
+			uc.jobNotifier.NotifyJobQueued(createdJob)
 		}
 	}
 	return nil

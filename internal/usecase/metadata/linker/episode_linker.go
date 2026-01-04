@@ -22,6 +22,8 @@ type EpisodeLinker struct {
 	seriesMetadataRepository  ports.SeriesMetadataRepository
 	seasonMetadataRepository  ports.SeasonMetadataRepository
 	episodeMetadataRepository ports.EpisodeMetadataRepository
+	seriesCreditRepository    ports.SeriesCreditRepository // optional, for fetching credits
+	searchRepository          ports.SearchRepository       // optional, for FTS indexing
 }
 
 // NewEpisodeLinker creates a new EpisodeLinker instance
@@ -32,6 +34,8 @@ func NewEpisodeLinker(
 	seriesMetadataRepository ports.SeriesMetadataRepository,
 	seasonMetadataRepository ports.SeasonMetadataRepository,
 	episodeMetadataRepository ports.EpisodeMetadataRepository,
+	seriesCreditRepository ports.SeriesCreditRepository,
+	searchRepository ports.SearchRepository,
 ) *EpisodeLinker {
 	return &EpisodeLinker{
 		config:                    config,
@@ -40,6 +44,8 @@ func NewEpisodeLinker(
 		seriesMetadataRepository:  seriesMetadataRepository,
 		seasonMetadataRepository:  seasonMetadataRepository,
 		episodeMetadataRepository: episodeMetadataRepository,
+		seriesCreditRepository:    seriesCreditRepository,
+		searchRepository:          searchRepository,
 	}
 }
 
@@ -51,6 +57,7 @@ type EpisodeLinkResult struct {
 	SeriesDetails   *ports.TMDBSeriesDetails // Includes title information for output messages
 	SeasonNumber    int
 	EpisodeNumber   int
+	SeriesCreated   bool // true if the series was newly created (not reused from existing)
 }
 
 // Link fetches episode metadata from TMDB and creates/retrieves the local records
@@ -69,6 +76,10 @@ func (l *EpisodeLinker) Link(ctx context.Context, seriesTMDBID, seasonNumber, ep
 	if err != nil {
 		return nil, fmt.Errorf("failed to get series details: %w", err)
 	}
+
+	// Check if series already exists (to track if we created it)
+	existingSeries, _ := l.seriesMetadataRepository.GetByTMDBID(ctx, seriesTMDBID)
+	seriesCreated := existingSeries == nil
 
 	// Get or create series metadata
 	seriesMetadata, err := l.getOrCreateSeriesMetadata(ctx, seriesDetails)
@@ -94,6 +105,11 @@ func (l *EpisodeLinker) Link(ctx context.Context, seriesTMDBID, seasonNumber, ep
 		return nil, err
 	}
 
+	// Index new series for full-text search
+	if seriesCreated {
+		l.indexSeriesForSearch(ctx, seriesMetadata.ID, seriesDetails)
+	}
+
 	// Download images if configured
 	l.downloadImages(ctx, seriesDetails, seasonDetails, seasonNumber, episodeNumber)
 
@@ -104,6 +120,7 @@ func (l *EpisodeLinker) Link(ctx context.Context, seriesTMDBID, seasonNumber, ep
 		SeriesDetails:   seriesDetails,
 		SeasonNumber:    seasonNumber,
 		EpisodeNumber:   episodeNumber,
+		SeriesCreated:   seriesCreated,
 	}, nil
 }
 
@@ -288,5 +305,41 @@ func (l *EpisodeLinker) downloadImages(ctx context.Context, seriesDetails *ports
 			}
 			break
 		}
+	}
+}
+
+// indexSeriesForSearch adds the series to the FTS search index
+func (l *EpisodeLinker) indexSeriesForSearch(ctx context.Context, seriesMetadataID int64, details *ports.TMDBSeriesDetails) {
+	if l.searchRepository == nil {
+		return
+	}
+
+	// Get credits from the database to build searchable cast/crew strings
+	// Credits may not exist yet for new series (they're fetched on-demand when viewing series details)
+	var castNames, crewNames []string
+	if l.seriesCreditRepository != nil {
+		credits, err := l.seriesCreditRepository.GetBySeriesMetadataID(ctx, seriesMetadataID)
+		if err != nil {
+			logger.Debug().Err(err).Int64("series_id", seriesMetadataID).Msg("No credits available for search indexing yet")
+		} else {
+			for _, credit := range credits {
+				if credit.CreditType == domain.CreditTypeCast {
+					castNames = append(castNames, credit.Name)
+				} else {
+					crewNames = append(crewNames, credit.Name)
+				}
+			}
+		}
+	}
+
+	if err := l.searchRepository.IndexSeries(
+		ctx,
+		seriesMetadataID,
+		details.Name,
+		details.OriginalName,
+		strings.Join(castNames, " "),
+		strings.Join(crewNames, " "),
+	); err != nil {
+		logger.Warn().Err(err).Int64("series_id", seriesMetadataID).Msg("Failed to index series for search")
 	}
 }

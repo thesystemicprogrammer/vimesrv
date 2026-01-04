@@ -570,6 +570,7 @@ func TestEnrichMediaFile_MediaNotFound(t *testing.T) {
 		&mockMetadataCandidateRepository{},
 		nil,
 		nil,
+		nil,
 	)
 
 	_, err := uc.Execute(context.Background(), EnrichMediaFileInput{MediaID: "not-found"})
@@ -602,6 +603,7 @@ func TestEnrichMediaFile_AlreadyProcessed(t *testing.T) {
 		&mockSeasonMetadataRepository{},
 		&mockEpisodeMetadataRepository{},
 		&mockMetadataCandidateRepository{},
+		nil,
 		nil,
 		nil,
 	)
@@ -663,6 +665,7 @@ func TestEnrichMediaFile_MovieNoResults(t *testing.T) {
 		&mockSeasonMetadataRepository{},
 		&mockEpisodeMetadataRepository{},
 		&mockMetadataCandidateRepository{},
+		nil,
 		nil,
 		nil,
 	)
@@ -754,6 +757,7 @@ func TestEnrichMediaFile_MovieAutoLink(t *testing.T) {
 		&mockSeasonMetadataRepository{},
 		&mockEpisodeMetadataRepository{},
 		&mockMetadataCandidateRepository{},
+		nil,
 		nil,
 		nil,
 	)
@@ -851,6 +855,7 @@ func TestEnrichMediaFile_MovieCandidatesFound(t *testing.T) {
 		&mockSeasonMetadataRepository{},
 		&mockEpisodeMetadataRepository{},
 		candidateRepo,
+		nil,
 		nil,
 		nil,
 	)
@@ -989,6 +994,7 @@ func TestEnrichMediaFile_SeriesAutoLink(t *testing.T) {
 		&mockMetadataCandidateRepository{},
 		nil,
 		nil,
+		nil,
 	)
 
 	output, err := uc.Execute(context.Background(), EnrichMediaFileInput{MediaID: "test-id"})
@@ -1046,6 +1052,7 @@ func TestEnrichMediaFile_TMDBSearchError(t *testing.T) {
 		&mockSeasonMetadataRepository{},
 		&mockEpisodeMetadataRepository{},
 		&mockMetadataCandidateRepository{},
+		nil,
 		nil,
 		nil,
 	)
@@ -1133,6 +1140,7 @@ func TestEnrichMediaFile_ReuseExistingMovieMetadata(t *testing.T) {
 		&mockSeasonMetadataRepository{},
 		&mockEpisodeMetadataRepository{},
 		&mockMetadataCandidateRepository{},
+		nil,
 		nil,
 		nil,
 	)

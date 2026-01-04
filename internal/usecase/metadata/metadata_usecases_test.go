@@ -29,6 +29,7 @@ func createTestMovieLinker(
 		movieRepo,
 		creditRepo,
 		certRepo,
+		nil, // searchRepository
 	)
 }
 
@@ -50,6 +51,8 @@ func createTestEpisodeLinker(
 		seriesRepo,
 		seasonRepo,
 		episodeRepo,
+		nil, // seriesCreditRepository
+		nil, // searchRepository
 	)
 }
 
@@ -326,6 +329,9 @@ func TestLinkMetadata_MediaNotFound(t *testing.T) {
 		episodeLinker,
 		mediaRepo,
 		&mockCandidateRepoFull{},
+		nil,
+		nil,
+		nil,
 	)
 
 	_, err := uc.Execute(context.Background(), LinkMetadataInput{MediaID: "not-found", CandidateID: 1})
@@ -358,6 +364,9 @@ func TestLinkMetadata_CandidateNotFound(t *testing.T) {
 		episodeLinker,
 		mediaRepo,
 		candidateRepo,
+		nil,
+		nil,
+		nil,
 	)
 
 	_, err := uc.Execute(context.Background(), LinkMetadataInput{MediaID: "test-id", CandidateID: 999})
@@ -394,6 +403,9 @@ func TestLinkMetadata_CandidateWrongMedia(t *testing.T) {
 		episodeLinker,
 		mediaRepo,
 		candidateRepo,
+		nil,
+		nil,
+		nil,
 	)
 
 	_, err := uc.Execute(context.Background(), LinkMetadataInput{MediaID: "test-id", CandidateID: 1})
@@ -462,6 +474,9 @@ func TestLinkMetadata_MovieSuccess(t *testing.T) {
 		episodeLinker,
 		mediaRepo,
 		candidateRepo,
+		nil,
+		nil,
+		nil,
 	)
 
 	output, err := uc.Execute(context.Background(), LinkMetadataInput{MediaID: "test-id", CandidateID: 1})
@@ -578,6 +593,9 @@ func TestLinkMetadata_SeriesSuccess(t *testing.T) {
 		episodeLinker,
 		mediaRepo,
 		candidateRepo,
+		nil,
+		nil,
+		nil,
 	)
 
 	output, err := uc.Execute(context.Background(), LinkMetadataInput{MediaID: "test-id", CandidateID: 1})
@@ -912,6 +930,9 @@ func TestLinkFromSearch_MediaNotFound(t *testing.T) {
 		episodeLinker,
 		mediaRepo,
 		&mockCandidateRepoFull{},
+		nil,
+		nil,
+		nil,
 	)
 
 	_, err := uc.Execute(context.Background(), LinkFromSearchInput{
@@ -974,6 +995,9 @@ func TestLinkFromSearch_MovieSuccess(t *testing.T) {
 		episodeLinker,
 		mediaRepo,
 		candidateRepo,
+		nil,
+		nil,
+		nil,
 	)
 
 	output, err := uc.Execute(context.Background(), LinkFromSearchInput{
@@ -1078,6 +1102,9 @@ func TestLinkFromSearch_SeriesSuccess(t *testing.T) {
 		episodeLinker,
 		mediaRepo,
 		candidateRepo,
+		nil,
+		nil,
+		nil,
 	)
 
 	output, err := uc.Execute(context.Background(), LinkFromSearchInput{

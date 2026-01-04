@@ -30,8 +30,9 @@ func NewTranscodeVideoJobHandler(useCase *transcode.ProcessTranscodeUseCase) por
 			return fmt.Errorf("transcode_id is required in job payload")
 		}
 
-		// Execute transcode use case
+		// Execute transcode use case with job ID for progress broadcasting
 		input := transcode.ProcessTranscodeInput{
+			JobID:       job.ID,
 			TranscodeID: payload.TranscodeID,
 		}
 

@@ -213,6 +213,21 @@ func (m *MockFileSystemService) Rename(oldPath, newPath string) error {
 	return nil
 }
 
+func (m *MockFileSystemService) CopyFileWithProgress(src, dst string, callback ports.CopyProgressCallback) error {
+	return nil
+}
+
+// MockJobNotifier for testing
+type MockJobNotifier struct{}
+
+func (m *MockJobNotifier) NotifyJobStarted(job *domain.Job) {}
+func (m *MockJobNotifier) NotifyJobProgress(jobID int64, jobType string, progress ports.JobProgress) {
+}
+func (m *MockJobNotifier) NotifyJobCompleted(job *domain.Job)                              {}
+func (m *MockJobNotifier) NotifyJobFailed(job *domain.Job, errorMessage string)            {}
+func (m *MockJobNotifier) NotifyJobRetrying(job *domain.Job, attempt int, maxAttempts int) {}
+func (m *MockJobNotifier) NotifyJobQueued(job *domain.Job)                                 {}
+
 // TestNewTranscodeVideoJobHandler tests the handler constructor
 func TestNewTranscodeVideoJobHandler(t *testing.T) {
 	cfg := &config.Config{
@@ -233,6 +248,7 @@ func TestNewTranscodeVideoJobHandler(t *testing.T) {
 		&MockMediaRepository{},
 		&MockTranscoder{},
 		&MockFileSystemService{},
+		&MockJobNotifier{},
 		cfg,
 	)
 
@@ -301,6 +317,7 @@ func TestTranscodeVideoJobHandler_Execute_Success(t *testing.T) {
 		mockMediaRepo,
 		mockTranscoder,
 		&MockFileSystemService{},
+		&MockJobNotifier{},
 		cfg,
 	)
 
@@ -345,6 +362,7 @@ func TestTranscodeVideoJobHandler_Execute_InvalidPayload(t *testing.T) {
 		&MockMediaRepository{},
 		&MockTranscoder{},
 		&MockFileSystemService{},
+		&MockJobNotifier{},
 		cfg,
 	)
 
@@ -385,6 +403,7 @@ func TestTranscodeVideoJobHandler_Execute_MissingTranscodeID(t *testing.T) {
 		&MockMediaRepository{},
 		&MockTranscoder{},
 		&MockFileSystemService{},
+		&MockJobNotifier{},
 		cfg,
 	)
 
@@ -436,6 +455,7 @@ func TestTranscodeVideoJobHandler_Execute_UseCaseError(t *testing.T) {
 		&MockMediaRepository{},
 		&MockTranscoder{},
 		&MockFileSystemService{},
+		&MockJobNotifier{},
 		cfg,
 	)
 
@@ -481,6 +501,7 @@ func TestTranscodeVideoJobHandler_ImplementsJobHandlerInterface(t *testing.T) {
 		&MockMediaRepository{},
 		&MockTranscoder{},
 		&MockFileSystemService{},
+		&MockJobNotifier{},
 		cfg,
 	)
 

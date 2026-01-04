@@ -5,6 +5,12 @@ import (
 	"path/filepath"
 )
 
+// CopyProgressCallback reports file copy progress.
+// written: bytes written so far
+// total: total file size in bytes
+// percentComplete: percentage complete (0-100)
+type CopyProgressCallback func(written, total int64, percentComplete float64)
+
 // FileSystemService provides filesystem operations
 type FileSystemService interface {
 	// WalkDir walks the file tree rooted at root, calling walkFn for each file or directory
@@ -13,6 +19,12 @@ type FileSystemService interface {
 	// CopyFile copies a file from src to dst
 	// Creates parent directories if they don't exist
 	CopyFile(src, dst string) error
+
+	// CopyFileWithProgress copies a file from src to dst with progress reporting.
+	// Creates parent directories if they don't exist.
+	// The callback is called periodically for files >= 100MB.
+	// If callback is nil, behaves the same as CopyFile.
+	CopyFileWithProgress(src, dst string, callback CopyProgressCallback) error
 
 	// DeleteFile deletes a file
 	DeleteFile(path string) error

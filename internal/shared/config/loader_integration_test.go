@@ -39,6 +39,7 @@ media:
 
 transcoding:
   segment_duration: 6
+  progress_log_interval_seconds: 60
   quality_profiles:
     - name: "720p"
       enabled: true
@@ -127,6 +128,7 @@ media:
 
 transcoding:
   segment_duration: 4
+  progress_log_interval_seconds: 60
   quality_profiles:
     - name: "720p"
       enabled: true

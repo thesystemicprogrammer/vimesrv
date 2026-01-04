@@ -10,6 +10,7 @@ import (
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/ports"
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/transcode"
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/user"
+	workeruc "github.com/thesystemicprogrammer/vimesrv/internal/usecase/worker"
 )
 
 type UseCases struct {
@@ -18,6 +19,7 @@ type UseCases struct {
 	RecoverStuckJobsUseCase    *job.RecoverStuckJobsUseCase
 	SchedulerTickUseCase       *job.SchedulerTickUseCase
 	UpsertScheduleUseCase      *job.UpsertScheduleUseCase
+	ListJobsUseCase            *job.ListJobsUseCase
 	ScanLibraryUseCase         *library.ScanLibraryUseCase
 	CreateTranscodeJobsUseCase *transcode.CreateTranscodeJobsUseCase
 	ProcessTranscodeUseCase    *transcode.ProcessTranscodeUseCase
@@ -43,6 +45,8 @@ type UseCases struct {
 	GetSimilarMoviesUseCase   *library.GetSimilarMoviesUseCase
 	GetSimilarSeriesUseCase   *library.GetSimilarSeriesUseCase
 	GetMovieCollectionUseCase *library.GetMovieCollectionUseCase
+	ListGenresUseCase         *library.ListGenresUseCase
+	SearchLibraryUseCase      *library.SearchLibraryUseCase
 	// User management use cases
 	CreateUserUseCase     *user.CreateUserUseCase
 	ListUsersUseCase      *user.ListUsersUseCase
@@ -51,14 +55,24 @@ type UseCases struct {
 	DeleteUserUseCase     *user.DeleteUserUseCase
 	ResetPasswordUseCase  *user.ResetPasswordUseCase
 	ChangePasswordUseCase *user.ChangePasswordUseCase
+	// Worker use cases (for distributed transcoding)
+	RegisterWorkerUseCase    *workeruc.RegisterWorkerUseCase
+	HeartbeatUseCase         *workeruc.HeartbeatUseCase
+	ClaimJobForWorkerUseCase *workeruc.ClaimJobForWorkerUseCase
+	CompleteWorkerJobUseCase *workeruc.CompleteWorkerJobUseCase
+	FailWorkerJobUseCase     *workeruc.FailWorkerJobUseCase
+	ReportProgressUseCase    *workeruc.ReportProgressUseCase
 }
 
 func initUseCases(cfg *config.Config, adapters *Adapters) *UseCases {
+	// Initialize EnqueueJobUseCase early as it's needed by multiple use cases
+	enqueueJobUseCase := job.NewEnqueueJobUseCase(cfg.Job, adapters.JobRepository, ports.RealClock{}, adapters.JobNotifier)
+
 	// Initialize CreateTranscodeJobsUseCase first
 	createTranscodeJobsUseCase := transcode.NewCreateTranscodeJobsUseCase(
 		adapters.MediaRepository,
 		adapters.TranscodeRepository,
-		adapters.JobRepository,
+		enqueueJobUseCase,
 		adapters.AudioStreamRepository,
 		adapters.SubtitleStreamRepository,
 		adapters.FFProbeService,
@@ -83,6 +97,7 @@ func initUseCases(cfg *config.Config, adapters *Adapters) *UseCases {
 			adapters.MovieMetadataRepository,
 			adapters.MovieCreditRepository,
 			adapters.MovieCertificationRepository,
+			adapters.SearchRepository,
 		)
 
 		episodeLinker := linker.NewEpisodeLinker(
@@ -92,6 +107,8 @@ func initUseCases(cfg *config.Config, adapters *Adapters) *UseCases {
 			adapters.SeriesMetadataRepository,
 			adapters.SeasonMetadataRepository,
 			adapters.EpisodeMetadataRepository,
+			adapters.SeriesCreditRepository,
+			adapters.SearchRepository,
 		)
 
 		enrichMediaFileUseCase = metadata.NewEnrichMediaFileUseCase(
@@ -107,6 +124,7 @@ func initUseCases(cfg *config.Config, adapters *Adapters) *UseCases {
 			adapters.MetadataCandidateRepository,
 			adapters.MovieCreditRepository,
 			adapters.MovieCertificationRepository,
+			adapters.SearchRepository,
 		)
 
 		getCandidatesUseCase = metadata.NewGetCandidatesUseCase(
@@ -121,6 +139,9 @@ func initUseCases(cfg *config.Config, adapters *Adapters) *UseCases {
 			episodeLinker,
 			adapters.MediaRepository,
 			adapters.MetadataCandidateRepository,
+			adapters.SearchRepository,
+			adapters.MovieCreditRepository,
+			adapters.SeriesCreditRepository,
 		)
 
 		searchMetadataUseCase = metadata.NewSearchMetadataUseCase(
@@ -133,6 +154,9 @@ func initUseCases(cfg *config.Config, adapters *Adapters) *UseCases {
 			episodeLinker,
 			adapters.MediaRepository,
 			adapters.MetadataCandidateRepository,
+			adapters.SearchRepository,
+			adapters.MovieCreditRepository,
+			adapters.SeriesCreditRepository,
 		)
 
 		skipEnrichmentUseCase = metadata.NewSkipEnrichmentUseCase(
@@ -153,11 +177,12 @@ func initUseCases(cfg *config.Config, adapters *Adapters) *UseCases {
 		adapters.FileSystemService,
 		adapters.MediaRepository,
 		createTranscodeJobsUseCase,
+		adapters.JobNotifier,
 	)
 
 	// Enable enrichment if TMDB is configured
 	if cfg.TMDB.Enabled {
-		scanLibraryUseCase.WithEnrichment(cfg.TMDB, adapters.JobRepository)
+		scanLibraryUseCase.WithEnrichment(cfg.TMDB, enqueueJobUseCase)
 	}
 
 	// Initialize similar content use cases if TMDB is enabled
@@ -205,12 +230,28 @@ func initUseCases(cfg *config.Config, adapters *Adapters) *UseCases {
 		)
 	}
 
-	return &UseCases{
-		EnqueueJobUseCase:          job.NewEnqueueJobUseCase(cfg.Job, adapters.JobRepository, ports.RealClock{}),
-		ProcessNextJobUseCase:      job.NewProcessNextJobUseCase(adapters.JobRepository, adapters.HandlerRegistry, adapters.BackoffStrategy, ports.RealClock{}, adapters.JobNotifier),
+	// Create base ProcessNextJobUseCase
+	processNextJobUseCase := job.NewProcessNextJobUseCase(
+		adapters.JobRepository,
+		adapters.HandlerRegistry,
+		adapters.BackoffStrategy,
+		ports.RealClock{},
+		adapters.JobNotifier,
+	)
+
+	// If worker mode is enabled, exclude transcode jobs from local processing
+	// (they will be processed exclusively by distributed workers)
+	if cfg.Worker.Enabled {
+		processNextJobUseCase = processNextJobUseCase.WithExcludedTypes([]string{"transcode_video"})
+	}
+
+	useCases := &UseCases{
+		EnqueueJobUseCase:          enqueueJobUseCase,
+		ProcessNextJobUseCase:      processNextJobUseCase,
 		RecoverStuckJobsUseCase:    job.NewRecoverStuckJobsUseCase(cfg.Job, adapters.JobRepository, ports.RealClock{}),
-		SchedulerTickUseCase:       job.NewSchedulerTickUseCase(cfg.Job, adapters.ScheduleRepository, adapters.CronParser, ports.RealClock{}),
+		SchedulerTickUseCase:       job.NewSchedulerTickUseCase(cfg.Job, adapters.ScheduleRepository, adapters.CronParser, ports.RealClock{}, adapters.JobNotifier),
 		UpsertScheduleUseCase:      job.NewUpsertScheduleUseCase(cfg.Job, adapters.ScheduleRepository, adapters.CronParser, ports.RealClock{}),
+		ListJobsUseCase:            job.NewListJobsUseCase(adapters.JobRepository),
 		ScanLibraryUseCase:         scanLibraryUseCase,
 		CreateTranscodeJobsUseCase: createTranscodeJobsUseCase,
 		ProcessTranscodeUseCase: transcode.NewProcessTranscodeUseCase(
@@ -218,6 +259,7 @@ func initUseCases(cfg *config.Config, adapters *Adapters) *UseCases {
 			adapters.MediaRepository,
 			adapters.Transcoder,
 			adapters.FileSystemService,
+			adapters.JobNotifier,
 			cfg,
 		),
 		GetMediaUseCase: media.NewGetMediaUseCase(
@@ -246,6 +288,8 @@ func initUseCases(cfg *config.Config, adapters *Adapters) *UseCases {
 		GetSimilarMoviesUseCase:   getSimilarMoviesUseCase,
 		GetSimilarSeriesUseCase:   getSimilarSeriesUseCase,
 		GetMovieCollectionUseCase: getMovieCollectionUseCase,
+		ListGenresUseCase:         library.NewListGenresUseCase(adapters.LibraryRepository),
+		SearchLibraryUseCase:      library.NewSearchLibraryUseCase(adapters.SearchRepository, adapters.LibraryRepository),
 		// User management use cases
 		CreateUserUseCase:     user.NewCreateUserUseCase(adapters.UserRepository),
 		ListUsersUseCase:      user.NewListUsersUseCase(adapters.UserRepository),
@@ -255,4 +299,40 @@ func initUseCases(cfg *config.Config, adapters *Adapters) *UseCases {
 		ResetPasswordUseCase:  user.NewResetPasswordUseCase(adapters.UserRepository),
 		ChangePasswordUseCase: user.NewChangePasswordUseCase(adapters.UserRepository),
 	}
+
+	// Initialize worker use cases if worker mode is enabled
+	if cfg.Worker.Enabled && adapters.WorkerRegistry != nil {
+		useCases.RegisterWorkerUseCase = workeruc.NewRegisterWorkerUseCase(adapters.WorkerRegistry)
+		useCases.HeartbeatUseCase = workeruc.NewHeartbeatUseCase(adapters.WorkerRegistry, adapters.JobRepository)
+		useCases.ClaimJobForWorkerUseCase = workeruc.NewClaimJobForWorkerUseCase(
+			adapters.JobRepository,
+			adapters.TranscodeRepository,
+			adapters.MediaRepository,
+			adapters.WorkerRegistry,
+			adapters.JobNotifier,
+			cfg,
+		)
+		useCases.CompleteWorkerJobUseCase = workeruc.NewCompleteWorkerJobUseCase(
+			adapters.JobRepository,
+			adapters.TranscodeRepository,
+			adapters.WorkerRegistry,
+			adapters.JobNotifier,
+			adapters.Transcoder,
+			adapters.FileSystemService,
+		)
+		useCases.FailWorkerJobUseCase = workeruc.NewFailWorkerJobUseCase(
+			adapters.JobRepository,
+			adapters.TranscodeRepository,
+			adapters.WorkerRegistry,
+			adapters.JobNotifier,
+			adapters.BackoffStrategy,
+		)
+		useCases.ReportProgressUseCase = workeruc.NewReportProgressUseCase(
+			adapters.JobRepository,
+			adapters.WorkerRegistry,
+			adapters.JobNotifier,
+		)
+	}
+
+	return useCases
 }

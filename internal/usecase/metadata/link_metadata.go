@@ -3,6 +3,7 @@ package metadata
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/thesystemicprogrammer/vimesrv/internal/domain"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/logger"
@@ -30,6 +31,9 @@ type LinkMetadataUseCase struct {
 	episodeLinker               *linker.EpisodeLinker
 	mediaRepository             ports.MediaRepository
 	metadataCandidateRepository ports.MetadataCandidateRepository
+	searchRepository            ports.SearchRepository
+	movieCreditRepository       ports.MovieCreditRepository
+	seriesCreditRepository      ports.SeriesCreditRepository
 }
 
 // NewLinkMetadataUseCase creates a new instance of LinkMetadataUseCase
@@ -38,12 +42,18 @@ func NewLinkMetadataUseCase(
 	episodeLinker *linker.EpisodeLinker,
 	mediaRepository ports.MediaRepository,
 	metadataCandidateRepository ports.MetadataCandidateRepository,
+	searchRepository ports.SearchRepository,
+	movieCreditRepository ports.MovieCreditRepository,
+	seriesCreditRepository ports.SeriesCreditRepository,
 ) *LinkMetadataUseCase {
 	return &LinkMetadataUseCase{
 		movieLinker:                 movieLinker,
 		episodeLinker:               episodeLinker,
 		mediaRepository:             mediaRepository,
 		metadataCandidateRepository: metadataCandidateRepository,
+		searchRepository:            searchRepository,
+		movieCreditRepository:       movieCreditRepository,
+		seriesCreditRepository:      seriesCreditRepository,
 	}
 }
 
@@ -117,6 +127,9 @@ func (uc *LinkMetadataUseCase) linkToMovie(ctx context.Context, media *domain.Me
 		return nil, fmt.Errorf("failed to update media file: %w", err)
 	}
 
+	// Index movie for full-text search
+	uc.indexMovieForSearch(ctx, media.ID, result.MovieMetadata.ID, result.Details.Title, result.Details.OriginalTitle)
+
 	return &LinkMetadataOutput{
 		MediaID:      media.ID,
 		MetadataType: domain.MetadataTypeMovie,
@@ -156,6 +169,11 @@ func (uc *LinkMetadataUseCase) linkToSeries(ctx context.Context, media *domain.M
 		return nil, fmt.Errorf("failed to update media file: %w", err)
 	}
 
+	// Index series for full-text search (if it was newly created)
+	if result.SeriesCreated {
+		uc.indexSeriesForSearch(ctx, result.SeriesMetadata.ID, result.SeriesDetails.Name, result.SeriesDetails.OriginalName)
+	}
+
 	seriesName := result.SeriesDetails.Name
 	return &LinkMetadataOutput{
 		MediaID:      media.ID,
@@ -163,4 +181,75 @@ func (uc *LinkMetadataUseCase) linkToSeries(ctx context.Context, media *domain.M
 		Title:        fmt.Sprintf("%s S%02dE%02d", seriesName, seasonNumber, episodeNumber),
 		Message:      fmt.Sprintf("Linked to %s S%02dE%02d", seriesName, seasonNumber, episodeNumber),
 	}, nil
+}
+
+// indexMovieForSearch adds the movie to the FTS search index
+func (uc *LinkMetadataUseCase) indexMovieForSearch(ctx context.Context, mediaID string, movieMetadataID int64, title, originalTitle string) {
+	if uc.searchRepository == nil {
+		return
+	}
+
+	// Get credits from the database to build searchable cast/crew strings
+	var castNames, crewNames []string
+	if uc.movieCreditRepository != nil {
+		credits, err := uc.movieCreditRepository.GetByMovieMetadataID(ctx, movieMetadataID)
+		if err != nil {
+			logger.Debug().Err(err).Int64("movie_id", movieMetadataID).Msg("No credits available for search indexing")
+		} else {
+			for _, credit := range credits {
+				if credit.CreditType == domain.CreditTypeCast {
+					castNames = append(castNames, credit.Name)
+				} else {
+					crewNames = append(crewNames, credit.Name)
+				}
+			}
+		}
+	}
+
+	if err := uc.searchRepository.IndexMovie(
+		ctx,
+		mediaID,
+		movieMetadataID,
+		title,
+		originalTitle,
+		strings.Join(castNames, " "),
+		strings.Join(crewNames, " "),
+	); err != nil {
+		logger.Warn().Err(err).Int64("movie_id", movieMetadataID).Msg("Failed to index movie for search")
+	}
+}
+
+// indexSeriesForSearch adds the series to the FTS search index
+func (uc *LinkMetadataUseCase) indexSeriesForSearch(ctx context.Context, seriesMetadataID int64, name, originalName string) {
+	if uc.searchRepository == nil {
+		return
+	}
+
+	// Get credits from the database to build searchable cast/crew strings
+	var castNames, crewNames []string
+	if uc.seriesCreditRepository != nil {
+		credits, err := uc.seriesCreditRepository.GetBySeriesMetadataID(ctx, seriesMetadataID)
+		if err != nil {
+			logger.Debug().Err(err).Int64("series_id", seriesMetadataID).Msg("No credits available for search indexing")
+		} else {
+			for _, credit := range credits {
+				if credit.CreditType == domain.CreditTypeCast {
+					castNames = append(castNames, credit.Name)
+				} else {
+					crewNames = append(crewNames, credit.Name)
+				}
+			}
+		}
+	}
+
+	if err := uc.searchRepository.IndexSeries(
+		ctx,
+		seriesMetadataID,
+		name,
+		originalName,
+		strings.Join(castNames, " "),
+		strings.Join(crewNames, " "),
+	); err != nil {
+		logger.Warn().Err(err).Int64("series_id", seriesMetadataID).Msg("Failed to index series for search")
+	}
 }

@@ -73,7 +73,7 @@ func setupTestDependencies(t *testing.T) (*Adapters, *UseCases, *sql.DB) {
 	}
 
 	upsertScheduleUC := usecasejob.NewUpsertScheduleUseCase(jobCfg, scheduleRepo, cronParser, ports.RealClock{})
-	enqueueJobUC := usecasejob.NewEnqueueJobUseCase(jobCfg, jobRepo, ports.RealClock{})
+	enqueueJobUC := usecasejob.NewEnqueueJobUseCase(jobCfg, jobRepo, ports.RealClock{}, &ports.NoOpJobNotifier{})
 
 	useCases := &UseCases{
 		UpsertScheduleUseCase: upsertScheduleUC,

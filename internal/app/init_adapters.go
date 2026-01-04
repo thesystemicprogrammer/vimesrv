@@ -1,10 +1,13 @@
 package app
 
 import (
+	"time"
+
 	"github.com/thesystemicprogrammer/vimesrv/internal/adapters/job"
 	"github.com/thesystemicprogrammer/vimesrv/internal/adapters/media"
 	metadataAdapter "github.com/thesystemicprogrammer/vimesrv/internal/adapters/metadata"
 	"github.com/thesystemicprogrammer/vimesrv/internal/adapters/repository"
+	workerAdapter "github.com/thesystemicprogrammer/vimesrv/internal/adapters/worker"
 	"github.com/thesystemicprogrammer/vimesrv/internal/infrastructure/database"
 	"github.com/thesystemicprogrammer/vimesrv/internal/infrastructure/websocket"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/config"
@@ -39,9 +42,11 @@ type Adapters struct {
 	SimilarContentRepository     ports.SimilarContentRepository
 	CollectionRepository         ports.CollectionRepository
 	LibraryRepository            ports.LibraryRepository
+	SearchRepository             ports.SearchRepository
 	UserRepository               ports.UserRepository
 	WebSocketHub                 *websocket.Hub
 	JobNotifier                  ports.JobNotifier
+	WorkerRegistry               *workerAdapter.Registry
 }
 
 func initAdapters(cfg *config.Config, db *database.DB) *Adapters {
@@ -71,6 +76,7 @@ func initAdapters(cfg *config.Config, db *database.DB) *Adapters {
 		SimilarContentRepository:     repository.NewSQLiteSimilarContentRepository(db.DB),
 		CollectionRepository:         repository.NewSQLiteCollectionRepository(db.DB),
 		LibraryRepository:            repository.NewLibraryRepository(db),
+		SearchRepository:             repository.NewSearchRepository(db),
 		UserRepository:               repository.NewSQLiteUserRepository(db),
 	}
 
@@ -87,6 +93,12 @@ func initAdapters(cfg *config.Config, db *database.DB) *Adapters {
 	if cfg.TMDB.Enabled {
 		adapters.TMDBClient = metadataAdapter.NewTMDBHTTPClient(cfg.TMDB)
 		adapters.ImageDownloader = metadataAdapter.NewHTTPImageDownloader(cfg.TMDB, adapters.TMDBClient)
+	}
+
+	// Initialize WorkerRegistry if worker mode is enabled
+	if cfg.Worker.Enabled {
+		timeout := time.Duration(cfg.Worker.HeartbeatTimeoutSeconds) * time.Second
+		adapters.WorkerRegistry = workerAdapter.NewRegistry(timeout)
 	}
 
 	return adapters

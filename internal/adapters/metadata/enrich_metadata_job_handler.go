@@ -12,7 +12,8 @@ import (
 
 // EnrichMetadataJobPayload represents the payload structure for metadata enrichment jobs
 type EnrichMetadataJobPayload struct {
-	MediaID string `json:"media_id"`
+	MediaID  string `json:"media_id"`
+	Filename string `json:"filename"`
 }
 
 // NewEnrichMetadataJobHandler creates a job handler for metadata enrichment jobs.

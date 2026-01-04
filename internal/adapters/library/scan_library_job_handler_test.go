@@ -2,7 +2,6 @@ package library
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -156,6 +155,13 @@ func (m *MockFileSystemService) Rename(oldPath, newPath string) error {
 	return nil
 }
 
+func (m *MockFileSystemService) CopyFileWithProgress(src, dst string, callback ports.CopyProgressCallback) error {
+	if m.CopyFileFn != nil {
+		return m.CopyFileFn(src, dst)
+	}
+	return nil
+}
+
 // MockMediaRepository for testing
 type MockMediaRepository struct {
 	CreateFn              func(ctx context.Context, media *domain.MediaFile) error
@@ -215,6 +221,7 @@ func TestNewScanLibraryJobHandler(t *testing.T) {
 		&MockFileSystemService{},
 		&MockMediaRepository{},
 		nil,
+		nil,
 	)
 
 	handler := NewScanLibraryJobHandler(useCase)
@@ -247,6 +254,7 @@ func TestScanLibraryJobHandler_Execute_Success(t *testing.T) {
 		mockFS,
 		&MockMediaRepository{},
 		nil,
+		nil,
 	)
 
 	handler := NewScanLibraryJobHandler(useCase)
@@ -273,10 +281,10 @@ func TestScanLibraryJobHandler_Execute_UseCaseError(t *testing.T) {
 		SupportedFormats: []string{".mp4"},
 	}
 
-	// Mock filesystem to return error
+	// Mock filesystem to return false for FileExists so use case returns error
 	mockFS := &MockFileSystemService{
-		WalkDirFn: func(root string, walkFn filepath.WalkFunc) error {
-			return errors.New("staging path does not exist")
+		FileExistsFn: func(path string) bool {
+			return false // Staging path does not exist
 		},
 	}
 
@@ -286,6 +294,7 @@ func TestScanLibraryJobHandler_Execute_UseCaseError(t *testing.T) {
 		&MockFFProbeService{},
 		mockFS,
 		&MockMediaRepository{},
+		nil,
 		nil,
 	)
 
@@ -329,6 +338,7 @@ func TestScanLibraryJobHandler_Execute_ContextCanceled(t *testing.T) {
 		&MockFFProbeService{},
 		mockFS,
 		&MockMediaRepository{},
+		nil,
 		nil,
 	)
 
@@ -377,6 +387,7 @@ func TestScanLibraryJobHandler_Execute_NoPayloadRequired(t *testing.T) {
 		&MockFFProbeService{},
 		mockFS,
 		&MockMediaRepository{},
+		nil,
 		nil,
 	)
 
@@ -433,6 +444,7 @@ func TestScanLibraryJobHandler_Execute_MultipleJobs(t *testing.T) {
 		mockFS,
 		&MockMediaRepository{},
 		nil,
+		nil,
 	)
 
 	handler := NewScanLibraryJobHandler(useCase)
@@ -481,6 +493,7 @@ func TestScanLibraryJobHandler_UsesConfigPaths(t *testing.T) {
 		mockFS,
 		&MockMediaRepository{},
 		nil,
+		nil,
 	)
 
 	handler := NewScanLibraryJobHandler(useCase)
@@ -514,6 +527,7 @@ func TestScanLibraryJobHandler_ImplementsJobHandlerInterface(t *testing.T) {
 		&MockFFProbeService{},
 		&MockFileSystemService{},
 		&MockMediaRepository{},
+		nil,
 		nil,
 	)
 

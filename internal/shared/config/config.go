@@ -19,6 +19,7 @@ type Config struct {
 	Library     LibraryConfig     `mapstructure:"library"`
 	WebSocket   WebSocketConfig   `mapstructure:"websocket"`
 	Rebuild     RebuildConfig     `mapstructure:"rebuild"`
+	Worker      WorkerConfig      `mapstructure:"worker"`
 }
 
 // AuthConfig holds authentication configuration
@@ -68,8 +69,9 @@ type LibraryScanConfig struct {
 }
 
 type TranscodingConfig struct {
-	SegmentDuration int              `mapstructure:"segment_duration"`
-	QualityProfiles []QualityProfile `mapstructure:"quality_profiles"`
+	SegmentDuration         int              `mapstructure:"segment_duration"`
+	ProgressLogIntervalSecs int              `mapstructure:"progress_log_interval_seconds"`
+	QualityProfiles         []QualityProfile `mapstructure:"quality_profiles"`
 }
 
 type QualityProfile struct {
@@ -142,6 +144,26 @@ type RebuildConfig struct {
 	TMDBRequestsPer10s int `mapstructure:"tmdb_requests_per_10s"`
 }
 
+// WorkerConfig holds configuration for distributed transcoding workers
+type WorkerConfig struct {
+	// Enabled enables the worker API and exclusive worker processing for transcode jobs
+	Enabled bool `mapstructure:"enabled"`
+
+	// AuthToken is the shared secret for worker authentication (required if enabled)
+	AuthToken string `mapstructure:"auth_token"`
+
+	// HeartbeatTimeoutSeconds is how long before a worker is considered dead
+	// if no heartbeat or progress report is received
+	HeartbeatTimeoutSeconds int `mapstructure:"heartbeat_timeout_seconds"`
+
+	// FallbackToLocal enables processing transcodes locally when no workers are available
+	FallbackToLocal bool `mapstructure:"fallback_to_local"`
+
+	// FallbackAfterMinutes is how long to wait before falling back to local processing
+	// (only used if FallbackToLocal is true)
+	FallbackAfterMinutes int `mapstructure:"fallback_after_minutes"`
+}
+
 func (c *Config) Validate() error {
 	if err := c.Server.Validate(); err != nil {
 		return fmt.Errorf("server config: %w", err)
@@ -186,6 +208,12 @@ func (c *Config) Validate() error {
 	if c.WebSocket.Enabled {
 		if err := c.WebSocket.Validate(); err != nil {
 			return fmt.Errorf("websocket config: %w", err)
+		}
+	}
+
+	if c.Worker.Enabled {
+		if err := c.Worker.Validate(); err != nil {
+			return fmt.Errorf("worker config: %w", err)
 		}
 	}
 
@@ -333,6 +361,10 @@ func (l *LibraryScanConfig) Validate() error {
 func (t *TranscodingConfig) Validate() error {
 	if t.SegmentDuration < 1 {
 		return fmt.Errorf("segment_duration must be at least 1 second, got %d", t.SegmentDuration)
+	}
+
+	if t.ProgressLogIntervalSecs < 10 || t.ProgressLogIntervalSecs > 600 {
+		return fmt.Errorf("progress_log_interval_seconds must be between 10 and 600, got %d", t.ProgressLogIntervalSecs)
 	}
 
 	if len(t.QualityProfiles) == 0 {
@@ -536,6 +568,28 @@ func (w *WebSocketConfig) Validate() error {
 
 	if w.MaxMessageSizeBytes < 256 || w.MaxMessageSizeBytes > 65536 {
 		return fmt.Errorf("max_message_size_bytes must be between 256 and 65536, got %d", w.MaxMessageSizeBytes)
+	}
+
+	return nil
+}
+
+func (w *WorkerConfig) Validate() error {
+	if w.AuthToken == "" {
+		return fmt.Errorf("auth_token cannot be empty when worker is enabled")
+	}
+
+	if len(w.AuthToken) < 16 {
+		return fmt.Errorf("auth_token must be at least 16 characters for security")
+	}
+
+	if w.HeartbeatTimeoutSeconds < 10 || w.HeartbeatTimeoutSeconds > 600 {
+		return fmt.Errorf("heartbeat_timeout_seconds must be between 10 and 600, got %d", w.HeartbeatTimeoutSeconds)
+	}
+
+	if w.FallbackToLocal {
+		if w.FallbackAfterMinutes < 1 || w.FallbackAfterMinutes > 1440 {
+			return fmt.Errorf("fallback_after_minutes must be between 1 and 1440 (24 hours), got %d", w.FallbackAfterMinutes)
+		}
 	}
 
 	return nil

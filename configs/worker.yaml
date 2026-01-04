@@ -1,0 +1,67 @@
+# vimesrv-worker Configuration
+# =============================
+# This is the configuration file for the distributed transcoding worker.
+# The worker connects to the main vimesrv server and processes transcode jobs.
+
+# Server connection settings
+server:
+  # URL of the main vimesrv server
+  url: "http://localhost:8080"
+  
+  # Authentication token - MUST match the server's worker.auth_token
+  # This is a shared secret for worker authentication
+  # Generate a secure token: openssl rand -hex 32
+  auth_token: ""
+
+# Worker settings
+worker:
+  # Unique worker ID (leave empty to auto-generate UUID on startup)
+  id: ""
+  
+  # Human-readable name for this worker (shown in logs and UI)
+  name: "worker-1"
+  
+  # How often to poll server for new jobs (in seconds)
+  poll_interval_seconds: 5
+  
+  # How often to send heartbeat when idle (in seconds)
+  # Must be less than server's worker.heartbeat_timeout_seconds
+  heartbeat_interval_seconds: 30
+  
+  # Maximum number of concurrent transcode jobs
+  # Adjust based on CPU/GPU resources available
+  concurrency: 2
+  
+  # How often to report progress during transcoding (in seconds)
+  progress_interval_seconds: 5
+
+# Media library settings
+media:
+  # Path to the media library
+  # IMPORTANT: Must be the same files as the server's media_path
+  # This is typically a shared NFS mount or similar shared storage
+  media_path: "/mnt/nfs/media"
+
+# Transcoding settings
+transcoding:
+  # Path to FFmpeg binary (default: searches PATH)
+  ffmpeg_path: "ffmpeg"
+  
+  # Path to FFprobe binary (default: searches PATH)
+  ffprobe_path: "ffprobe"
+  
+  # Maximum time for a single transcode job (in seconds)
+  # Default: 7200 (2 hours)
+  timeout_seconds: 7200
+  
+  # Segment duration (in seconds)
+  # IMPORTANT: Must match server's transcoding.segment_duration
+  segment_duration: 4
+
+# Logging settings
+logging:
+  # Log level: debug, info, warn, error
+  level: "info"
+  
+  # Log format: console (human-readable) or json
+  format: "console"

@@ -12,6 +12,7 @@ import (
 	"github.com/thesystemicprogrammer/vimesrv/internal/domain"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/config"
+	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/ports"
 )
 
 // MockJobRepository is a mock implementation of ports.JobRepository
@@ -26,6 +27,14 @@ func (m *MockJobRepository) Enqueue(ctx context.Context, job *domain.Job) (int64
 
 func (m *MockJobRepository) ClaimNextJobDue(ctx context.Context, workerID string) (*domain.Job, bool, error) {
 	args := m.Called(ctx, workerID)
+	if args.Get(0) == nil {
+		return nil, args.Bool(1), args.Error(2)
+	}
+	return args.Get(0).(*domain.Job), args.Bool(1), args.Error(2)
+}
+
+func (m *MockJobRepository) ClaimNextJobDueExcludingTypes(ctx context.Context, workerID string, excludeTypes []string) (*domain.Job, bool, error) {
+	args := m.Called(ctx, workerID, excludeTypes)
 	if args.Get(0) == nil {
 		return nil, args.Bool(1), args.Error(2)
 	}
@@ -65,6 +74,35 @@ func (m *MockJobRepository) ExistsPendingJobByType(ctx context.Context, jobType 
 	return args.Bool(0), args.Error(1)
 }
 
+func (m *MockJobRepository) ListJobs(ctx context.Context, filter ports.JobListFilter) (*ports.JobListResult, error) {
+	args := m.Called(ctx, filter)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*ports.JobListResult), args.Error(1)
+}
+
+func (m *MockJobRepository) Get(ctx context.Context, jobID int64) (*domain.Job, error) {
+	args := m.Called(ctx, jobID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.Job), args.Error(1)
+}
+
+func (m *MockJobRepository) ClaimNextTranscodeJob(ctx context.Context, workerID string) (*domain.Job, error) {
+	args := m.Called(ctx, workerID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.Job), args.Error(1)
+}
+
+func (m *MockJobRepository) CountQueuedTranscodeJobs(ctx context.Context) (int, error) {
+	args := m.Called(ctx)
+	return args.Int(0), args.Error(1)
+}
+
 // MockClock is a mock implementation of ports.Clock
 type MockClock struct {
 	mock.Mock
@@ -98,7 +136,7 @@ func TestEnqueueJobUseCase_Execute_Success(t *testing.T) {
 			job.RunAt.Equal(now)
 	})).Return(int64(123), nil)
 
-	uc := NewEnqueueJobUseCase(cfg, mockRepo, mockClock)
+	uc := NewEnqueueJobUseCase(cfg, mockRepo, mockClock, &ports.NoOpJobNotifier{})
 
 	jobID, err := uc.Execute(ctx, EnqueueJobInput{
 		Type:     "test-job",
@@ -119,7 +157,7 @@ func TestEnqueueJobUseCase_Execute_EmptyType(t *testing.T) {
 	mockClock := new(MockClock)
 
 	cfg := config.JobConfig{MaxAttempts: 3}
-	uc := NewEnqueueJobUseCase(cfg, mockRepo, mockClock)
+	uc := NewEnqueueJobUseCase(cfg, mockRepo, mockClock, &ports.NoOpJobNotifier{})
 
 	_, err := uc.Execute(ctx, EnqueueJobInput{
 		Type:     "",
@@ -145,7 +183,7 @@ func TestEnqueueJobUseCase_Execute_NilPayload(t *testing.T) {
 		return job.Type == "test-job" && job.Payload == nil
 	})).Return(int64(123), nil)
 
-	uc := NewEnqueueJobUseCase(cfg, mockRepo, mockClock)
+	uc := NewEnqueueJobUseCase(cfg, mockRepo, mockClock, &ports.NoOpJobNotifier{})
 
 	jobID, err := uc.Execute(ctx, EnqueueJobInput{
 		Type:     "test-job",
@@ -165,7 +203,7 @@ func TestEnqueueJobUseCase_Execute_InvalidPayload(t *testing.T) {
 	mockClock := new(MockClock)
 
 	cfg := config.JobConfig{MaxAttempts: 3}
-	uc := NewEnqueueJobUseCase(cfg, mockRepo, mockClock)
+	uc := NewEnqueueJobUseCase(cfg, mockRepo, mockClock, &ports.NoOpJobNotifier{})
 
 	// channels cannot be marshaled to JSON
 	invalidPayload := make(chan int)
@@ -193,7 +231,7 @@ func TestEnqueueJobUseCase_Execute_CustomRunAt(t *testing.T) {
 		return job.Type == "future-job" && job.RunAt.Equal(futureTime)
 	})).Return(int64(456), nil)
 
-	uc := NewEnqueueJobUseCase(cfg, mockRepo, mockClock)
+	uc := NewEnqueueJobUseCase(cfg, mockRepo, mockClock, &ports.NoOpJobNotifier{})
 
 	jobID, err := uc.Execute(ctx, EnqueueJobInput{
 		Type:     "future-job",
@@ -221,7 +259,7 @@ func TestEnqueueJobUseCase_Execute_CustomMaxAttempts(t *testing.T) {
 		return job.Type == "test-job" && job.MaxAttempts == 5
 	})).Return(int64(789), nil)
 
-	uc := NewEnqueueJobUseCase(cfg, mockRepo, mockClock)
+	uc := NewEnqueueJobUseCase(cfg, mockRepo, mockClock, &ports.NoOpJobNotifier{})
 
 	jobID, err := uc.Execute(ctx, EnqueueJobInput{
 		Type:        "test-job",
@@ -249,7 +287,7 @@ func TestEnqueueJobUseCase_Execute_DefaultMaxAttempts(t *testing.T) {
 		return job.Type == "test-job" && job.MaxAttempts == 7
 	})).Return(int64(111), nil)
 
-	uc := NewEnqueueJobUseCase(cfg, mockRepo, mockClock)
+	uc := NewEnqueueJobUseCase(cfg, mockRepo, mockClock, &ports.NoOpJobNotifier{})
 
 	jobID, err := uc.Execute(ctx, EnqueueJobInput{
 		Type:        "test-job",
@@ -296,7 +334,7 @@ func TestEnqueueJobUseCase_Execute_PayloadMarshaling(t *testing.T) {
 			unmarshaled["count"] == float64(42)
 	})).Return(int64(999), nil)
 
-	uc := NewEnqueueJobUseCase(cfg, mockRepo, mockClock)
+	uc := NewEnqueueJobUseCase(cfg, mockRepo, mockClock, &ports.NoOpJobNotifier{})
 
 	jobID, err := uc.Execute(ctx, EnqueueJobInput{
 		Type:     "test-job",

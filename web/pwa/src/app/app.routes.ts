@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
 import { adminGuard } from './core/guards/admin.guard';
+import { managerGuard } from './core/guards/manager.guard';
 import { passwordChangeGuard } from './core/guards/password-change.guard';
 
 export const routes: Routes = [
@@ -22,6 +23,11 @@ export const routes: Routes = [
     path: 'library',
     canActivate: [authGuard, passwordChangeGuard],
     loadComponent: () => import('./features/library/library.component').then(m => m.LibraryComponent)
+  },
+  {
+    path: 'search',
+    canActivate: [authGuard, passwordChangeGuard],
+    loadComponent: () => import('./features/search/search-results.component').then(m => m.SearchResultsComponent)
   },
   {
     path: 'movie/:id',
@@ -52,6 +58,11 @@ export const routes: Routes = [
     path: 'admin',
     canActivate: [adminGuard, passwordChangeGuard],
     loadComponent: () => import('./features/admin/admin.component').then(m => m.AdminComponent)
+  },
+  {
+    path: 'jobs',
+    canActivate: [managerGuard, passwordChangeGuard],
+    loadComponent: () => import('./features/jobs/jobs.component').then(m => m.JobsComponent)
   },
   {
     path: '**',

@@ -2,17 +2,16 @@ package library
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/thesystemicprogrammer/vimesrv/internal/domain"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/config"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/logger"
+	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/job"
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/ports"
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/transcode"
 )
@@ -26,9 +25,21 @@ type ScanResult struct {
 	Failed     int // Failed to process
 }
 
+// ScanLibraryInput contains parameters for library scanning with progress reporting
+type ScanLibraryInput struct {
+	JobID int64 // Job ID for progress notifications (0 = no notifications)
+}
+
+// fileInfo holds information about a file to be processed
+type fileInfo struct {
+	path string
+	size int64
+}
+
 // EnrichMetadataJobPayload is the payload for enrich_metadata jobs
 type EnrichMetadataJobPayload struct {
-	MediaID string `json:"media_id"`
+	MediaID  string `json:"media_id"`
+	Filename string `json:"filename"`
 }
 
 type ScanLibraryUseCase struct {
@@ -38,7 +49,8 @@ type ScanLibraryUseCase struct {
 	ffprobeService             ports.FFProbeService
 	fileSystemService          ports.FileSystemService
 	mediaRepository            ports.MediaRepository
-	jobRepository              ports.JobRepository
+	enqueueJobUseCase          *job.EnqueueJobUseCase
+	jobNotifier                ports.JobNotifier
 	createTranscodeJobsUseCase *transcode.CreateTranscodeJobsUseCase
 }
 
@@ -49,6 +61,7 @@ func NewScanLibraryUseCase(
 	fileSystemService ports.FileSystemService,
 	mediaRepository ports.MediaRepository,
 	createTranscodeJobsUseCase *transcode.CreateTranscodeJobsUseCase,
+	jobNotifier ports.JobNotifier,
 ) *ScanLibraryUseCase {
 	return &ScanLibraryUseCase{
 		config:                     config,
@@ -57,18 +70,26 @@ func NewScanLibraryUseCase(
 		fileSystemService:          fileSystemService,
 		mediaRepository:            mediaRepository,
 		createTranscodeJobsUseCase: createTranscodeJobsUseCase,
+		jobNotifier:                jobNotifier,
 	}
 }
 
 // WithEnrichment adds enrichment job capability to the use case
-func (uc *ScanLibraryUseCase) WithEnrichment(tmdbConfig config.TMDBConfig, jobRepository ports.JobRepository) *ScanLibraryUseCase {
+func (uc *ScanLibraryUseCase) WithEnrichment(tmdbConfig config.TMDBConfig, enqueueJobUseCase *job.EnqueueJobUseCase) *ScanLibraryUseCase {
 	uc.tmdbConfig = tmdbConfig
-	uc.jobRepository = jobRepository
+	uc.enqueueJobUseCase = enqueueJobUseCase
 	return uc
 }
 
-// Execute scans the staging directory and imports video files into the library
+// Execute scans the staging directory and imports video files into the library.
+// This is a backward-compatible method that calls ExecuteWithProgress without job context.
 func (uc *ScanLibraryUseCase) Execute(ctx context.Context) error {
+	return uc.ExecuteWithProgress(ctx, ScanLibraryInput{JobID: 0})
+}
+
+// ExecuteWithProgress scans the staging directory and imports video files into the library.
+// When JobID > 0 and jobNotifier is set, it sends progress notifications via WebSocket.
+func (uc *ScanLibraryUseCase) ExecuteWithProgress(ctx context.Context, input ScanLibraryInput) error {
 	logger.Info().Str("staging_path", uc.config.StagingPath).Msg("Starting library scan")
 
 	// Validate staging path exists
@@ -76,20 +97,25 @@ func (uc *ScanLibraryUseCase) Execute(ctx context.Context) error {
 		return fmt.Errorf("staging path does not exist: %s", uc.config.StagingPath)
 	}
 
+	// Collect all supported files first to know total count and size
+	files, totalSize := uc.collectSupportedFiles()
+	totalFiles := len(files)
+
+	if totalFiles == 0 {
+		logger.Info().Msg("No files to process in staging directory")
+		return nil
+	}
+
+	logger.Info().
+		Int("total_files", totalFiles).
+		Int64("total_size_bytes", totalSize).
+		Msg("Collected files for processing")
+
 	result := &ScanResult{}
+	var processedSize int64
 
-	// Walk staging directory and process files
-	err := uc.fileSystemService.WalkDir(uc.config.StagingPath, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			logger.Warn().Err(err).Str("path", path).Msg("Error accessing path")
-			return nil // Continue walking
-		}
-
-		// Skip directories
-		if info.IsDir() {
-			return nil
-		}
-
+	// Process each file with progress tracking
+	for i, file := range files {
 		// Check context cancellation
 		select {
 		case <-ctx.Done():
@@ -97,18 +123,12 @@ func (uc *ScanLibraryUseCase) Execute(ctx context.Context) error {
 		default:
 		}
 
-		// Process the file
-		if err := uc.processFile(ctx, path, result); err != nil {
-			logger.Error().Err(err).Str("path", path).Msg("Failed to process file")
+		fileIndex := i + 1
+		if err := uc.processFileWithProgress(ctx, file, result, fileIndex, totalFiles, &processedSize, totalSize, input.JobID); err != nil {
+			logger.Error().Err(err).Str("path", file.path).Msg("Failed to process file")
 			result.Failed++
 		}
-
 		result.Processed++
-		return nil
-	})
-
-	if err != nil {
-		return fmt.Errorf("failed to walk staging directory: %w", err)
 	}
 
 	// Clean up empty directories in staging
@@ -127,22 +147,59 @@ func (uc *ScanLibraryUseCase) Execute(ctx context.Context) error {
 	return nil
 }
 
-// processFile processes a single file from the staging directory
-func (uc *ScanLibraryUseCase) processFile(ctx context.Context, filePath string, result *ScanResult) error {
+// collectSupportedFiles walks the staging directory and returns all supported files with their sizes
+func (uc *ScanLibraryUseCase) collectSupportedFiles() ([]fileInfo, int64) {
+	var files []fileInfo
+	var totalSize int64
+
+	_ = uc.fileSystemService.WalkDir(uc.config.StagingPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			logger.Warn().Err(err).Str("path", path).Msg("Error accessing path during collection")
+			return nil
+		}
+
+		// Skip directories
+		if info.IsDir() {
+			return nil
+		}
+
+		// Only include supported formats
+		if uc.isSupportedFormat(path) {
+			size := info.Size()
+			files = append(files, fileInfo{path: path, size: size})
+			totalSize += size
+		}
+
+		return nil
+	})
+
+	return files, totalSize
+}
+
+// processFileWithProgress processes a single file with progress reporting
+func (uc *ScanLibraryUseCase) processFileWithProgress(
+	ctx context.Context,
+	file fileInfo,
+	result *ScanResult,
+	fileIndex, totalFiles int,
+	processedSize *int64,
+	totalSize int64,
+	jobID int64,
+) error {
+	filePath := file.path
+	filename := filepath.Base(filePath)
+
 	logger.Debug().Str("file", filePath).Msg("Processing file")
 
-	// Check if file has supported extension
-	if !uc.isSupportedFormat(filePath) {
-		logger.Debug().Str("file", filePath).Msg("Skipping unsupported file format")
-		result.Skipped++
-		return nil
-	}
+	// Report analyzing phase (indeterminate)
+	uc.notifyProgress(jobID, "Analyzing", fileIndex, totalFiles, filename, -1)
 
 	// Validate video with ffprobe
 	valid, err := uc.ffprobeService.ValidateVideo(filePath)
 	if err != nil {
 		logger.Warn().Err(err).Str("file", filePath).Msg("Failed to validate video")
 		result.Skipped++
+		*processedSize += file.size
 		uc.deleteFile(filePath)
 		return nil
 	}
@@ -150,6 +207,7 @@ func (uc *ScanLibraryUseCase) processFile(ctx context.Context, filePath string, 
 	if !valid {
 		logger.Warn().Str("file", filePath).Msg("Invalid video file, skipping")
 		result.Skipped++
+		*processedSize += file.size
 		uc.deleteFile(filePath)
 		return nil
 	}
@@ -174,6 +232,7 @@ func (uc *ScanLibraryUseCase) processFile(ctx context.Context, filePath string, 
 			Str("fingerprint", fingerprint).
 			Msg("Duplicate file detected, skipping")
 		result.Duplicates++
+		*processedSize += file.size
 		uc.deleteFile(filePath)
 		return nil
 	}
@@ -188,8 +247,6 @@ func (uc *ScanLibraryUseCase) processFile(ctx context.Context, filePath string, 
 	originalFilename := filepath.Base(filePath)
 
 	// Generate deterministic ID from fingerprint
-	// This ensures the same file content always produces the same media ID,
-	// enabling database rebuilds while preserving transcode paths and API URLs.
 	id := domain.DeriveIDFromFingerprint(fingerprint)
 
 	// Create target directory: {media_path}/{uuid}/
@@ -201,15 +258,29 @@ func (uc *ScanLibraryUseCase) processFile(ctx context.Context, filePath string, 
 	// Target file path
 	targetPath := filepath.Join(targetDir, originalFilename)
 
-	// Copy file to library
+	// Copy file to library with progress callback
 	logger.Info().
 		Str("src", filePath).
 		Str("dst", targetPath).
 		Msg("Copying file to library")
 
-	if err := uc.fileSystemService.CopyFile(filePath, targetPath); err != nil {
+	// Create progress callback for large file copy
+	var copyCallback ports.CopyProgressCallback
+	if jobID > 0 && uc.jobNotifier != nil {
+		startProcessedSize := *processedSize
+		copyCallback = func(written, total int64, filePercent float64) {
+			// Calculate overall percentage across all files
+			overallPercent := float64(startProcessedSize+written) / float64(totalSize) * 100
+			uc.notifyProgress(jobID, "Copying", fileIndex, totalFiles, filename, overallPercent)
+		}
+	}
+
+	if err := uc.fileSystemService.CopyFileWithProgress(filePath, targetPath, copyCallback); err != nil {
 		return fmt.Errorf("failed to copy file: %w", err)
 	}
+
+	// Update processed size after successful copy
+	*processedSize += file.size
 
 	// Create media file record
 	mediaFile := domain.NewMediaFile(
@@ -265,8 +336,8 @@ func (uc *ScanLibraryUseCase) processFile(ctx context.Context, filePath string, 
 	}
 
 	// Enqueue metadata enrichment job if TMDB is enabled
-	if uc.tmdbConfig.Enabled && uc.tmdbConfig.AutoSearch && uc.jobRepository != nil {
-		if err := uc.enqueueEnrichmentJob(ctx, id); err != nil {
+	if uc.tmdbConfig.Enabled && uc.tmdbConfig.AutoSearch && uc.enqueueJobUseCase != nil {
+		if err := uc.enqueueEnrichmentJob(ctx, id, originalFilename); err != nil {
 			logger.Error().Err(err).Str("media_id", id).Msg("Failed to enqueue enrichment job")
 			// Don't fail the import - just log the error
 		} else {
@@ -290,6 +361,32 @@ func (uc *ScanLibraryUseCase) processFile(ctx context.Context, filePath string, 
 	return nil
 }
 
+// notifyProgress sends a progress notification if jobNotifier is configured
+// percentage < 0 indicates indeterminate progress (analyzing phase)
+func (uc *ScanLibraryUseCase) notifyProgress(jobID int64, action string, fileIndex, totalFiles int, filename string, percentage float64) {
+	if jobID <= 0 || uc.jobNotifier == nil {
+		return
+	}
+
+	var msg string
+	if totalFiles == 1 {
+		msg = fmt.Sprintf("%s: %s", action, filename)
+	} else {
+		msg = fmt.Sprintf("%s file %d/%d: %s", action, fileIndex, totalFiles, filename)
+	}
+
+	progress := ports.JobProgress{
+		Message: msg,
+	}
+
+	// Only set percentage if >= 0 (determinate progress)
+	if percentage >= 0 {
+		progress.Percentage = percentage
+	}
+
+	uc.jobNotifier.NotifyJobProgress(jobID, shared.JobTypeScanLibrary, progress)
+}
+
 // isSupportedFormat checks if the file extension is in the supported formats list
 func (uc *ScanLibraryUseCase) isSupportedFormat(filePath string) bool {
 	ext := strings.ToLower(filepath.Ext(filePath))
@@ -311,25 +408,18 @@ func (uc *ScanLibraryUseCase) deleteFile(filePath string) {
 }
 
 // enqueueEnrichmentJob enqueues a metadata enrichment job for the given media file
-func (uc *ScanLibraryUseCase) enqueueEnrichmentJob(ctx context.Context, mediaID string) error {
-	payload := EnrichMetadataJobPayload{MediaID: mediaID}
-
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("failed to marshal enrichment job payload: %w", err)
+func (uc *ScanLibraryUseCase) enqueueEnrichmentJob(ctx context.Context, mediaID string, filename string) error {
+	payload := EnrichMetadataJobPayload{
+		MediaID:  mediaID,
+		Filename: filename,
 	}
 
-	job := &domain.Job{
+	_, err := uc.enqueueJobUseCase.Execute(ctx, job.EnqueueJobInput{
 		Type:        shared.JobTypeEnrichMetadata,
-		Payload:     payloadBytes,
-		Status:      shared.StatusQueued,
+		Payload:     payload,
 		Priority:    shared.JobPriorityEnrichMetadata,
-		RunAt:       time.Now(),
-		Attempts:    0,
 		MaxAttempts: 3, // Enrichment jobs can retry a few times
-	}
-
-	_, err = uc.jobRepository.Enqueue(ctx, job)
+	})
 	if err != nil {
 		return fmt.Errorf("failed to enqueue enrichment job: %w", err)
 	}

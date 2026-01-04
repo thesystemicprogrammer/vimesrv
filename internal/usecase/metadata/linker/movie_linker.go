@@ -21,6 +21,7 @@ type MovieLinker struct {
 	movieMetadataRepository      ports.MovieMetadataRepository
 	movieCreditRepository        ports.MovieCreditRepository
 	movieCertificationRepository ports.MovieCertificationRepository
+	searchRepository             ports.SearchRepository // optional, for FTS indexing
 }
 
 // NewMovieLinker creates a new MovieLinker instance
@@ -31,6 +32,7 @@ func NewMovieLinker(
 	movieMetadataRepository ports.MovieMetadataRepository,
 	movieCreditRepository ports.MovieCreditRepository,
 	movieCertificationRepository ports.MovieCertificationRepository,
+	searchRepository ports.SearchRepository,
 ) *MovieLinker {
 	return &MovieLinker{
 		config:                       config,
@@ -39,6 +41,7 @@ func NewMovieLinker(
 		movieMetadataRepository:      movieMetadataRepository,
 		movieCreditRepository:        movieCreditRepository,
 		movieCertificationRepository: movieCertificationRepository,
+		searchRepository:             searchRepository,
 	}
 }
 
@@ -116,6 +119,10 @@ func (l *MovieLinker) Link(ctx context.Context, tmdbID int) (*MovieLinkResult, e
 	if err := l.fetchAndStoreCertifications(ctx, movieMetadata.ID, tmdbID); err != nil {
 		logger.Warn().Err(err).Int("tmdb_id", tmdbID).Msg("Failed to fetch movie certifications")
 	}
+
+	// Note: Search indexing is handled by the FTS migration (011) which populates the index
+	// by joining media_files with movie_metadata. We don't index here because the linker
+	// doesn't have access to the media_id - that relationship is established later.
 
 	// Download images if configured
 	l.downloadImages(ctx, details)
@@ -330,5 +337,43 @@ func (l *MovieLinker) downloadImages(ctx context.Context, details *ports.TMDBMov
 		if _, err := l.imageDownloader.DownloadImage(ctx, details.BackdropPath, ports.ImageTypeMovieBackdrop, details.ID); err != nil {
 			logger.Warn().Err(err).Int("tmdb_id", details.ID).Msg("Failed to download movie backdrop")
 		}
+	}
+}
+
+// indexMovieForSearch adds the movie to the FTS search index
+func (l *MovieLinker) indexMovieForSearch(ctx context.Context, movieMetadataID int64, details *ports.TMDBMovieDetails) {
+	if l.searchRepository == nil {
+		return
+	}
+
+	// Get credits from the database to build searchable cast/crew strings
+	credits, err := l.movieCreditRepository.GetByMovieMetadataID(ctx, movieMetadataID)
+	if err != nil {
+		logger.Warn().Err(err).Int64("movie_id", movieMetadataID).Msg("Failed to get credits for search indexing")
+		credits = nil
+	}
+
+	var castNames, crewNames []string
+	for _, credit := range credits {
+		if credit.CreditType == domain.CreditTypeCast {
+			castNames = append(castNames, credit.Name)
+		} else {
+			crewNames = append(crewNames, credit.Name)
+		}
+	}
+
+	// We don't have the media_id here - that's set when linking to a specific media file
+	// The search index will be populated by LinkMetadataUseCase which has access to media_id
+	// For now, we'll store with empty media_id and update it later
+	if err := l.searchRepository.IndexMovie(
+		ctx,
+		"", // media_id will be set by LinkMetadataUseCase
+		movieMetadataID,
+		details.Title,
+		details.OriginalTitle,
+		strings.Join(castNames, " "),
+		strings.Join(crewNames, " "),
+	); err != nil {
+		logger.Warn().Err(err).Int64("movie_id", movieMetadataID).Msg("Failed to index movie for search")
 	}
 }

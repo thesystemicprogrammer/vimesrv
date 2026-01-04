@@ -693,6 +693,86 @@ DROP TABLE IF EXISTS series_credits;
 -- SQLite doesn't support DROP COLUMN
 `,
 	},
+	{
+		version: 11,
+		name:    "create_fts5_search_indexes",
+		up: `
+-- FTS5 virtual table for movie search
+-- Indexes title, original title, and all cast/crew names
+-- Note: NOT using content='' (contentless) because we need UNINDEXED columns to be stored
+CREATE VIRTUAL TABLE IF NOT EXISTS movie_search USING fts5(
+    media_id UNINDEXED,
+    movie_metadata_id UNINDEXED,
+    title,
+    original_title,
+    cast_names,
+    crew_names,
+    tokenize='unicode61 remove_diacritics 2'
+);
+
+-- FTS5 virtual table for series search
+-- Indexes name, original name, and cast/crew names
+CREATE VIRTUAL TABLE IF NOT EXISTS series_search USING fts5(
+    series_metadata_id UNINDEXED,
+    name,
+    original_name,
+    cast_names,
+    crew_names,
+    tokenize='unicode61 remove_diacritics 2'
+);
+
+-- Populate movie_search from existing data
+INSERT INTO movie_search(media_id, movie_metadata_id, title, original_title, cast_names, crew_names)
+SELECT 
+    mf.id,
+    mm.id,
+    COALESCE(
+        (SELECT GROUP_CONCAT(title, ' ') FROM movie_metadata_translations WHERE movie_metadata_id = mm.id),
+        mm.original_title
+    ),
+    mm.original_title,
+    COALESCE(
+        (SELECT GROUP_CONCAT(name, ' ') FROM movie_credits WHERE movie_metadata_id = mm.id AND credit_type = 'cast'),
+        ''
+    ),
+    COALESCE(
+        (SELECT GROUP_CONCAT(name, ' ') FROM movie_credits WHERE movie_metadata_id = mm.id AND credit_type = 'crew'),
+        ''
+    )
+FROM media_files mf
+JOIN movie_metadata mm ON mf.movie_metadata_id = mm.id
+WHERE mf.metadata_type = 'movie' AND mf.movie_metadata_id IS NOT NULL;
+
+-- Populate series_search from existing data
+INSERT INTO series_search(series_metadata_id, name, original_name, cast_names, crew_names)
+SELECT 
+    sm.id,
+    COALESCE(
+        (SELECT GROUP_CONCAT(name, ' ') FROM series_metadata_translations WHERE series_metadata_id = sm.id),
+        sm.original_name
+    ),
+    sm.original_name,
+    COALESCE(
+        (SELECT GROUP_CONCAT(name, ' ') FROM series_credits WHERE series_metadata_id = sm.id AND credit_type = 'cast'),
+        ''
+    ),
+    COALESCE(
+        (SELECT GROUP_CONCAT(name, ' ') FROM series_credits WHERE series_metadata_id = sm.id AND credit_type = 'crew'),
+        ''
+    )
+FROM series_metadata sm
+WHERE EXISTS (
+    SELECT 1 FROM season_metadata ssm
+    JOIN episode_metadata em ON ssm.id = em.season_id
+    JOIN media_files mf ON mf.episode_metadata_id = em.id
+    WHERE ssm.series_id = sm.id
+);
+`,
+		down: `
+DROP TABLE IF EXISTS series_search;
+DROP TABLE IF EXISTS movie_search;
+`,
+	},
 }
 
 func NewDatabaseMigration(db *sql.DB) *DatabaseMigration {

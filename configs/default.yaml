@@ -41,11 +41,12 @@ media:
     - ".m4v"
   library_scan:
     enabled: true
-    cron_spec: "0 * * * * *" # Every minute at second 0 (6-field format: sec min hour day month weekday)
+    cron_spec: "0 0 3 * * *" # Daily at 3:00 AM (6-field format: sec min hour day month weekday)
     priority: 0
 
 transcoding:
   segment_duration: 4
+  progress_log_interval_seconds: 60 # Log transcode progress every 60 seconds
 
   # Quality presets using CRF-based encoding
   # Set enabled: true to create transcodes for that quality
@@ -150,3 +151,13 @@ websocket:
 rebuild:
   allow_rebuild: false # Must be set to true to enable --rebuild-from-dump
   tmdb_requests_per_10s: 15 # Conservative rate limit during rebuild (default TMDB limit is 35)
+
+# Distributed transcoding worker configuration
+# When enabled, transcode jobs are processed exclusively by remote workers
+# Workers must have access to the same media library (e.g., via NFS)
+worker:
+  enabled: false                      # Enable worker API and exclusive worker processing
+  auth_token: ""                      # Shared secret for worker authentication (set via WORKER_AUTH_TOKEN env var)
+  heartbeat_timeout_seconds: 60       # Worker considered dead if no heartbeat/progress within this time
+  fallback_to_local: false            # Process locally when no workers are available
+  fallback_after_minutes: 30          # Wait time before local fallback (if enabled)

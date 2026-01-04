@@ -37,6 +37,13 @@ func (fs *OSFileSystem) WalkDir(root string, walkFn filepath.WalkFunc) error {
 
 // CopyFile copies a file from src to dst with progress logging for large files
 func (fs *OSFileSystem) CopyFile(src, dst string) error {
+	return fs.CopyFileWithProgress(src, dst, nil)
+}
+
+// CopyFileWithProgress copies a file from src to dst with optional progress callback.
+// The callback is called periodically for files >= progressThreshold (1GB).
+// If callback is nil, only logging is performed for large files.
+func (fs *OSFileSystem) CopyFileWithProgress(src, dst string, callback ports.CopyProgressCallback) error {
 	// Open source file
 	srcFile, err := os.Open(src)
 	if err != nil {
@@ -66,7 +73,7 @@ func (fs *OSFileSystem) CopyFile(src, dst string) error {
 
 	// Copy with or without progress logging based on file size
 	if fileSize >= progressThreshold {
-		return fs.copyWithProgress(srcFile, dstFile, fileSize, src, dst)
+		return fs.copyWithProgress(srcFile, dstFile, fileSize, src, dst, callback)
 	}
 
 	// Simple copy for small files
@@ -77,8 +84,8 @@ func (fs *OSFileSystem) CopyFile(src, dst string) error {
 	return nil
 }
 
-// copyWithProgress copies a file with progress logging
-func (fs *OSFileSystem) copyWithProgress(src io.Reader, dst io.Writer, totalSize int64, srcPath, dstPath string) error {
+// copyWithProgress copies a file with progress logging and optional callback
+func (fs *OSFileSystem) copyWithProgress(src io.Reader, dst io.Writer, totalSize int64, srcPath, dstPath string, callback ports.CopyProgressCallback) error {
 	buffer := make([]byte, 1024*1024) // 1MB buffer
 	var written int64
 	lastLogTime := time.Now()
@@ -104,18 +111,24 @@ func (fs *OSFileSystem) copyWithProgress(src io.Reader, dst io.Writer, totalSize
 				return fmt.Errorf("short write: wrote %d bytes, expected %d", nw, nr)
 			}
 
-			// Check if we should log progress
+			// Check if we should log/report progress
 			currentPercent := int((written * 100) / totalSize)
+			percentFloat := float64(written*100) / float64(totalSize)
 			timeSinceLastLog := time.Since(lastLogTime)
 
 			if currentPercent >= lastLoggedPercent+progressInterval && timeSinceLastLog >= minProgressLogInterval {
-				logger.Info().
+				logger.Debug().
 					Str("src", srcPath).
 					Str("dst", dstPath).
 					Int64("written_bytes", written).
 					Int64("total_bytes", totalSize).
 					Int("percent", currentPercent).
 					Msg("File copy progress")
+
+				// Call the progress callback if provided
+				if callback != nil {
+					callback(written, totalSize, percentFloat)
+				}
 
 				lastLoggedPercent = currentPercent
 				lastLogTime = time.Now()
@@ -135,6 +148,11 @@ func (fs *OSFileSystem) copyWithProgress(src io.Reader, dst io.Writer, totalSize
 		Str("dst", dstPath).
 		Int64("size_bytes", written).
 		Msg("Large file copy completed")
+
+	// Final callback at 100%
+	if callback != nil {
+		callback(written, totalSize, 100.0)
+	}
 
 	return nil
 }

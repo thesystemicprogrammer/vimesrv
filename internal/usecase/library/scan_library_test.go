@@ -137,6 +137,11 @@ func (m *MockFileSystemService) Rename(oldPath, newPath string) error {
 	return args.Error(0)
 }
 
+func (m *MockFileSystemService) CopyFileWithProgress(src, dst string, callback ports.CopyProgressCallback) error {
+	args := m.Called(src, dst, callback)
+	return args.Error(0)
+}
+
 type MockMediaRepository struct {
 	mock.Mock
 }
@@ -203,7 +208,7 @@ func TestScanLibraryUseCase_Execute_StagingPathNotExists(t *testing.T) {
 
 	mockFS.On("FileExists", cfg.StagingPath).Return(false)
 
-	uc := NewScanLibraryUseCase(cfg, mockHasher, mockFFProbe, mockFS, mockRepo, nil)
+	uc := NewScanLibraryUseCase(cfg, mockHasher, mockFFProbe, mockFS, mockRepo, nil, nil)
 
 	err := uc.Execute(context.Background())
 
@@ -223,9 +228,9 @@ func TestScanLibraryUseCase_Execute_EmptyDirectory(t *testing.T) {
 
 	mockFS.On("FileExists", cfg.StagingPath).Return(true)
 	mockFS.On("WalkDir", cfg.StagingPath, mock.Anything).Return(nil)
-	mockFS.On("RemoveEmptyDirs", cfg.StagingPath).Return(nil)
+	// RemoveEmptyDirs is NOT called when there are no files to process
 
-	uc := NewScanLibraryUseCase(cfg, mockHasher, mockFFProbe, mockFS, mockRepo, nil)
+	uc := NewScanLibraryUseCase(cfg, mockHasher, mockFFProbe, mockFS, mockRepo, nil, nil)
 
 	err := uc.Execute(context.Background())
 
@@ -252,9 +257,9 @@ func TestScanLibraryUseCase_Execute_UnsupportedFormat(t *testing.T) {
 		walkFn("/library/staging/document.txt", &mockFileInfo{name: "document.txt", isDir: false}, nil)
 	}).Return(nil)
 
-	mockFS.On("RemoveEmptyDirs", cfg.StagingPath).Return(nil)
+	// RemoveEmptyDirs is NOT called when there are no supported files to process
 
-	uc := NewScanLibraryUseCase(cfg, mockHasher, mockFFProbe, mockFS, mockRepo, nil)
+	uc := NewScanLibraryUseCase(cfg, mockHasher, mockFFProbe, mockFS, mockRepo, nil, nil)
 
 	err := uc.Execute(ctx)
 
@@ -287,7 +292,7 @@ func TestScanLibraryUseCase_Execute_InvalidVideo(t *testing.T) {
 	mockFS.On("DeleteFile", filePath).Return(nil)
 	mockFS.On("RemoveEmptyDirs", cfg.StagingPath).Return(nil)
 
-	uc := NewScanLibraryUseCase(cfg, mockHasher, mockFFProbe, mockFS, mockRepo, nil)
+	uc := NewScanLibraryUseCase(cfg, mockHasher, mockFFProbe, mockFS, mockRepo, nil, nil)
 
 	err := uc.Execute(ctx)
 
@@ -323,7 +328,7 @@ func TestScanLibraryUseCase_Execute_DuplicateFile(t *testing.T) {
 	mockFS.On("DeleteFile", filePath).Return(nil)
 	mockFS.On("RemoveEmptyDirs", cfg.StagingPath).Return(nil)
 
-	uc := NewScanLibraryUseCase(cfg, mockHasher, mockFFProbe, mockFS, mockRepo, nil)
+	uc := NewScanLibraryUseCase(cfg, mockHasher, mockFFProbe, mockFS, mockRepo, nil, nil)
 
 	err := uc.Execute(ctx)
 
@@ -383,13 +388,13 @@ func TestScanLibraryUseCase_Execute_SuccessfulImport(t *testing.T) {
 		return filepath.Dir(path) == cfg.MediaPath && len(filepath.Base(path)) == 36
 	})).Return(nil)
 
-	// Expect CopyFile with UUID-based path
-	mockFS.On("CopyFile", filePath, mock.MatchedBy(func(path string) bool {
+	// Expect CopyFileWithProgress with UUID-based path
+	mockFS.On("CopyFileWithProgress", filePath, mock.MatchedBy(func(path string) bool {
 		// Path should be /library/media/{uuid}/video.mp4
 		return filepath.Base(path) == "video.mp4" &&
 			filepath.Dir(filepath.Dir(path)) == cfg.MediaPath &&
 			len(filepath.Base(filepath.Dir(path))) == 36
-	})).Return(nil)
+	}), mock.Anything).Return(nil)
 
 	mockRepo.On("Create", ctx, mock.MatchedBy(func(m *domain.MediaFile) bool {
 		return m.Fingerprint == fingerprint &&
@@ -401,7 +406,7 @@ func TestScanLibraryUseCase_Execute_SuccessfulImport(t *testing.T) {
 	mockFS.On("DeleteFile", filePath).Return(nil)
 	mockFS.On("RemoveEmptyDirs", cfg.StagingPath).Return(nil)
 
-	uc := NewScanLibraryUseCase(cfg, mockHasher, mockFFProbe, mockFS, mockRepo, nil)
+	uc := NewScanLibraryUseCase(cfg, mockHasher, mockFFProbe, mockFS, mockRepo, nil, nil)
 
 	err := uc.Execute(ctx)
 
@@ -449,12 +454,12 @@ func TestScanLibraryUseCase_Execute_DatabaseError_Rollback(t *testing.T) {
 		return filepath.Dir(path) == cfg.MediaPath && len(filepath.Base(path)) == 36
 	})).Return(nil)
 
-	// Expect CopyFile with UUID-based path
-	mockFS.On("CopyFile", filePath, mock.MatchedBy(func(path string) bool {
+	// Expect CopyFileWithProgress with UUID-based path
+	mockFS.On("CopyFileWithProgress", filePath, mock.MatchedBy(func(path string) bool {
 		return filepath.Base(path) == "video.mp4" &&
 			filepath.Dir(filepath.Dir(path)) == cfg.MediaPath &&
 			len(filepath.Base(filepath.Dir(path))) == 36
-	})).Return(nil)
+	}), mock.Anything).Return(nil)
 
 	// Database insert fails
 	dbError := errors.New("database connection failed")
@@ -468,7 +473,7 @@ func TestScanLibraryUseCase_Execute_DatabaseError_Rollback(t *testing.T) {
 	})).Return(nil)
 	mockFS.On("RemoveEmptyDirs", cfg.StagingPath).Return(nil)
 
-	uc := NewScanLibraryUseCase(cfg, mockHasher, mockFFProbe, mockFS, mockRepo, nil)
+	uc := NewScanLibraryUseCase(cfg, mockHasher, mockFFProbe, mockFS, mockRepo, nil, nil)
 
 	err := uc.Execute(ctx)
 
@@ -500,7 +505,7 @@ func TestScanLibraryUseCase_Execute_ContextCanceled(t *testing.T) {
 		walkFn("/library/staging/video.mp4", &mockFileInfo{name: "video.mp4", isDir: false}, nil)
 	}).Return(context.Canceled)
 
-	uc := NewScanLibraryUseCase(cfg, mockHasher, mockFFProbe, mockFS, mockRepo, nil)
+	uc := NewScanLibraryUseCase(cfg, mockHasher, mockFFProbe, mockFS, mockRepo, nil, nil)
 
 	err := uc.Execute(ctx)
 

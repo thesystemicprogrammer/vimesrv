@@ -82,8 +82,14 @@ func registerHTTPHandlers(useCases *UseCases, adapters *Adapters, httpServer *se
 			useCases.GetSeriesCreditsUseCase,
 			useCases.ListRecentUseCase,
 			useCases.ListUnmatchedUseCase,
+			useCases.ListGenresUseCase,
+			useCases.SearchLibraryUseCase,
 		)
 		libraryHandler.RegisterRoutes(apiGroup)
+
+		// Job API (admin/manager only)
+		jobHandler := http.NewJobHandler(useCases.ListJobsUseCase)
+		jobHandler.RegisterRoutes(apiGroup)
 	}
 
 	// === Protected Streaming Routes ===
@@ -100,6 +106,26 @@ func registerHTTPHandlers(useCases *UseCases, adapters *Adapters, httpServer *se
 
 		// Content endpoint (video/audio segments, subtitles)
 		streamGroup.Match([]string{"GET", "HEAD"}, "/dash/content/:id/*path", dashHandler.ServeContent)
+	}
+
+	// === Worker API Routes (separate auth via worker token) ===
+
+	// Register worker handler if worker mode is enabled
+	// Note: Worker routes use their own auth middleware (not user auth)
+	if cfg.Worker.Enabled && useCases.RegisterWorkerUseCase != nil {
+		workerHandler := http.NewWorkerHandler(
+			&cfg.Worker,
+			useCases.RegisterWorkerUseCase,
+			useCases.HeartbeatUseCase,
+			useCases.ClaimJobForWorkerUseCase,
+			useCases.CompleteWorkerJobUseCase,
+			useCases.FailWorkerJobUseCase,
+			useCases.ReportProgressUseCase,
+		)
+		// Worker routes are under /api/v1 but have their own auth middleware
+		workerAPIGroup := router.Group("/api/v1")
+		workerHandler.RegisterRoutes(workerAPIGroup)
+		logger.Info().Msg("Worker API routes registered")
 	}
 
 	logger.Info().

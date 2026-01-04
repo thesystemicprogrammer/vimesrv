@@ -23,24 +23,78 @@ func NewLibraryRepository(db *database.DB) ports.LibraryRepository {
 	}
 }
 
-// ListMovies returns movies with their metadata, sorted by most recently added
-func (r *LibraryRepository) ListMovies(ctx context.Context, language string, limit, offset int) ([]ports.MovieSummary, int, error) {
+// ListMovies returns movies with their metadata
+func (r *LibraryRepository) ListMovies(ctx context.Context, language string, limit, offset int, filterOpts ports.MovieFilterOptions) ([]ports.MovieSummary, int, error) {
 	exactLang, baseLang := languageParams(language)
 
-	// Count total movies
-	countQuery := `
+	// Build dynamic WHERE clause and args for filtering
+	whereConditions := []string{
+		"mf.metadata_type = 'movie'",
+		"mf.movie_metadata_id IS NOT NULL",
+	}
+	var filterArgs []interface{}
+
+	// Genre filter (AND logic - movie must have ALL specified genres)
+	if len(filterOpts.Genres) > 0 {
+		for _, genre := range filterOpts.Genres {
+			// Use LIKE to match genre in JSON array: genres contains "Genre"
+			whereConditions = append(whereConditions, "mm.genres LIKE ?")
+			filterArgs = append(filterArgs, "%\""+genre+"\"%")
+		}
+	}
+
+	// Year range filter
+	if filterOpts.YearFrom > 0 {
+		whereConditions = append(whereConditions, "CAST(SUBSTR(mm.release_date, 1, 4) AS INTEGER) >= ?")
+		filterArgs = append(filterArgs, filterOpts.YearFrom)
+	}
+	if filterOpts.YearTo > 0 {
+		whereConditions = append(whereConditions, "CAST(SUBSTR(mm.release_date, 1, 4) AS INTEGER) <= ?")
+		filterArgs = append(filterArgs, filterOpts.YearTo)
+	}
+
+	// Minimum rating filter
+	if filterOpts.MinRating > 0 {
+		whereConditions = append(whereConditions, "mm.vote_average >= ?")
+		filterArgs = append(filterArgs, filterOpts.MinRating)
+	}
+
+	whereClause := strings.Join(whereConditions, " AND ")
+
+	// Count total movies with filters applied
+	countQuery := fmt.Sprintf(`
 		SELECT COUNT(*) 
 		FROM media_files mf
-		WHERE mf.metadata_type = 'movie' AND mf.movie_metadata_id IS NOT NULL
-	`
+		LEFT JOIN movie_metadata mm ON mf.movie_metadata_id = mm.id
+		WHERE %s
+	`, whereClause)
+
 	var total int
-	if err := r.db.QueryRowContext(ctx, countQuery).Scan(&total); err != nil {
+	if err := r.db.QueryRowContext(ctx, countQuery, filterArgs...).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("failed to count movies: %w", err)
+	}
+
+	// Build ORDER BY clause
+	var orderClause string
+	sortOrder := "DESC"
+	if filterOpts.SortOrder == "asc" {
+		sortOrder = "ASC"
+	}
+
+	switch filterOpts.SortBy {
+	case "title":
+		orderClause = fmt.Sprintf("COALESCE(mt.title, mm.original_title) %s", sortOrder)
+	case "year":
+		orderClause = fmt.Sprintf("mm.release_date %s", sortOrder)
+	case "rating":
+		orderClause = fmt.Sprintf("mm.vote_average %s", sortOrder)
+	default: // date_added
+		orderClause = fmt.Sprintf("mf.created_at %s", sortOrder)
 	}
 
 	// Query movies with metadata
 	// Translation join uses subquery with priority: exact lang > base lang > English > English variant
-	query := `
+	query := fmt.Sprintf(`
 		SELECT 
 			mf.id,
 			mf.duration,
@@ -64,14 +118,14 @@ func (r *LibraryRepository) ListMovies(ctx context.Context, language string, lim
 				ROW_NUMBER() OVER (PARTITION BY movie_metadata_id ORDER BY 
 					CASE 
 						WHEN language = ? THEN 0 
-						WHEN language LIKE ? || '%' THEN 1 
+						WHEN language LIKE ? || '%%' THEN 1 
 						WHEN language = 'en' THEN 2
-						WHEN language LIKE 'en%' THEN 3
+						WHEN language LIKE 'en%%' THEN 3
 						ELSE 4 
 					END
 				) as rn
 			FROM movie_metadata_translations
-			WHERE language = ? OR language LIKE ? || '%' OR language = 'en' OR language LIKE 'en%'
+			WHERE language = ? OR language LIKE ? || '%%' OR language = 'en' OR language LIKE 'en%%'
 		) mt ON mm.id = mt.movie_metadata_id AND mt.rn = 1
 		LEFT JOIN (
 			SELECT media_id, 
@@ -81,12 +135,17 @@ func (r *LibraryRepository) ListMovies(ctx context.Context, language string, lim
 			FROM transcodes
 			GROUP BY media_id
 		) t ON mf.id = t.media_id
-		WHERE mf.metadata_type = 'movie' AND mf.movie_metadata_id IS NOT NULL
-		ORDER BY mf.created_at DESC
+		WHERE %s
+		ORDER BY %s
 		LIMIT ? OFFSET ?
-	`
+	`, whereClause, orderClause)
 
-	rows, err := r.db.QueryContext(ctx, query, exactLang, baseLang, exactLang, baseLang, limit, offset)
+	// Build query args: language params first, then filter args, then limit/offset
+	queryArgs := []interface{}{exactLang, baseLang, exactLang, baseLang}
+	queryArgs = append(queryArgs, filterArgs...)
+	queryArgs = append(queryArgs, limit, offset)
+
+	rows, err := r.db.QueryContext(ctx, query, queryArgs...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to query movies: %w", err)
 	}
@@ -519,13 +578,95 @@ func (r *LibraryRepository) GetMovieDetail(ctx context.Context, mediaID string, 
 	return &detail, nil
 }
 
-// ListSeries returns series with summary info, sorted by name
-func (r *LibraryRepository) ListSeries(ctx context.Context, language string, includeEmpty bool) ([]ports.SeriesSummary, error) {
+// ListSeries returns series with summary info
+func (r *LibraryRepository) ListSeries(ctx context.Context, language string, includeEmpty bool, limit, offset int, filterOpts ports.SeriesFilterOptions) ([]ports.SeriesSummary, int, error) {
 	exactLang, baseLang := languageParams(language)
+
+	// Build dynamic WHERE clause and args for filtering
+	whereConditions := []string{}
+	var filterArgs []interface{}
+
+	if !includeEmpty {
+		whereConditions = append(whereConditions, "episode_count.available > 0")
+	}
+
+	// Genre filter (AND logic - series must have ALL specified genres)
+	if len(filterOpts.Genres) > 0 {
+		for _, genre := range filterOpts.Genres {
+			whereConditions = append(whereConditions, "sm.genres LIKE ?")
+			filterArgs = append(filterArgs, "%\""+genre+"\"%")
+		}
+	}
+
+	// Year range filter
+	if filterOpts.YearFrom > 0 {
+		whereConditions = append(whereConditions, "CAST(SUBSTR(sm.first_air_date, 1, 4) AS INTEGER) >= ?")
+		filterArgs = append(filterArgs, filterOpts.YearFrom)
+	}
+	if filterOpts.YearTo > 0 {
+		whereConditions = append(whereConditions, "CAST(SUBSTR(sm.first_air_date, 1, 4) AS INTEGER) <= ?")
+		filterArgs = append(filterArgs, filterOpts.YearTo)
+	}
+
+	// Minimum rating filter
+	if filterOpts.MinRating > 0 {
+		whereConditions = append(whereConditions, "sm.vote_average >= ?")
+		filterArgs = append(filterArgs, filterOpts.MinRating)
+	}
+
+	whereClause := ""
+	if len(whereConditions) > 0 {
+		whereClause = "WHERE " + strings.Join(whereConditions, " AND ")
+	}
+
+	// Build ORDER BY clause
+	var orderClause string
+	sortOrder := "DESC"
+	if filterOpts.SortOrder == "asc" {
+		sortOrder = "ASC"
+	}
+
+	switch filterOpts.SortBy {
+	case "name":
+		orderClause = fmt.Sprintf("COALESCE(st.name, sm.original_name) %s", sortOrder)
+	case "year":
+		orderClause = fmt.Sprintf("sm.first_air_date %s", sortOrder)
+	case "rating":
+		orderClause = fmt.Sprintf("sm.vote_average %s", sortOrder)
+	case "date_added":
+		orderClause = fmt.Sprintf("episode_count.latest_added %s", sortOrder)
+	default: // name ascending as fallback
+		orderClause = "COALESCE(st.name, sm.original_name) ASC"
+	}
+
+	// Count query
+	countQuery := fmt.Sprintf(`
+		SELECT COUNT(*)
+		FROM series_metadata sm
+		LEFT JOIN (
+			SELECT 
+				ssm.series_id,
+				COUNT(DISTINCT mf.id) as available,
+				MAX(mf.created_at) as latest_added
+			FROM season_metadata ssm
+			JOIN episode_metadata em ON ssm.id = em.season_id
+			JOIN media_files mf ON mf.episode_metadata_id = em.id
+			GROUP BY ssm.series_id
+		) episode_count ON sm.id = episode_count.series_id
+		%s
+	`, whereClause)
+
+	// Build count args
+	countArgs := append([]interface{}{}, filterArgs...)
+
+	var total int
+	if err := r.db.QueryRowContext(ctx, countQuery, countArgs...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("failed to count series: %w", err)
+	}
 
 	// Query series with episode counts
 	// Translation join uses subquery with priority: exact lang > base lang > English > English variant
-	query := `
+	query := fmt.Sprintf(`
 		SELECT 
 			sm.id,
 			sm.tmdb_id,
@@ -544,35 +685,38 @@ func (r *LibraryRepository) ListSeries(ctx context.Context, language string, inc
 				ROW_NUMBER() OVER (PARTITION BY series_metadata_id ORDER BY 
 					CASE 
 						WHEN language = ? THEN 0 
-						WHEN language LIKE ? || '%' THEN 1 
+						WHEN language LIKE ? || '%%' THEN 1 
 						WHEN language = 'en' THEN 2
-						WHEN language LIKE 'en%' THEN 3
+						WHEN language LIKE 'en%%' THEN 3
 						ELSE 4 
 					END
 				) as rn
 			FROM series_metadata_translations
-			WHERE language = ? OR language LIKE ? || '%' OR language = 'en' OR language LIKE 'en%'
+			WHERE language = ? OR language LIKE ? || '%%' OR language = 'en' OR language LIKE 'en%%'
 		) st ON sm.id = st.series_metadata_id AND st.rn = 1
 		LEFT JOIN (
 			SELECT 
 				ssm.series_id,
-				COUNT(DISTINCT mf.id) as available
+				COUNT(DISTINCT mf.id) as available,
+				MAX(mf.created_at) as latest_added
 			FROM season_metadata ssm
 			JOIN episode_metadata em ON ssm.id = em.season_id
 			JOIN media_files mf ON mf.episode_metadata_id = em.id
 			GROUP BY ssm.series_id
 		) episode_count ON sm.id = episode_count.series_id
-	`
+		%s
+		ORDER BY %s
+		LIMIT ? OFFSET ?
+	`, whereClause, orderClause)
 
-	if !includeEmpty {
-		query += ` WHERE episode_count.available > 0`
-	}
+	// Build query args: language params first, then filter args, then limit/offset
+	queryArgs := []interface{}{exactLang, baseLang, exactLang, baseLang}
+	queryArgs = append(queryArgs, filterArgs...)
+	queryArgs = append(queryArgs, limit, offset)
 
-	query += ` ORDER BY COALESCE(st.name, sm.original_name)`
-
-	rows, err := r.db.QueryContext(ctx, query, exactLang, baseLang, exactLang, baseLang)
+	rows, err := r.db.QueryContext(ctx, query, queryArgs...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query series: %w", err)
+		return nil, 0, fmt.Errorf("failed to query series: %w", err)
 	}
 	defer rows.Close()
 
@@ -595,7 +739,7 @@ func (r *LibraryRepository) ListSeries(ctx context.Context, language string, inc
 			&s.AvailableEpisodes,
 		)
 		if err != nil {
-			return nil, fmt.Errorf("failed to scan series: %w", err)
+			return nil, 0, fmt.Errorf("failed to scan series: %w", err)
 		}
 
 		s.Genres = parseGenresJSON(genresJSON)
@@ -603,10 +747,10 @@ func (r *LibraryRepository) ListSeries(ctx context.Context, language string, inc
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating series: %w", err)
+		return nil, 0, fmt.Errorf("error iterating series: %w", err)
 	}
 
-	return series, nil
+	return series, total, nil
 }
 
 // GetSeriesDetail returns a series with all seasons and episodes
@@ -1188,4 +1332,121 @@ func parseGenresJSON(json string) string {
 	json = strings.TrimSuffix(json, "]")
 	json = strings.ReplaceAll(json, "\"", "")
 	return json
+}
+
+// ListMovieGenres returns all unique genres from movies in the library
+func (r *LibraryRepository) ListMovieGenres(ctx context.Context) ([]string, error) {
+	// Get all genres from movie_metadata where we have linked media files
+	query := `
+		SELECT DISTINCT mm.genres
+		FROM media_files mf
+		JOIN movie_metadata mm ON mf.movie_metadata_id = mm.id
+		WHERE mf.metadata_type = 'movie' AND mf.movie_metadata_id IS NOT NULL
+		AND mm.genres IS NOT NULL AND mm.genres != '[]'
+	`
+
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query movie genres: %w", err)
+	}
+	defer rows.Close()
+
+	genreSet := make(map[string]bool)
+	for rows.Next() {
+		var genresJSON string
+		if err := rows.Scan(&genresJSON); err != nil {
+			return nil, fmt.Errorf("failed to scan genres: %w", err)
+		}
+
+		// Parse JSON array and add each genre
+		genresStr := parseGenresJSON(genresJSON)
+		if genresStr != "" {
+			for _, genre := range strings.Split(genresStr, ",") {
+				genre = strings.TrimSpace(genre)
+				if genre != "" {
+					genreSet[genre] = true
+				}
+			}
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating movie genres: %w", err)
+	}
+
+	// Convert set to sorted slice
+	genres := make([]string, 0, len(genreSet))
+	for genre := range genreSet {
+		genres = append(genres, genre)
+	}
+	// Sort alphabetically
+	sortStrings(genres)
+
+	return genres, nil
+}
+
+// ListSeriesGenres returns all unique genres from series in the library
+func (r *LibraryRepository) ListSeriesGenres(ctx context.Context) ([]string, error) {
+	// Get all genres from series_metadata where we have linked episodes
+	query := `
+		SELECT DISTINCT sm.genres
+		FROM series_metadata sm
+		WHERE sm.id IN (
+			SELECT DISTINCT ssm.series_id
+			FROM season_metadata ssm
+			JOIN episode_metadata em ON ssm.id = em.season_id
+			JOIN media_files mf ON mf.episode_metadata_id = em.id
+		)
+		AND sm.genres IS NOT NULL AND sm.genres != '[]'
+	`
+
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query series genres: %w", err)
+	}
+	defer rows.Close()
+
+	genreSet := make(map[string]bool)
+	for rows.Next() {
+		var genresJSON string
+		if err := rows.Scan(&genresJSON); err != nil {
+			return nil, fmt.Errorf("failed to scan genres: %w", err)
+		}
+
+		// Parse JSON array and add each genre
+		genresStr := parseGenresJSON(genresJSON)
+		if genresStr != "" {
+			for _, genre := range strings.Split(genresStr, ",") {
+				genre = strings.TrimSpace(genre)
+				if genre != "" {
+					genreSet[genre] = true
+				}
+			}
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating series genres: %w", err)
+	}
+
+	// Convert set to sorted slice
+	genres := make([]string, 0, len(genreSet))
+	for genre := range genreSet {
+		genres = append(genres, genre)
+	}
+	// Sort alphabetically
+	sortStrings(genres)
+
+	return genres, nil
+}
+
+// sortStrings sorts a slice of strings in place
+func sortStrings(s []string) {
+	for i := 0; i < len(s)-1; i++ {
+		for j := i + 1; j < len(s); j++ {
+			if s[i] > s[j] {
+				s[i], s[j] = s[j], s[i]
+			}
+		}
+	}
 }

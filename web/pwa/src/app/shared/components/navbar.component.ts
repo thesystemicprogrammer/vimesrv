@@ -1,9 +1,11 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, signal, ElementRef, ViewChild, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule, Router } from '@angular/router';
+import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { AuthService } from '../../core/services/auth.service';
-import { ApiService } from '../../core/services/api.service';
+import { ApiService, LibrarySearchResult } from '../../core/services/api.service';
+import { debounceTime, Subject, switchMap, of, catchError } from 'rxjs';
 
 interface LanguageOption {
   code: string;
@@ -14,21 +16,134 @@ interface LanguageOption {
 @Component({
   selector: 'app-navbar',
   standalone: true,
-  imports: [CommonModule, RouterModule, TranslateModule],
+  imports: [CommonModule, RouterModule, FormsModule, TranslateModule],
   template: `
     @if (auth.isAuthenticated()) {
       <nav class="bg-zinc-900 border-b border-zinc-800 px-4 py-3">
         <div class="max-w-screen-2xl mx-auto flex items-center justify-between">
           <!-- Logo / Title -->
           <a routerLink="/" class="flex items-center gap-2 text-white hover:text-zinc-300 transition-colors">
-<img src="assets/logo.svg" alt="VimeSrv" class="h-8 w-8" />
-            <span class="text-xl font-semibold">VimeSrv</span>
+            <img src="assets/logo.svg" alt="VimeSrv" class="h-8 w-8" />
+            <span class="text-xl font-semibold" [class.hidden]="searchExpanded() && isMobile()">VimeSrv</span>
           </a>
 
+          <!-- Search Bar (expandable) -->
+          <div class="flex-1 flex justify-center px-4" [class.hidden]="!searchExpanded() && isMobile()">
+            <div class="relative w-full max-w-md" #searchContainer>
+              <div class="relative">
+                <input
+                  #searchInput
+                  type="text"
+                  [(ngModel)]="searchQuery"
+                  (ngModelChange)="onSearchChange($event)"
+                  (focus)="onSearchFocus()"
+                  (keydown.escape)="closeSearch()"
+                  (keydown.enter)="goToSearchResults()"
+                  [placeholder]="'common.search' | translate"
+                  class="w-full pl-10 pr-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-400 focus:outline-none focus:border-blue-500 text-sm"
+                />
+                <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                </svg>
+                @if (searchQuery) {
+                  <button
+                    (click)="clearSearch()"
+                    class="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white"
+                  >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                  </button>
+                }
+              </div>
+
+              <!-- Search Results Dropdown -->
+              @if (showSearchResults() && (searchResults().length > 0 || searchLoading() || searchQuery.length >= 2)) {
+                <div class="absolute top-full left-0 right-0 mt-2 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl z-30 max-h-96 overflow-y-auto">
+                  @if (searchLoading()) {
+                    <div class="flex items-center justify-center py-8">
+                      <div class="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-blue-500"></div>
+                    </div>
+                  } @else if (searchResults().length === 0 && searchQuery.length >= 2) {
+                    <div class="py-8 text-center text-zinc-400 text-sm">
+                      {{ 'common.noResults' | translate }}
+                    </div>
+                  } @else {
+                    @for (result of searchResults().slice(0, 8); track result.media_id || result.series_metadata_id) {
+                      <button
+                        (click)="selectSearchResult(result)"
+                        class="w-full flex items-center gap-3 p-3 hover:bg-zinc-700 transition text-left"
+                      >
+                        <!-- Poster thumbnail -->
+                        <div class="w-10 h-14 bg-zinc-700 rounded overflow-hidden flex-shrink-0">
+                          @if (result.poster_path) {
+                            <img
+                              [src]="'https://image.tmdb.org/t/p/w92' + result.poster_path"
+                              [alt]="result.title"
+                              class="w-full h-full object-cover"
+                            />
+                          } @else {
+                            <div class="w-full h-full flex items-center justify-center text-zinc-500">
+                              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"/>
+                              </svg>
+                            </div>
+                          }
+                        </div>
+                        <div class="flex-1 min-w-0">
+                          <p class="text-white text-sm font-medium truncate">{{ result.title }}</p>
+                          <div class="flex items-center gap-2 text-xs text-zinc-400">
+                            <span class="px-1.5 py-0.5 bg-zinc-700 rounded">{{ result.type === 'movie' ? ('metadataMatch.movie' | translate) : ('metadataMatch.tvSeries' | translate) }}</span>
+                            @if (result.year) {
+                              <span>{{ result.year }}</span>
+                            }
+                            @if (result.vote_average) {
+                              <span class="flex items-center gap-0.5">
+                                <svg class="w-3 h-3 text-yellow-500" fill="currentColor" viewBox="0 0 20 20">
+                                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+                                </svg>
+                                {{ result.vote_average.toFixed(1) }}
+                              </span>
+                            }
+                          </div>
+                        </div>
+                      </button>
+                    }
+                    @if (searchResults().length > 8 || searchQuery.length >= 2) {
+                      <button
+                        (click)="goToSearchResults()"
+                        class="w-full py-3 text-center text-sm text-blue-400 hover:text-blue-300 hover:bg-zinc-700 transition border-t border-zinc-700"
+                      >
+                        {{ 'nav.viewAllResults' | translate }}
+                      </button>
+                    }
+                  }
+                </div>
+              }
+            </div>
+          </div>
+
           <!-- User Info & Actions -->
-          <div class="flex items-center gap-4">
+          <div class="flex items-center gap-2 sm:gap-4">
+            <!-- Search Icon (mobile toggle) -->
+            <button
+              (click)="toggleSearch()"
+              class="sm:hidden p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded transition-colors"
+              [class.text-blue-400]="searchExpanded()"
+            >
+              @if (searchExpanded()) {
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+              } @else {
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                </svg>
+              }
+            </button>
+
             <!-- Language Selector -->
-            <div class="relative">
+            <div class="relative" [class.hidden]="searchExpanded() && isMobile()">
               <button
                 (click)="toggleLanguageMenu()"
                 class="flex items-center gap-2 px-3 py-1.5 text-sm text-zinc-400 hover:text-white hover:bg-zinc-800 rounded transition-colors"
@@ -70,7 +185,7 @@ interface LanguageOption {
             </div>
 
             <!-- User Menu Dropdown -->
-            <div class="relative">
+            <div class="relative" [class.hidden]="searchExpanded() && isMobile()">
               <button
                 (click)="toggleUserMenu()"
                 class="flex items-center gap-2 px-3 py-1.5 text-sm text-zinc-400 hover:text-white hover:bg-zinc-800 rounded transition-colors"
@@ -121,6 +236,19 @@ interface LanguageOption {
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                       </svg>
                       {{ 'nav.adminPanel' | translate }}
+                    </button>
+                  }
+
+                  <!-- Jobs (for admin and manager) -->
+                  @if (auth.canManageLibrary()) {
+                    <button
+                      (click)="navigateToJobs()"
+                      class="w-full px-4 py-2 text-left text-sm text-zinc-300 hover:bg-zinc-700 hover:text-white transition-colors flex items-center gap-2"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                      </svg>
+                      {{ 'nav.jobs' | translate }}
                     </button>
                   }
 
@@ -201,10 +329,22 @@ export class NavbarComponent {
   private readonly router = inject(Router);
   private readonly translate = inject(TranslateService);
 
+  @ViewChild('searchInput') searchInput!: ElementRef<HTMLInputElement>;
+  @ViewChild('searchContainer') searchContainer!: ElementRef<HTMLDivElement>;
+
   languageMenuOpen = signal(false);
   userMenuOpen = signal(false);
   toastMessage = signal<string | null>(null);
   toastType = signal<'success' | 'info' | 'error'>('info');
+
+  // Search state
+  searchExpanded = signal(false);
+  showSearchResults = signal(false);
+  searchLoading = signal(false);
+  searchResults = signal<LibrarySearchResult[]>([]);
+  searchQuery = '';
+
+  private searchSubject = new Subject<string>();
 
   languages: LanguageOption[] = [
     { code: 'en', name: 'English', flag: '🇬🇧' },
@@ -218,6 +358,91 @@ export class NavbarComponent {
     { code: 'ko', name: '한국어', flag: '🇰🇷' },
     { code: 'zh', name: '中文', flag: '🇨🇳' }
   ];
+
+  constructor() {
+    // Set up debounced search
+    this.searchSubject.pipe(
+      debounceTime(300),
+      switchMap(query => {
+        if (query.length < 2) {
+          return of({ data: { results: [] } });
+        }
+        this.searchLoading.set(true);
+        return this.api.searchLibrary(query, 10).pipe(
+          catchError(() => of({ data: { results: [] } }))
+        );
+      })
+    ).subscribe(response => {
+      this.searchResults.set(response.data.results || []);
+      this.searchLoading.set(false);
+    });
+  }
+
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: MouseEvent): void {
+    // Close search results if clicking outside
+    if (this.searchContainer && !this.searchContainer.nativeElement.contains(event.target as Node)) {
+      this.showSearchResults.set(false);
+    }
+  }
+
+  isMobile(): boolean {
+    return window.innerWidth < 640; // sm breakpoint
+  }
+
+  toggleSearch(): void {
+    this.searchExpanded.update(v => !v);
+    if (this.searchExpanded()) {
+      setTimeout(() => {
+        this.searchInput?.nativeElement?.focus();
+      }, 0);
+    } else {
+      this.closeSearch();
+    }
+  }
+
+  onSearchChange(query: string): void {
+    this.searchSubject.next(query);
+    this.showSearchResults.set(true);
+  }
+
+  onSearchFocus(): void {
+    if (this.searchQuery.length >= 2 || this.searchResults().length > 0) {
+      this.showSearchResults.set(true);
+    }
+  }
+
+  closeSearch(): void {
+    this.showSearchResults.set(false);
+    if (this.isMobile()) {
+      this.searchExpanded.set(false);
+    }
+  }
+
+  clearSearch(): void {
+    this.searchQuery = '';
+    this.searchResults.set([]);
+    this.showSearchResults.set(false);
+  }
+
+  selectSearchResult(result: LibrarySearchResult): void {
+    this.closeSearch();
+    this.clearSearch();
+    
+    if (result.type === 'movie' && result.media_id) {
+      this.router.navigate(['/movie', result.media_id]);
+    } else if (result.type === 'series' && result.series_metadata_id) {
+      this.router.navigate(['/series', result.series_metadata_id]);
+    }
+  }
+
+  goToSearchResults(): void {
+    if (this.searchQuery.length >= 2) {
+      this.closeSearch();
+      this.router.navigate(['/search'], { queryParams: { q: this.searchQuery } });
+      this.clearSearch();
+    }
+  }
 
   toggleLanguageMenu(): void {
     this.languageMenuOpen.update(open => !open);
@@ -251,6 +476,11 @@ export class NavbarComponent {
   navigateToAdmin(): void {
     this.closeUserMenu();
     this.router.navigate(['/admin']);
+  }
+
+  navigateToJobs(): void {
+    this.closeUserMenu();
+    this.router.navigate(['/jobs']);
   }
 
   selectLanguage(code: string): void {

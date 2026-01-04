@@ -1,5 +1,6 @@
 import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { MovieSummary, SeriesSummary, RecentlyAddedItem } from '../../core/services/api.service';
+import { LazyLoadDirective } from '../../shared/directives/lazy-load.directive';
 
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w342';
 
@@ -8,6 +9,7 @@ export type CardType = 'movie' | 'series' | 'recent';
 @Component({
   selector: 'app-media-card',
   standalone: true,
+  imports: [LazyLoadDirective],
   template: `
     <div
       class="relative rounded-lg overflow-hidden shadow-lg hover:ring-2 hover:ring-blue-500 transition cursor-pointer group bg-slate-800"
@@ -17,10 +19,10 @@ export type CardType = 'movie' | 'series' | 'recent';
       <div class="aspect-[2/3] bg-slate-700 relative overflow-hidden">
         @if (posterUrl) {
           <img
-            [src]="posterUrl"
-            [alt]="title"
+            appLazyLoad
+            [lazySrc]="posterUrl"
+            [lazyAlt]="title"
             class="w-full h-full object-cover"
-            loading="lazy"
           />
         } @else {
           <!-- Placeholder icon when no poster -->

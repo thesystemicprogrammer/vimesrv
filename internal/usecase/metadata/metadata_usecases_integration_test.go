@@ -258,6 +258,7 @@ func TestEnrichMediaFile_Integration_AutoLinkMovie(t *testing.T) {
 		candidateRepo,
 		nil,
 		nil,
+		nil,
 	)
 
 	// Execute enrichment
@@ -379,6 +380,7 @@ func TestEnrichMediaFile_Integration_CandidatesFound(t *testing.T) {
 		candidateRepo,
 		nil,
 		nil,
+		nil,
 	)
 
 	// Execute enrichment
@@ -489,6 +491,7 @@ func TestLinkMetadata_Integration_LinkFromCandidate(t *testing.T) {
 		movieMetadataRepo,
 		creditRepo,
 		certRepo,
+		nil, // searchRepository - not needed for this test
 	)
 	episodeLinker := linker.NewEpisodeLinker(
 		cfg,
@@ -497,6 +500,8 @@ func TestLinkMetadata_Integration_LinkFromCandidate(t *testing.T) {
 		seriesMetadataRepo,
 		seasonMetadataRepo,
 		episodeMetadataRepo,
+		nil, // seriesCreditRepository - not needed for this test
+		nil, // searchRepository - not needed for this test
 	)
 
 	// Create use case
@@ -505,6 +510,9 @@ func TestLinkMetadata_Integration_LinkFromCandidate(t *testing.T) {
 		episodeLinker,
 		mediaRepo,
 		candidateRepo,
+		nil,
+		nil,
+		nil,
 	)
 
 	// Execute link

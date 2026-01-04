@@ -25,13 +25,15 @@ type EnqueueJobUseCase struct {
 	config        config.JobConfig
 	jobRepository ports.JobRepository
 	clock         ports.Clock
+	jobNotifier   ports.JobNotifier
 }
 
-func NewEnqueueJobUseCase(config config.JobConfig, jobRepository ports.JobRepository, clock ports.Clock) *EnqueueJobUseCase {
+func NewEnqueueJobUseCase(config config.JobConfig, jobRepository ports.JobRepository, clock ports.Clock, jobNotifier ports.JobNotifier) *EnqueueJobUseCase {
 	return &EnqueueJobUseCase{
 		config:        config,
 		jobRepository: jobRepository,
 		clock:         clock,
+		jobNotifier:   jobNotifier,
 	}
 }
 
@@ -73,6 +75,12 @@ func (uc *EnqueueJobUseCase) Execute(ctx context.Context, jobInput EnqueueJobInp
 	if err != nil {
 		logger.Error().Err(err).Msg("error enqueuing job")
 		return 0, err
+	}
+
+	// Update job with ID and notify
+	job.ID = jobID
+	if uc.jobNotifier != nil {
+		uc.jobNotifier.NotifyJobQueued(job)
 	}
 
 	return jobID, nil

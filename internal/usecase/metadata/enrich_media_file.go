@@ -44,6 +44,7 @@ type EnrichMediaFileUseCase struct {
 	metadataCandidateRepository  ports.MetadataCandidateRepository
 	movieCreditRepository        ports.MovieCreditRepository
 	movieCertificationRepository ports.MovieCertificationRepository
+	searchRepository             ports.SearchRepository
 }
 
 // NewEnrichMediaFileUseCase creates a new instance of EnrichMediaFileUseCase
@@ -60,6 +61,7 @@ func NewEnrichMediaFileUseCase(
 	metadataCandidateRepository ports.MetadataCandidateRepository,
 	movieCreditRepository ports.MovieCreditRepository,
 	movieCertificationRepository ports.MovieCertificationRepository,
+	searchRepository ports.SearchRepository,
 ) *EnrichMediaFileUseCase {
 	return &EnrichMediaFileUseCase{
 		config:                       config,
@@ -74,6 +76,7 @@ func NewEnrichMediaFileUseCase(
 		metadataCandidateRepository:  metadataCandidateRepository,
 		movieCreditRepository:        movieCreditRepository,
 		movieCertificationRepository: movieCertificationRepository,
+		searchRepository:             searchRepository,
 	}
 }
 
@@ -450,6 +453,9 @@ func (uc *EnrichMediaFileUseCase) autoLinkMovie(ctx context.Context, media *doma
 		return nil, fmt.Errorf("failed to update media file: %w", err)
 	}
 
+	// Index movie for full-text search
+	uc.indexMovieForSearch(ctx, media.ID, movieMetadata.ID, details.Title, details.OriginalTitle)
+
 	return &EnrichMediaFileOutput{
 		MediaID:          media.ID,
 		EnrichmentStatus: domain.EnrichmentStatusAutoLinked,
@@ -511,6 +517,9 @@ func (uc *EnrichMediaFileUseCase) autoLinkSeries(ctx context.Context, media *dom
 	if err := uc.mediaRepository.Update(ctx, media); err != nil {
 		return nil, fmt.Errorf("failed to update media file: %w", err)
 	}
+
+	// Index series for full-text search
+	uc.indexSeriesForSearch(ctx, seriesMetadata.ID, seriesDetails.Name, seriesDetails.OriginalName)
 
 	return &EnrichMediaFileOutput{
 		MediaID:          media.ID,
@@ -1096,4 +1105,61 @@ func (uc *EnrichMediaFileUseCase) fetchAndStoreCertifications(ctx context.Contex
 		Msg("Stored movie certifications")
 
 	return nil
+}
+
+// indexMovieForSearch adds the movie to the FTS search index
+func (uc *EnrichMediaFileUseCase) indexMovieForSearch(ctx context.Context, mediaID string, movieMetadataID int64, title, originalTitle string) {
+	if uc.searchRepository == nil {
+		return
+	}
+
+	// Get credits from the database to build searchable cast/crew strings
+	var castNames, crewNames []string
+	if uc.movieCreditRepository != nil {
+		credits, err := uc.movieCreditRepository.GetByMovieMetadataID(ctx, movieMetadataID)
+		if err != nil {
+			logger.Debug().Err(err).Int64("movie_id", movieMetadataID).Msg("No credits available for search indexing")
+		} else {
+			for _, credit := range credits {
+				if credit.CreditType == domain.CreditTypeCast {
+					castNames = append(castNames, credit.Name)
+				} else {
+					crewNames = append(crewNames, credit.Name)
+				}
+			}
+		}
+	}
+
+	if err := uc.searchRepository.IndexMovie(
+		ctx,
+		mediaID,
+		movieMetadataID,
+		title,
+		originalTitle,
+		strings.Join(castNames, " "),
+		strings.Join(crewNames, " "),
+	); err != nil {
+		logger.Warn().Err(err).Int64("movie_id", movieMetadataID).Msg("Failed to index movie for search")
+	}
+}
+
+// indexSeriesForSearch adds the series to the FTS search index
+func (uc *EnrichMediaFileUseCase) indexSeriesForSearch(ctx context.Context, seriesMetadataID int64, name, originalName string) {
+	if uc.searchRepository == nil {
+		return
+	}
+
+	// Note: EnrichMediaFileUseCase doesn't have seriesCreditRepository
+	// Series credits are fetched on-demand when viewing series details
+	// For now, index with empty credits - they can be updated later
+	if err := uc.searchRepository.IndexSeries(
+		ctx,
+		seriesMetadataID,
+		name,
+		originalName,
+		"", // castNames - will be populated later
+		"", // crewNames - will be populated later
+	); err != nil {
+		logger.Warn().Err(err).Int64("series_id", seriesMetadataID).Msg("Failed to index series for search")
+	}
 }

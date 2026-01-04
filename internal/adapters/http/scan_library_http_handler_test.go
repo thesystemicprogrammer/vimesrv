@@ -15,6 +15,7 @@ import (
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/config"
 	usecasejob "github.com/thesystemicprogrammer/vimesrv/internal/usecase/job"
+	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/ports"
 )
 
 // MockJobRepository is a mock implementation for testing
@@ -29,6 +30,14 @@ func (m *MockJobRepository) Enqueue(ctx context.Context, job *domain.Job) (int64
 
 func (m *MockJobRepository) ClaimNextJobDue(ctx context.Context, workerID string) (*domain.Job, bool, error) {
 	args := m.Called(ctx, workerID)
+	if args.Get(0) == nil {
+		return nil, args.Bool(1), args.Error(2)
+	}
+	return args.Get(0).(*domain.Job), args.Bool(1), args.Error(2)
+}
+
+func (m *MockJobRepository) ClaimNextJobDueExcludingTypes(ctx context.Context, workerID string, excludeTypes []string) (*domain.Job, bool, error) {
+	args := m.Called(ctx, workerID, excludeTypes)
 	if args.Get(0) == nil {
 		return nil, args.Bool(1), args.Error(2)
 	}
@@ -68,6 +77,35 @@ func (m *MockJobRepository) ExistsPendingJobByType(ctx context.Context, jobType 
 	return args.Bool(0), args.Error(1)
 }
 
+func (m *MockJobRepository) ListJobs(ctx context.Context, filter ports.JobListFilter) (*ports.JobListResult, error) {
+	args := m.Called(ctx, filter)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*ports.JobListResult), args.Error(1)
+}
+
+func (m *MockJobRepository) Get(ctx context.Context, jobID int64) (*domain.Job, error) {
+	args := m.Called(ctx, jobID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.Job), args.Error(1)
+}
+
+func (m *MockJobRepository) ClaimNextTranscodeJob(ctx context.Context, workerID string) (*domain.Job, error) {
+	args := m.Called(ctx, workerID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.Job), args.Error(1)
+}
+
+func (m *MockJobRepository) CountQueuedTranscodeJobs(ctx context.Context) (int, error) {
+	args := m.Called(ctx)
+	return args.Int(0), args.Error(1)
+}
+
 // MockClock for testing
 type MockClock struct {
 	mock.Mock
@@ -99,7 +137,7 @@ func TestScanLibraryHTTPHandler_Handle_Success(t *testing.T) {
 
 	// Create use case and handler
 	cfg := config.JobConfig{MaxAttempts: 3}
-	enqueueUC := usecasejob.NewEnqueueJobUseCase(cfg, mockRepo, mockClock)
+	enqueueUC := usecasejob.NewEnqueueJobUseCase(cfg, mockRepo, mockClock, &ports.NoOpJobNotifier{})
 	handler := NewScanLibraryHTTPHandler(enqueueUC)
 
 	// Create test request
@@ -132,7 +170,7 @@ func TestScanLibraryHTTPHandler_Handle_EnqueueError(t *testing.T) {
 		Return(int64(0), errors.New("database connection failed"))
 
 	cfg := config.JobConfig{MaxAttempts: 3}
-	enqueueUC := usecasejob.NewEnqueueJobUseCase(cfg, mockRepo, mockClock)
+	enqueueUC := usecasejob.NewEnqueueJobUseCase(cfg, mockRepo, mockClock, &ports.NoOpJobNotifier{})
 	handler := NewScanLibraryHTTPHandler(enqueueUC)
 
 	w := httptest.NewRecorder()
@@ -163,7 +201,7 @@ func TestScanLibraryHTTPHandler_Handle_ContextCanceled(t *testing.T) {
 		Return(int64(0), context.Canceled)
 
 	cfg := config.JobConfig{MaxAttempts: 3}
-	enqueueUC := usecasejob.NewEnqueueJobUseCase(cfg, mockRepo, mockClock)
+	enqueueUC := usecasejob.NewEnqueueJobUseCase(cfg, mockRepo, mockClock, &ports.NoOpJobNotifier{})
 	handler := NewScanLibraryHTTPHandler(enqueueUC)
 
 	w := httptest.NewRecorder()
@@ -196,7 +234,7 @@ func TestScanLibraryHTTPHandler_Handle_MultipleRequests(t *testing.T) {
 		Return(int64(3), nil).Once()
 
 	cfg := config.JobConfig{MaxAttempts: 3}
-	enqueueUC := usecasejob.NewEnqueueJobUseCase(cfg, mockRepo, mockClock)
+	enqueueUC := usecasejob.NewEnqueueJobUseCase(cfg, mockRepo, mockClock, &ports.NoOpJobNotifier{})
 	handler := NewScanLibraryHTTPHandler(enqueueUC)
 
 	// First request
@@ -257,7 +295,7 @@ func TestScanLibraryHTTPHandler_Handle_JobTypeConstant(t *testing.T) {
 	).Return(int64(999), nil)
 
 	cfg := config.JobConfig{MaxAttempts: 3}
-	enqueueUC := usecasejob.NewEnqueueJobUseCase(cfg, mockRepo, mockClock)
+	enqueueUC := usecasejob.NewEnqueueJobUseCase(cfg, mockRepo, mockClock, &ports.NoOpJobNotifier{})
 	handler := NewScanLibraryHTTPHandler(enqueueUC)
 
 	w := httptest.NewRecorder()
@@ -293,7 +331,7 @@ func TestScanLibraryHTTPHandler_Handle_NilPayload(t *testing.T) {
 	).Return(int64(456), nil)
 
 	cfg := config.JobConfig{MaxAttempts: 3}
-	enqueueUC := usecasejob.NewEnqueueJobUseCase(cfg, mockRepo, mockClock)
+	enqueueUC := usecasejob.NewEnqueueJobUseCase(cfg, mockRepo, mockClock, &ports.NoOpJobNotifier{})
 	handler := NewScanLibraryHTTPHandler(enqueueUC)
 
 	w := httptest.NewRecorder()

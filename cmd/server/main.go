@@ -179,6 +179,8 @@ func runRebuildFromDump(cfg *config.Config) error {
 	episodeMetadataRepository := repository.NewSQLiteEpisodeMetadataRepository(db.DB)
 	movieCreditRepository := repository.NewSQLiteMovieCreditRepository(db.DB)
 	movieCertificationRepository := repository.NewSQLiteMovieCertificationRepository(db.DB)
+	seriesCreditRepository := repository.NewSQLiteSeriesCreditRepository(db.DB)
+	searchRepository := repository.NewSearchRepository(db)
 
 	// Create rebuild use case
 	rebuildUseCase := rebuild.NewRebuildUseCase(
@@ -208,6 +210,8 @@ func runRebuildFromDump(cfg *config.Config) error {
 			episodeMetadataRepository,
 			movieCreditRepository,
 			movieCertificationRepository,
+			seriesCreditRepository,
+			searchRepository,
 			mediaRepository,
 		)
 		logger.Info().Msg("TMDB enabled - auto-linking will be performed")

@@ -3,6 +3,9 @@ import { AuthService } from './auth.service';
 
 // WebSocket message types
 export type WebSocketMessageType = 
+  | 'jobs_queued'
+  | 'job_started'
+  | 'job_progress'
   | 'job_completed'
   | 'job_failed'
   | 'job_retrying'
@@ -11,6 +14,39 @@ export type WebSocketMessageType =
 export interface WebSocketMessage<T = unknown> {
   type: WebSocketMessageType;
   payload: T;
+}
+
+export interface JobQueuedPayload {
+  job_id: number;
+  job_type: string;
+  payload?: unknown;
+  priority: number;
+  max_attempts: number;
+  created_at: string;
+}
+
+export interface JobsQueuedPayload {
+  jobs: JobQueuedPayload[];
+}
+
+export interface JobStartedPayload {
+  job_id: number;
+  job_type: string;
+  payload?: unknown;
+  attempt: number;
+  max_attempts: number;
+}
+
+export interface JobProgressPayload {
+  job_id: number;
+  job_type: string;
+  frame?: number;
+  fps?: number;
+  bitrate?: string;
+  time?: string;
+  speed?: string;
+  percentage?: number;
+  message?: string;
 }
 
 export interface JobCompletedPayload {
@@ -56,6 +92,9 @@ export class WebSocketService {
   // Signals for reactive state
   private connectionStateSignal = signal<ConnectionState>('disconnected');
   private lastMessageSignal = signal<WebSocketMessage | null>(null);
+  private lastJobsQueuedSignal = signal<JobsQueuedPayload | null>(null);
+  private lastJobStartedSignal = signal<JobStartedPayload | null>(null);
+  private lastJobProgressSignal = signal<JobProgressPayload | null>(null);
   private lastJobCompletedSignal = signal<JobCompletedPayload | null>(null);
   private lastJobFailedSignal = signal<JobFailedPayload | null>(null);
   private lastJobRetryingSignal = signal<JobRetryingPayload | null>(null);
@@ -64,6 +103,9 @@ export class WebSocketService {
   readonly connectionState = computed(() => this.connectionStateSignal());
   readonly isConnected = computed(() => this.connectionStateSignal() === 'connected');
   readonly lastMessage = computed(() => this.lastMessageSignal());
+  readonly lastJobsQueued = computed(() => this.lastJobsQueuedSignal());
+  readonly lastJobStarted = computed(() => this.lastJobStartedSignal());
+  readonly lastJobProgress = computed(() => this.lastJobProgressSignal());
   readonly lastJobCompleted = computed(() => this.lastJobCompletedSignal());
   readonly lastJobFailed = computed(() => this.lastJobFailedSignal());
   readonly lastJobRetrying = computed(() => this.lastJobRetryingSignal());
@@ -156,6 +198,27 @@ export class WebSocketService {
   }
 
   /**
+   * Subscribe to jobs queued events (batched)
+   */
+  onJobsQueued(callback: (payload: JobsQueuedPayload) => void): () => void {
+    return this.onMessage('jobs_queued', callback);
+  }
+
+  /**
+   * Subscribe to job started events
+   */
+  onJobStarted(callback: (payload: JobStartedPayload) => void): () => void {
+    return this.onMessage('job_started', callback);
+  }
+
+  /**
+   * Subscribe to job progress events
+   */
+  onJobProgress(callback: (payload: JobProgressPayload) => void): () => void {
+    return this.onMessage('job_progress', callback);
+  }
+
+  /**
    * Subscribe to job completed events
    */
   onJobCompleted(callback: (payload: JobCompletedPayload) => void): () => void {
@@ -219,6 +282,15 @@ export class WebSocketService {
 
     // Update type-specific signals
     switch (message.type) {
+      case 'jobs_queued':
+        this.lastJobsQueuedSignal.set(message.payload as JobsQueuedPayload);
+        break;
+      case 'job_started':
+        this.lastJobStartedSignal.set(message.payload as JobStartedPayload);
+        break;
+      case 'job_progress':
+        this.lastJobProgressSignal.set(message.payload as JobProgressPayload);
+        break;
       case 'job_completed':
         this.lastJobCompletedSignal.set(message.payload as JobCompletedPayload);
         break;

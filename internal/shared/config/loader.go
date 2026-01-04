@@ -89,6 +89,7 @@ func setDefaults(v *viper.Viper) {
 
 	// Transcoding defaults
 	v.SetDefault("transcoding.segment_duration", 4)
+	v.SetDefault("transcoding.progress_log_interval_seconds", 60)
 	v.SetDefault("transcoding.segment_pattern", "chunk-%03d.m4s")
 
 	// Quality profiles defaults
@@ -178,6 +179,13 @@ func setDefaults(v *viper.Viper) {
 	// Rebuild defaults
 	v.SetDefault("rebuild.allow_rebuild", false)
 	v.SetDefault("rebuild.tmdb_requests_per_10s", 15)
+
+	// Worker defaults (distributed transcoding)
+	v.SetDefault("worker.enabled", false)
+	v.SetDefault("worker.auth_token", "")
+	v.SetDefault("worker.heartbeat_timeout_seconds", 60)
+	v.SetDefault("worker.fallback_to_local", false)
+	v.SetDefault("worker.fallback_after_minutes", 30)
 }
 
 // bindEnvVars binds environment variables to viper keys
@@ -218,6 +226,13 @@ func bindEnvVars(v *viper.Viper) {
 
 	// Library
 	v.BindEnv("library.recently_added_count", "LIBRARY_RECENTLY_ADDED_COUNT")
+
+	// Worker (distributed transcoding)
+	v.BindEnv("worker.enabled", "WORKER_ENABLED")
+	v.BindEnv("worker.auth_token", "WORKER_AUTH_TOKEN")
+	v.BindEnv("worker.heartbeat_timeout_seconds", "WORKER_HEARTBEAT_TIMEOUT_SECONDS")
+	v.BindEnv("worker.fallback_to_local", "WORKER_FALLBACK_TO_LOCAL")
+	v.BindEnv("worker.fallback_after_minutes", "WORKER_FALLBACK_AFTER_MINUTES")
 }
 
 func normalizePathsToAbsolute(cfg *Config) error {

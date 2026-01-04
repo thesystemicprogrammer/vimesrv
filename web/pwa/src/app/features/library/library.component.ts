@@ -1,4 +1,4 @@
-import { Component, inject, OnInit, OnDestroy, signal, computed, ViewChild } from '@angular/core';
+import { Component, inject, OnInit, OnDestroy, signal, computed, ViewChild, effect, AfterViewInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { toObservable } from '@angular/core/rxjs-interop';
 import { forkJoin, Subscription, skip } from 'rxjs';
@@ -8,19 +8,30 @@ import {
   MovieSummary,
   SeriesSummary,
   UnmatchedMediaSummary,
-  RecentlyAddedItem
+  RecentlyAddedItem,
+  SortBy,
+  SortOrder
 } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
+import { FilterStateService } from '../../core/services/filter-state.service';
+import { ScrollStateService } from '../../core/services/scroll-state.service';
 import { MediaCardComponent } from './media-card.component';
 import { MediaRowComponent } from './media-row.component';
 import { MetadataMatchModalComponent } from './metadata-match-modal.component';
+import { FilterBottomSheetComponent } from './filter-bottom-sheet.component';
 
 type FilterTab = 'all' | 'movies' | 'series' | 'unmatched';
+
+interface SortOption {
+  sortBy: SortBy;
+  sortOrder: SortOrder;
+  labelKey: string;
+}
 
 @Component({
   selector: 'app-library',
   standalone: true,
-  imports: [MediaCardComponent, MediaRowComponent, MetadataMatchModalComponent, TranslateModule],
+  imports: [MediaCardComponent, MediaRowComponent, MetadataMatchModalComponent, FilterBottomSheetComponent, TranslateModule],
   template: `
     <div class="container mx-auto px-4 py-8">
       <!-- Header -->
@@ -40,7 +51,7 @@ type FilterTab = 'all' | 'movies' | 'series' | 'unmatched';
       </div>
 
       <!-- Filter Tabs -->
-      <div class="flex gap-2 mb-8 border-b border-slate-700">
+      <div class="flex gap-2 mb-6 border-b border-slate-700">
         @for (tab of tabs; track tab.id) {
           <button
             (click)="setActiveTab(tab.id)"
@@ -55,6 +66,87 @@ type FilterTab = 'all' | 'movies' | 'series' | 'unmatched';
           </button>
         }
       </div>
+
+      <!-- Sort and Filter Controls (for movies/series tabs) -->
+      @if (activeTab() === 'movies' || activeTab() === 'series') {
+        <div class="flex flex-wrap items-center gap-4 mb-6">
+          <!-- Mobile Filter Button -->
+          <button
+            (click)="openFilterSheet()"
+            class="sm:hidden flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition text-sm"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/>
+            </svg>
+            <span>{{ 'filter.title' | translate }}</span>
+            @if (filterState.hasActiveFilters()) {
+              <span class="w-2 h-2 bg-blue-500 rounded-full"></span>
+            }
+          </button>
+
+          <!-- Sort Dropdown (desktop) -->
+          <div class="relative hidden sm:block">
+            <button
+              (click)="toggleSortDropdown()"
+              class="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition text-sm"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12"/>
+              </svg>
+              <span>{{ filterState.sortLabel() }}</span>
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+              </svg>
+            </button>
+            @if (showSortDropdown()) {
+              <div class="absolute top-full left-0 mt-1 w-48 bg-slate-800 rounded-lg shadow-lg border border-slate-700 z-10">
+                @for (option of sortOptions; track option.sortBy + option.sortOrder) {
+                  <button
+                    (click)="setSort(option)"
+                    [class]="getSortOptionClass(option)"
+                    class="w-full text-left px-4 py-2 text-sm transition first:rounded-t-lg last:rounded-b-lg"
+                  >
+                    {{ option.labelKey | translate }}
+                  </button>
+                }
+              </div>
+            }
+          </div>
+
+          <!-- Genre Pills (desktop) -->
+          @if (availableGenres().length > 0) {
+            <div class="hidden sm:flex flex-wrap gap-2 flex-1">
+              @for (genre of availableGenres().slice(0, showAllGenres() ? undefined : 8); track genre) {
+                <button
+                  (click)="toggleGenre(genre)"
+                  [class]="getGenrePillClass(genre)"
+                  class="px-3 py-1 rounded-full text-xs font-medium transition"
+                >
+                  {{ genre }}
+                </button>
+              }
+              @if (availableGenres().length > 8) {
+                <button
+                  (click)="showAllGenres.set(!showAllGenres())"
+                  class="px-3 py-1 text-blue-400 hover:text-blue-300 text-xs font-medium transition"
+                >
+                  {{ showAllGenres() ? ('library.showLess' | translate) : ('+' + (availableGenres().length - 8) + ' ' + ('library.more' | translate)) }}
+                </button>
+              }
+            </div>
+          }
+
+          <!-- Clear Filters -->
+          @if (filterState.hasActiveFilters()) {
+            <button
+              (click)="clearFilters()"
+              class="text-sm text-slate-400 hover:text-white transition"
+            >
+              {{ 'library.clearFilters' | translate }}
+            </button>
+          }
+        </div>
+      }
 
       @if (loading()) {
         <div class="flex justify-center items-center h-64">
@@ -132,9 +224,17 @@ type FilterTab = 'all' | 'movies' | 'series' | 'unmatched';
 
         <!-- Movies Tab -->
         @if (activeTab() === 'movies') {
-          @if (movies().length === 0) {
+          @if (movies().length === 0 && !loadingMore()) {
             <div class="text-center text-slate-400 py-16">
-              <p class="text-xl">{{ 'library.noMoviesFound' | translate }}</p>
+              <p class="text-xl">{{ filterState.hasActiveFilters() ? ('library.noMoviesMatchFilters' | translate) : ('library.noMoviesFound' | translate) }}</p>
+              @if (filterState.hasActiveFilters()) {
+                <button
+                  (click)="clearFilters()"
+                  class="mt-4 text-blue-400 hover:text-blue-300 transition"
+                >
+                  {{ 'library.clearFilters' | translate }}
+                </button>
+              }
             </div>
           } @else {
             <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 gap-4">
@@ -146,14 +246,40 @@ type FilterTab = 'all' | 'movies' | 'series' | 'unmatched';
                 />
               }
             </div>
+            @if (hasMoreMovies()) {
+              <div class="flex justify-center mt-8">
+                <button
+                  (click)="loadMoreMovies()"
+                  [disabled]="loadingMore()"
+                  class="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition disabled:opacity-50"
+                >
+                  @if (loadingMore()) {
+                    <span class="flex items-center gap-2">
+                      <div class="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
+                      {{ 'library.loading' | translate }}
+                    </span>
+                  } @else {
+                    {{ 'library.loadMore' | translate }}
+                  }
+                </button>
+              </div>
+            }
           }
         }
 
         <!-- Series Tab -->
         @if (activeTab() === 'series') {
-          @if (series().length === 0) {
+          @if (series().length === 0 && !loadingMore()) {
             <div class="text-center text-slate-400 py-16">
-              <p class="text-xl">{{ 'library.noSeriesFound' | translate }}</p>
+              <p class="text-xl">{{ filterState.hasActiveFilters() ? ('library.noSeriesMatchFilters' | translate) : ('library.noSeriesFound' | translate) }}</p>
+              @if (filterState.hasActiveFilters()) {
+                <button
+                  (click)="clearFilters()"
+                  class="mt-4 text-blue-400 hover:text-blue-300 transition"
+                >
+                  {{ 'library.clearFilters' | translate }}
+                </button>
+              }
             </div>
           } @else {
             <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 gap-4">
@@ -165,6 +291,24 @@ type FilterTab = 'all' | 'movies' | 'series' | 'unmatched';
                 />
               }
             </div>
+            @if (hasMoreSeries()) {
+              <div class="flex justify-center mt-8">
+                <button
+                  (click)="loadMoreSeries()"
+                  [disabled]="loadingMore()"
+                  class="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition disabled:opacity-50"
+                >
+                  @if (loadingMore()) {
+                    <span class="flex items-center gap-2">
+                      <div class="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
+                      {{ 'library.loading' | translate }}
+                    </span>
+                  } @else {
+                    {{ 'library.loadMore' | translate }}
+                  }
+                </button>
+              </div>
+            }
           }
         }
 
@@ -211,17 +355,27 @@ type FilterTab = 'all' | 'movies' | 'series' | 'unmatched';
       (matched)="onMetadataMatched()"
       (skipped)="onMetadataSkipped()"
     />
+
+    <!-- Filter Bottom Sheet (mobile) -->
+    <app-filter-bottom-sheet
+      #filterSheet
+      [genres]="availableGenres()"
+    />
   `
 })
-export class LibraryComponent implements OnInit, OnDestroy {
+export class LibraryComponent implements OnInit, OnDestroy, AfterViewInit {
   private readonly api = inject(ApiService);
   private readonly router = inject(Router);
   private readonly auth = inject(AuthService);
   private readonly translate = inject(TranslateService);
+  readonly filterState = inject(FilterStateService);
+  private readonly scrollState = inject(ScrollStateService);
 
   private languageSubscription: Subscription | null = null;
+  private pendingScrollRestore = false;
 
   @ViewChild('matchModal') matchModal!: MetadataMatchModalComponent;
+  @ViewChild('filterSheet') filterSheet!: FilterBottomSheetComponent;
 
   // Data signals
   movies = signal<MovieSummary[]>([]);
@@ -230,17 +384,52 @@ export class LibraryComponent implements OnInit, OnDestroy {
   unmatched = signal<UnmatchedMediaSummary[]>([]);
   selectedUnmatchedMedia = signal<UnmatchedMediaSummary | null>(null);
 
+  // Genre data
+  movieGenres = signal<string[]>([]);
+  seriesGenres = signal<string[]>([]);
+
   // UI state
   loading = signal(true);
+  loadingMore = signal(false);
   error = signal<string | null>(null);
   scanning = signal(false);
   activeTab = signal<FilterTab>('all');
+  showSortDropdown = signal(false);
+  showAllGenres = signal(false);
+
+  // Pagination state
+  moviesPage = signal(1);
+  seriesPage = signal(1);
+  moviesTotalCount = signal(0);
+  seriesTotalCount = signal(0);
+  readonly perPage = 20;
+
+  // Computed: available genres based on current tab
+  availableGenres = computed(() => {
+    return this.activeTab() === 'series' ? this.seriesGenres() : this.movieGenres();
+  });
+
+  // Computed: has more items to load
+  hasMoreMovies = computed(() => this.movies().length < this.moviesTotalCount());
+  hasMoreSeries = computed(() => this.series().length < this.seriesTotalCount());
+
+  // Sort options
+  sortOptions: SortOption[] = [
+    { sortBy: 'date_added', sortOrder: 'desc', labelKey: 'library.sort.recentlyAdded' },
+    { sortBy: 'date_added', sortOrder: 'asc', labelKey: 'library.sort.oldestAdded' },
+    { sortBy: 'title', sortOrder: 'asc', labelKey: 'library.sort.titleAZ' },
+    { sortBy: 'title', sortOrder: 'desc', labelKey: 'library.sort.titleZA' },
+    { sortBy: 'year', sortOrder: 'desc', labelKey: 'library.sort.newest' },
+    { sortBy: 'year', sortOrder: 'asc', labelKey: 'library.sort.oldest' },
+    { sortBy: 'rating', sortOrder: 'desc', labelKey: 'library.sort.highestRated' },
+    { sortBy: 'rating', sortOrder: 'asc', labelKey: 'library.sort.lowestRated' },
+  ];
 
   // Tab configuration with computed counts
   tabs = [
     { id: 'all' as const, labelKey: 'library.all', count: computed(() => null) },
-    { id: 'movies' as const, labelKey: 'library.movies', count: computed(() => this.movies().length) },
-    { id: 'series' as const, labelKey: 'library.series', count: computed(() => this.series().length) },
+    { id: 'movies' as const, labelKey: 'library.movies', count: computed(() => this.moviesTotalCount()) },
+    { id: 'series' as const, labelKey: 'library.series', count: computed(() => this.seriesTotalCount()) },
     { id: 'unmatched' as const, labelKey: 'library.unmatched', count: computed(() => this.unmatched().length) }
   ];
 
@@ -251,6 +440,22 @@ export class LibraryComponent implements OnInit, OnDestroy {
       .subscribe(() => {
         this.loadLibrary();
       });
+
+    // Re-fetch when filter state changes
+    effect(() => {
+      // Access signals to track changes
+      this.filterState.sortBy();
+      this.filterState.sortOrder();
+      this.filterState.selectedGenres();
+      this.filterState.yearFrom();
+      this.filterState.yearTo();
+      this.filterState.minRating();
+
+      // Only reload if not in initial loading state
+      if (!this.loading()) {
+        this.resetAndReloadFiltered();
+      }
+    });
   }
 
   ngOnDestroy(): void {
@@ -258,24 +463,103 @@ export class LibraryComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    this.loadLibrary();
+    // Check if we're restoring from a back navigation
+    const savedState = this.scrollState.getState();
+    if (savedState) {
+      this.pendingScrollRestore = true;
+      this.activeTab.set(savedState.activeTab as FilterTab);
+      this.loadLibraryWithRestoration(savedState);
+    } else {
+      this.loadLibrary();
+    }
+  }
+
+  ngAfterViewInit(): void {
+    // Scroll restoration happens after data is loaded (see loadLibraryWithRestoration)
+  }
+
+  /**
+   * Load library with state restoration (for back navigation)
+   */
+  private loadLibraryWithRestoration(savedState: { scrollY: number; activeTab: string; moviesPage: number; seriesPage: number; moviesCount: number; seriesCount: number }): void {
+    this.loading.set(true);
+    this.error.set(null);
+
+    const filterOptions = this.filterState.getApiFilterOptions();
+
+    // Load enough items to restore the previous scroll position
+    const moviesPerPage = savedState.moviesPage * this.perPage;
+    const seriesPerPage = savedState.seriesPage * this.perPage;
+
+    forkJoin({
+      movies: this.api.listMovies({ page: 1, perPage: moviesPerPage, ...filterOptions }),
+      series: this.api.listSeries({ page: 1, perPage: seriesPerPage, ...filterOptions }),
+      recent: this.api.listRecent(),
+      unmatched: this.api.listUnmatched(1, 100),
+      genres: this.api.listGenres()
+    }).subscribe({
+      next: (responses) => {
+        this.movies.set(responses.movies.data.items || []);
+        this.moviesTotalCount.set(responses.movies.data.total);
+        this.moviesPage.set(savedState.moviesPage);
+
+        this.series.set(responses.series.data.items || []);
+        this.seriesTotalCount.set(responses.series.data.total);
+        this.seriesPage.set(savedState.seriesPage);
+
+        this.recentItems.set(responses.recent.data.items || []);
+        this.unmatched.set(responses.unmatched.data.items || []);
+
+        this.movieGenres.set(responses.genres.data.movie_genres || []);
+        this.seriesGenres.set(responses.genres.data.series_genres || []);
+
+        this.loading.set(false);
+
+        // Restore scroll position after a brief delay for DOM to update
+        if (this.pendingScrollRestore) {
+          setTimeout(() => {
+            window.scrollTo({ top: savedState.scrollY, behavior: 'instant' });
+            this.pendingScrollRestore = false;
+            this.scrollState.clearState();
+          }, 50);
+        }
+      },
+      error: (err) => {
+        this.error.set(err.error?.error?.message || 'Failed to load library');
+        this.loading.set(false);
+        this.scrollState.clearState();
+      }
+    });
   }
 
   loadLibrary(): void {
     this.loading.set(true);
     this.error.set(null);
 
+    const filterOptions = this.filterState.getApiFilterOptions();
+
     forkJoin({
-      movies: this.api.listMovies(1, 100),
-      series: this.api.listSeries(),
+      movies: this.api.listMovies({ page: 1, perPage: this.perPage, ...filterOptions }),
+      series: this.api.listSeries({ page: 1, perPage: this.perPage, ...filterOptions }),
       recent: this.api.listRecent(),
-      unmatched: this.api.listUnmatched(1, 100)
+      unmatched: this.api.listUnmatched(1, 100),
+      genres: this.api.listGenres()
     }).subscribe({
       next: (responses) => {
         this.movies.set(responses.movies.data.items || []);
+        this.moviesTotalCount.set(responses.movies.data.total);
+        this.moviesPage.set(1);
+
         this.series.set(responses.series.data.items || []);
+        this.seriesTotalCount.set(responses.series.data.total);
+        this.seriesPage.set(1);
+
         this.recentItems.set(responses.recent.data.items || []);
         this.unmatched.set(responses.unmatched.data.items || []);
+
+        this.movieGenres.set(responses.genres.data.movie_genres || []);
+        this.seriesGenres.set(responses.genres.data.series_genres || []);
+
         this.loading.set(false);
       },
       error: (err) => {
@@ -285,8 +569,72 @@ export class LibraryComponent implements OnInit, OnDestroy {
     });
   }
 
+  private resetAndReloadFiltered(): void {
+    const filterOptions = this.filterState.getApiFilterOptions();
+
+    // Reset pagination
+    this.moviesPage.set(1);
+    this.seriesPage.set(1);
+
+    // Reload with new filters
+    forkJoin({
+      movies: this.api.listMovies({ page: 1, perPage: this.perPage, ...filterOptions }),
+      series: this.api.listSeries({ page: 1, perPage: this.perPage, ...filterOptions })
+    }).subscribe({
+      next: (responses) => {
+        this.movies.set(responses.movies.data.items || []);
+        this.moviesTotalCount.set(responses.movies.data.total);
+        this.series.set(responses.series.data.items || []);
+        this.seriesTotalCount.set(responses.series.data.total);
+      }
+    });
+  }
+
+  loadMoreMovies(): void {
+    if (this.loadingMore() || !this.hasMoreMovies()) return;
+
+    this.loadingMore.set(true);
+    const nextPage = this.moviesPage() + 1;
+    const filterOptions = this.filterState.getApiFilterOptions();
+
+    this.api.listMovies({ page: nextPage, perPage: this.perPage, ...filterOptions }).subscribe({
+      next: (response) => {
+        this.movies.update(current => [...current, ...(response.data.items || [])]);
+        this.moviesPage.set(nextPage);
+        this.loadingMore.set(false);
+      },
+      error: () => {
+        this.loadingMore.set(false);
+      }
+    });
+  }
+
+  loadMoreSeries(): void {
+    if (this.loadingMore() || !this.hasMoreSeries()) return;
+
+    this.loadingMore.set(true);
+    const nextPage = this.seriesPage() + 1;
+    const filterOptions = this.filterState.getApiFilterOptions();
+
+    this.api.listSeries({ page: nextPage, perPage: this.perPage, ...filterOptions }).subscribe({
+      next: (response) => {
+        this.series.update(current => [...current, ...(response.data.items || [])]);
+        this.seriesPage.set(nextPage);
+        this.loadingMore.set(false);
+      },
+      error: () => {
+        this.loadingMore.set(false);
+      }
+    });
+  }
+
   setActiveTab(tab: FilterTab): void {
     this.activeTab.set(tab);
+    this.showSortDropdown.set(false);
+  }
+
+  openFilterSheet(): void {
+    this.filterSheet.open();
   }
 
   getTabClass(tabId: FilterTab): string {
@@ -297,6 +645,39 @@ export class LibraryComponent implements OnInit, OnDestroy {
     return `${baseClass} text-slate-400 border-transparent hover:text-white hover:border-slate-500`;
   }
 
+  toggleSortDropdown(): void {
+    this.showSortDropdown.update(v => !v);
+  }
+
+  setSort(option: SortOption): void {
+    this.filterState.setSort(option.sortBy, option.sortOrder);
+    this.showSortDropdown.set(false);
+  }
+
+  getSortOptionClass(option: SortOption): string {
+    const isSelected = this.filterState.sortBy() === option.sortBy && this.filterState.sortOrder() === option.sortOrder;
+    if (isSelected) {
+      return 'text-blue-400 bg-slate-700';
+    }
+    return 'text-slate-300 hover:bg-slate-700';
+  }
+
+  toggleGenre(genre: string): void {
+    this.filterState.toggleGenre(genre);
+  }
+
+  getGenrePillClass(genre: string): string {
+    const isSelected = this.filterState.selectedGenres().includes(genre);
+    if (isSelected) {
+      return 'bg-blue-600 text-white';
+    }
+    return 'bg-slate-700 text-slate-300 hover:bg-slate-600';
+  }
+
+  clearFilters(): void {
+    this.filterState.clearAllFilters();
+  }
+
   onMovieClick(item: MovieSummary | SeriesSummary): void {
     if ('media_id' in item) {
       this.navigateToMovie(item);
@@ -304,6 +685,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   }
 
   onRecentItemClick(item: RecentlyAddedItem): void {
+    this.saveScrollState();
     if (item.type === 'movie' && item.media_id) {
       this.router.navigate(['/movie', item.media_id]);
     } else if (item.type === 'season' && item.series_metadata_id) {
@@ -315,11 +697,27 @@ export class LibraryComponent implements OnInit, OnDestroy {
   }
 
   navigateToMovie(movie: MovieSummary): void {
+    this.saveScrollState();
     this.router.navigate(['/movie', movie.media_id]);
   }
 
   navigateToSeries(s: SeriesSummary): void {
+    this.saveScrollState();
     this.router.navigate(['/series', s.series_metadata_id]);
+  }
+
+  /**
+   * Save scroll and pagination state before navigating away
+   */
+  private saveScrollState(): void {
+    this.scrollState.saveState({
+      scrollY: window.scrollY,
+      activeTab: this.activeTab(),
+      moviesPage: this.moviesPage(),
+      seriesPage: this.seriesPage(),
+      moviesCount: this.movies().length,
+      seriesCount: this.series().length
+    });
   }
 
   openMatchModal(item: UnmatchedMediaSummary): void {

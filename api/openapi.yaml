@@ -22,8 +22,12 @@ tags:
     description: TMDB metadata enrichment
   - name: Library
     description: Library scanning and browsing
+  - name: Jobs
+    description: Job monitoring (admin/manager only)
   - name: Streaming
     description: DASH streaming endpoints
+  - name: Worker
+    description: Distributed transcoding worker API (requires worker auth token)
 
 components:
   securitySchemes:
@@ -37,6 +41,10 @@ components:
       in: query
       name: token
       description: Short-lived stream token obtained from /api/v1/auth/stream-token
+    WorkerAuth:
+      type: http
+      scheme: bearer
+      description: Worker authentication token configured in server's worker.auth_token setting
 
   schemas:
     Error:
@@ -809,6 +817,236 @@ components:
               type: integer
             per_page:
               type: integer
+
+    # Job Schemas
+    Job:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        type:
+          type: string
+          enum: [scan_library, transcode_video, enrich_metadata, fetch_translations]
+        status:
+          type: string
+          enum: [queued, running, succeeded, dead]
+        payload:
+          type: object
+          description: Job-specific payload data
+        priority:
+          type: integer
+        attempts:
+          type: integer
+        max_attempts:
+          type: integer
+        last_error:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+
+    JobListResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            jobs:
+              type: array
+              items:
+                $ref: '#/components/schemas/Job'
+            total:
+              type: integer
+
+    # Worker API Schemas
+    WorkerRegisterRequest:
+      type: object
+      required:
+        - worker_id
+      properties:
+        worker_id:
+          type: string
+          description: Unique identifier for the worker
+          example: "worker-1"
+        name:
+          type: string
+          description: Human-readable worker name
+          example: "Transcode Worker 1"
+        capacity:
+          type: integer
+          description: Maximum concurrent jobs this worker can handle
+          example: 4
+
+    WorkerHeartbeatRequest:
+      type: object
+      required:
+        - worker_id
+      properties:
+        worker_id:
+          type: string
+        name:
+          type: string
+        active_jobs:
+          type: integer
+          description: Number of jobs currently being processed
+        capacity:
+          type: integer
+          description: Maximum concurrent jobs
+
+    WorkerHeartbeatResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        server_time:
+          type: integer
+          format: int64
+          description: Server timestamp (Unix seconds)
+        queued_jobs:
+          type: integer
+          description: Number of jobs waiting in queue
+
+    WorkerClaimRequest:
+      type: object
+      required:
+        - worker_id
+      properties:
+        worker_id:
+          type: string
+
+    WorkerClaimResponse:
+      type: object
+      properties:
+        job:
+          $ref: '#/components/schemas/WorkerJob'
+          nullable: true
+          description: Job details or null if no jobs available
+
+    WorkerJob:
+      type: object
+      properties:
+        job_id:
+          type: integer
+          format: int64
+        transcode_id:
+          type: string
+          description: Unique transcode session identifier
+        track_type:
+          type: string
+          enum: [video, audio, subtitle]
+        track_index:
+          type: integer
+          description: Source stream index in media file
+        quality:
+          type: string
+          description: Quality level (for video tracks)
+          example: "1080p"
+        input_path:
+          type: string
+          description: Absolute path to source media file
+        output_path:
+          type: string
+          description: Absolute path to output directory/file
+        media_duration:
+          type: number
+          description: Total duration in seconds
+        transcode_options:
+          $ref: '#/components/schemas/WorkerTranscodeOptions'
+
+    WorkerTranscodeOptions:
+      type: object
+      properties:
+        width:
+          type: integer
+          description: Output video width
+        height:
+          type: integer
+          description: Output video height
+        video_codec:
+          type: string
+          description: FFmpeg video codec
+          example: "libx264"
+        crf:
+          type: integer
+          description: Constant Rate Factor (quality)
+        max_bitrate:
+          type: integer
+          description: Maximum bitrate in bits/second
+        preset:
+          type: string
+          description: FFmpeg encoding preset
+          example: "medium"
+        audio_codec:
+          type: string
+          description: FFmpeg audio codec
+          example: "aac"
+        audio_bitrate:
+          type: integer
+          description: Audio bitrate in bits/second
+        segment_time:
+          type: integer
+          description: DASH segment duration in seconds
+
+    WorkerProgressRequest:
+      type: object
+      required:
+        - worker_id
+      properties:
+        worker_id:
+          type: string
+        percentage:
+          type: number
+          description: Completion percentage (0-100)
+        speed:
+          type: string
+          description: Encoding speed (e.g., "2.5x")
+        eta_seconds:
+          type: integer
+          description: Estimated time remaining in seconds
+
+    WorkerCompleteRequest:
+      type: object
+      required:
+        - worker_id
+      properties:
+        worker_id:
+          type: string
+        segment_count:
+          type: integer
+          description: Number of segments produced
+        output_files:
+          type: array
+          items:
+            type: string
+          description: List of output file names
+
+    WorkerFailRequest:
+      type: object
+      required:
+        - worker_id
+        - error
+      properties:
+        worker_id:
+          type: string
+        error:
+          type: string
+          description: Error message
+        retry:
+          type: boolean
+          description: Whether the job should be retried
 
 paths:
   /api/v1/auth/login:
@@ -1647,6 +1885,52 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /api/v1/jobs:
+    get:
+      tags: [Jobs]
+      summary: List jobs
+      description: |
+        Returns a list of jobs. Requires admin or manager role.
+        By default returns active jobs (running/queued) plus completed/failed jobs from the last 24 hours.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          description: Filter by status (comma-separated, e.g., "running,queued")
+          schema:
+            type: string
+        - name: type
+          in: query
+          description: Filter by job type (comma-separated, e.g., "transcode_video,scan_library")
+          schema:
+            type: string
+        - name: include_old
+          in: query
+          description: Include jobs older than 24 hours
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Job list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobListResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden (admin or manager access required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /stream/dash/{id}/manifest.mpd:
     get:
       tags: [Streaming]
@@ -1738,6 +2022,273 @@ paths:
                 type: string
         '404':
           description: Content not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Worker API Endpoints
+  /api/v1/worker/register:
+    post:
+      tags: [Worker]
+      summary: Register worker
+      description: |
+        Register a new worker with the server. Workers must register before claiming jobs.
+        This endpoint requires the worker auth token configured in the server.
+      security:
+        - WorkerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkerRegisterRequest'
+      responses:
+        '200':
+          description: Worker registered successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  registered:
+                    type: boolean
+                  message:
+                    type: string
+        '400':
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Invalid or missing auth token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Worker API not enabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/worker/heartbeat:
+    post:
+      tags: [Worker]
+      summary: Send heartbeat
+      description: |
+        Send a heartbeat to indicate the worker is still alive.
+        Workers should send heartbeats at regular intervals (e.g., every 30 seconds).
+        The server uses heartbeats to detect dead workers and reassign their jobs.
+      security:
+        - WorkerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkerHeartbeatRequest'
+      responses:
+        '200':
+          description: Heartbeat acknowledged
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerHeartbeatResponse'
+        '400':
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Invalid or missing auth token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/worker/jobs/claim:
+    post:
+      tags: [Worker]
+      summary: Claim next job
+      description: |
+        Attempt to claim the next available job from the queue.
+        Returns the job details if a job is available, or null if no jobs are queued.
+        The worker must be registered before claiming jobs.
+      security:
+        - WorkerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkerClaimRequest'
+      responses:
+        '200':
+          description: Job claimed or no jobs available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerClaimResponse'
+        '400':
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Invalid or missing auth token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/worker/jobs/{id}/progress:
+    post:
+      tags: [Worker]
+      summary: Report job progress
+      description: |
+        Report progress on an active job.
+        Workers should report progress at regular intervals during transcoding.
+      security:
+        - WorkerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Job ID
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkerProgressRequest'
+      responses:
+        '200':
+          description: Progress recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+        '400':
+          description: Invalid request body or job ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Invalid or missing auth token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Job not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/worker/jobs/{id}/complete:
+    post:
+      tags: [Worker]
+      summary: Complete job
+      description: |
+        Mark a job as successfully completed.
+        The server will validate the output files before accepting the completion.
+      security:
+        - WorkerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Job ID
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkerCompleteRequest'
+      responses:
+        '200':
+          description: Job completed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  message:
+                    type: string
+        '400':
+          description: Invalid request or validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Invalid or missing auth token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/worker/jobs/{id}/fail:
+    post:
+      tags: [Worker]
+      summary: Fail job
+      description: |
+        Mark a job as failed.
+        If retry is true, the job will be re-queued for another attempt (up to max_attempts).
+      security:
+        - WorkerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Job ID
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkerFailRequest'
+      responses:
+        '200':
+          description: Job marked as failed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  message:
+                    type: string
+        '400':
+          description: Invalid request body or job ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Invalid or missing auth token
           content:
             application/json:
               schema:

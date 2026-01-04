@@ -211,7 +211,7 @@ func (uc *GetSimilarMoviesUseCase) findMovieInLibrary(ctx context.Context, tmdbI
 	}
 
 	// Get the movie from library to find the media ID
-	movies, _, err := uc.libraryRepo.ListMovies(ctx, language, 1000, 0)
+	movies, _, err := uc.libraryRepo.ListMovies(ctx, language, 1000, 0, ports.MovieFilterOptions{})
 	if err != nil {
 		return "", err
 	}

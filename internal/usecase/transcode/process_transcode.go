@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/thesystemicprogrammer/vimesrv/internal/domain"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/config"
@@ -16,6 +17,7 @@ import (
 
 // ProcessTranscodeInput represents the input for the ProcessTranscode use case
 type ProcessTranscodeInput struct {
+	JobID       int64  // ID of the job processing this transcode
 	TranscodeID string // ID of the transcode record
 }
 
@@ -33,6 +35,7 @@ type ProcessTranscodeUseCase struct {
 	mediaRepo     ports.MediaRepository
 	transcoder    ports.Transcoder
 	filesystem    ports.FileSystemService
+	jobNotifier   ports.JobNotifier
 	config        *config.Config
 }
 
@@ -42,6 +45,7 @@ func NewProcessTranscodeUseCase(
 	mediaRepo ports.MediaRepository,
 	transcoder ports.Transcoder,
 	filesystem ports.FileSystemService,
+	jobNotifier ports.JobNotifier,
 	cfg *config.Config,
 ) *ProcessTranscodeUseCase {
 	return &ProcessTranscodeUseCase{
@@ -49,7 +53,93 @@ func NewProcessTranscodeUseCase(
 		mediaRepo:     mediaRepo,
 		transcoder:    transcoder,
 		filesystem:    filesystem,
+		jobNotifier:   jobNotifier,
 		config:        cfg,
+	}
+}
+
+// parseTimeToSeconds converts FFmpeg time format (HH:MM:SS.ms) to seconds
+func parseTimeToSeconds(timeStr string) float64 {
+	if timeStr == "" {
+		return 0
+	}
+
+	// Split by colon to get hours, minutes, seconds
+	parts := strings.Split(timeStr, ":")
+	if len(parts) != 3 {
+		return 0
+	}
+
+	hours, err := strconv.ParseFloat(parts[0], 64)
+	if err != nil {
+		return 0
+	}
+
+	minutes, err := strconv.ParseFloat(parts[1], 64)
+	if err != nil {
+		return 0
+	}
+
+	seconds, err := strconv.ParseFloat(parts[2], 64)
+	if err != nil {
+		return 0
+	}
+
+	return hours*3600 + minutes*60 + seconds
+}
+
+// makeProgressCallback creates a logging callback for transcode progress
+func (uc *ProcessTranscodeUseCase) makeProgressCallback(
+	jobID int64,
+	transcodeID, mediaID, trackType, filename string,
+	totalDurationSecs int,
+) ports.ProgressCallback {
+	lastLogTime := time.Time{} // Zero time ensures first progress is logged
+	interval := time.Duration(uc.config.Transcoding.ProgressLogIntervalSecs) * time.Second
+
+	return func(progress ports.TranscodeProgress) {
+		// Skip the final 100% callback (completion is logged separately)
+		if progress.Percentage == 100 {
+			return
+		}
+
+		// Throttle based on configured interval
+		if time.Since(lastLogTime) < interval {
+			return
+		}
+
+		// Calculate percentage from time
+		currentSecs := parseTimeToSeconds(progress.Time)
+		percent := 0.0
+		if totalDurationSecs > 0 {
+			percent = (currentSecs * 100) / float64(totalDurationSecs)
+			if percent > 99 {
+				percent = 99
+			}
+		}
+
+		logger.Debug().
+			Str("transcode_id", transcodeID).
+			Str("media_id", mediaID).
+			Str("filename", filename).
+			Str("track_type", trackType).
+			Str("time", progress.Time).
+			Float64("percent", percent).
+			Str("speed", progress.Speed).
+			Msg("Transcode progress")
+
+		// Broadcast progress via WebSocket
+		uc.jobNotifier.NotifyJobProgress(jobID, "transcode_video", ports.JobProgress{
+			Frame:      progress.Frame,
+			FPS:        progress.FPS,
+			Bitrate:    progress.Bitrate,
+			Time:       progress.Time,
+			Speed:      progress.Speed,
+			Percentage: percent,
+			Message:    fmt.Sprintf("Transcoding %s - %s", trackType, filename),
+		})
+
+		lastLogTime = time.Now()
 	}
 }
 
@@ -99,9 +189,9 @@ func (uc *ProcessTranscodeUseCase) Execute(ctx context.Context, input ProcessTra
 	var transcodeErr error
 	switch transcode.TrackType {
 	case domain.TrackTypeVideo:
-		transcodeErr = uc.transcodeVideo(ctx, media, transcode, outputPath)
+		transcodeErr = uc.transcodeVideo(ctx, input.JobID, media, transcode, outputPath)
 	case domain.TrackTypeAudio:
-		transcodeErr = uc.transcodeAudio(ctx, media, transcode, outputPath)
+		transcodeErr = uc.transcodeAudio(ctx, input.JobID, media, transcode, outputPath)
 	case domain.TrackTypeSubtitle:
 		transcodeErr = uc.transcodeSubtitle(ctx, media, transcode, outputPath)
 	default:
@@ -160,7 +250,7 @@ func (uc *ProcessTranscodeUseCase) Execute(ctx context.Context, input ProcessTra
 }
 
 // transcodeVideo handles video transcoding
-func (uc *ProcessTranscodeUseCase) transcodeVideo(ctx context.Context, media *domain.MediaFile, transcode *domain.Transcode, outputPath string) error {
+func (uc *ProcessTranscodeUseCase) transcodeVideo(ctx context.Context, jobID int64, media *domain.MediaFile, transcode *domain.Transcode, outputPath string) error {
 	// Find quality profile
 	var quality *config.QualityProfile
 	for _, q := range uc.config.Transcoding.QualityProfiles {
@@ -209,11 +299,12 @@ func (uc *ProcessTranscodeUseCase) transcodeVideo(ctx context.Context, media *do
 	}
 
 	// Execute transcoding with progress callback
-	return uc.transcoder.TranscodeVideo(ctx, opts, nil)
+	callback := uc.makeProgressCallback(jobID, transcode.ID, media.ID, string(transcode.TrackType), media.Filename, media.Duration)
+	return uc.transcoder.TranscodeVideo(ctx, opts, callback)
 }
 
 // transcodeAudio handles audio transcoding
-func (uc *ProcessTranscodeUseCase) transcodeAudio(ctx context.Context, media *domain.MediaFile, transcode *domain.Transcode, outputPath string) error {
+func (uc *ProcessTranscodeUseCase) transcodeAudio(ctx context.Context, jobID int64, media *domain.MediaFile, transcode *domain.Transcode, outputPath string) error {
 	// Parse audio bitrate from quality profile (use first enabled profile)
 	var audioBitrateStr string
 	for _, q := range uc.config.Transcoding.QualityProfiles {
@@ -245,8 +336,9 @@ func (uc *ProcessTranscodeUseCase) transcodeAudio(ctx context.Context, media *do
 		TrackType:         fmt.Sprintf("audio-%d", transcode.TrackIndex),
 	}
 
-	// Execute transcoding
-	return uc.transcoder.TranscodeAudio(ctx, opts, nil)
+	// Execute transcoding with progress callback
+	callback := uc.makeProgressCallback(jobID, transcode.ID, media.ID, opts.TrackType, media.Filename, media.Duration)
+	return uc.transcoder.TranscodeAudio(ctx, opts, callback)
 }
 
 // transcodeSubtitle handles subtitle extraction

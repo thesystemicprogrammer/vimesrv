@@ -3,6 +3,7 @@ package rebuild
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/thesystemicprogrammer/vimesrv/internal/domain"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/config"
@@ -13,9 +14,11 @@ import (
 
 // Linker handles linking media files to TMDB metadata during rebuild
 type Linker struct {
-	movieLinker     *linker.MovieLinker
-	episodeLinker   *linker.EpisodeLinker
-	mediaRepository ports.MediaRepository
+	movieLinker           *linker.MovieLinker
+	episodeLinker         *linker.EpisodeLinker
+	mediaRepository       ports.MediaRepository
+	searchRepository      ports.SearchRepository
+	movieCreditRepository ports.MovieCreditRepository
 }
 
 // NewLinker creates a new rebuild linker
@@ -29,6 +32,8 @@ func NewLinker(
 	episodeMetadataRepository ports.EpisodeMetadataRepository,
 	movieCreditRepository ports.MovieCreditRepository,
 	movieCertificationRepository ports.MovieCertificationRepository,
+	seriesCreditRepository ports.SeriesCreditRepository,
+	searchRepository ports.SearchRepository,
 	mediaRepository ports.MediaRepository,
 ) *Linker {
 	return &Linker{
@@ -39,6 +44,7 @@ func NewLinker(
 			movieMetadataRepository,
 			movieCreditRepository,
 			movieCertificationRepository,
+			searchRepository,
 		),
 		episodeLinker: linker.NewEpisodeLinker(
 			tmdbConfig,
@@ -47,8 +53,12 @@ func NewLinker(
 			seriesMetadataRepository,
 			seasonMetadataRepository,
 			episodeMetadataRepository,
+			seriesCreditRepository,
+			searchRepository,
 		),
-		mediaRepository: mediaRepository,
+		mediaRepository:       mediaRepository,
+		searchRepository:      searchRepository,
+		movieCreditRepository: movieCreditRepository,
 	}
 }
 
@@ -84,6 +94,9 @@ func (l *Linker) linkMovie(ctx context.Context, media *domain.MediaFile, tmdbID 
 	if err := l.mediaRepository.Update(ctx, media); err != nil {
 		return fmt.Errorf("failed to update media file: %w", err)
 	}
+
+	// Index movie for full-text search
+	l.indexMovieForSearch(ctx, media.ID, result.MovieMetadata.ID, result.Details.Title, result.Details.OriginalTitle)
 
 	logger.Info().
 		Str("media_id", media.ID).
@@ -124,4 +137,40 @@ func (l *Linker) linkEpisode(ctx context.Context, media *domain.MediaFile, serie
 		Msg("[rebuild] Linked to episode")
 
 	return nil
+}
+
+// indexMovieForSearch adds the movie to the FTS search index
+func (l *Linker) indexMovieForSearch(ctx context.Context, mediaID string, movieMetadataID int64, title, originalTitle string) {
+	if l.searchRepository == nil {
+		return
+	}
+
+	// Get credits from the database to build searchable cast/crew strings
+	var castNames, crewNames []string
+	if l.movieCreditRepository != nil {
+		credits, err := l.movieCreditRepository.GetByMovieMetadataID(ctx, movieMetadataID)
+		if err != nil {
+			logger.Debug().Err(err).Int64("movie_id", movieMetadataID).Msg("No credits available for search indexing")
+		} else {
+			for _, credit := range credits {
+				if credit.CreditType == domain.CreditTypeCast {
+					castNames = append(castNames, credit.Name)
+				} else {
+					crewNames = append(crewNames, credit.Name)
+				}
+			}
+		}
+	}
+
+	if err := l.searchRepository.IndexMovie(
+		ctx,
+		mediaID,
+		movieMetadataID,
+		title,
+		originalTitle,
+		strings.Join(castNames, " "),
+		strings.Join(crewNames, " "),
+	); err != nil {
+		logger.Warn().Err(err).Int64("movie_id", movieMetadataID).Msg("Failed to index movie for search")
+	}
 }

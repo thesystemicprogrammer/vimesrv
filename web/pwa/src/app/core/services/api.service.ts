@@ -280,6 +280,47 @@ export interface MoviesListResponse {
 
 export interface SeriesListResponse {
   items: SeriesSummary[];
+  total: number;
+  page: number;
+  per_page: number;
+}
+
+// Filter options for movies and series lists
+export type SortBy = 'date_added' | 'title' | 'year' | 'rating';
+export type SortOrder = 'asc' | 'desc';
+
+export interface ListFilterOptions {
+  page?: number;
+  perPage?: number;
+  sortBy?: SortBy;
+  sortOrder?: SortOrder;
+  genres?: string[];
+  yearFrom?: number;
+  yearTo?: number;
+  minRating?: number;
+}
+
+export interface GenresResponse {
+  movie_genres: string[];
+  series_genres: string[];
+}
+
+// Library search types
+export interface LibrarySearchResult {
+  type: 'movie' | 'series';
+  media_id?: string;
+  series_metadata_id?: number;
+  movie_metadata_id?: number;
+  title: string;
+  year?: string;
+  poster_path?: string;
+  vote_average: number;
+}
+
+export interface LibrarySearchResponse {
+  query: string;
+  results: LibrarySearchResult[];
+  count: number;
 }
 
 export interface RecentListResponse {
@@ -368,6 +409,36 @@ export interface ChangePasswordRequest {
   new_password: string;
 }
 
+// Job types
+export type JobStatus = 'queued' | 'running' | 'succeeded' | 'dead';
+export type JobType = 'scan_library' | 'transcode_video' | 'transcode_audio' | 'enrich_metadata' | 'fetch_translations';
+
+export interface Job {
+  id: number;
+  type: JobType;
+  status: JobStatus;
+  payload?: Record<string, unknown>;
+  priority: number;
+  attempts: number;
+  max_attempts: number;
+  last_error?: string;
+  created_at: string;
+  started_at?: string;
+  finished_at?: string;
+  updated_at: string;
+}
+
+export interface JobListResponse {
+  jobs: Job[];
+  total: number;
+}
+
+export interface JobListOptions {
+  status?: JobStatus[];
+  type?: JobType[];
+  includeOld?: boolean;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -432,12 +503,31 @@ export class ApiService {
   }
 
   // Library browsing endpoints
-  listMovies(page = 1, perPage = 20): Observable<ApiResponse<MoviesListResponse>> {
+  listMovies(options: ListFilterOptions = {}): Observable<ApiResponse<MoviesListResponse>> {
     const lang = this.auth.language();
-    const params = new HttpParams()
-      .set('page', page.toString())
-      .set('per_page', perPage.toString())
+    let params = new HttpParams()
+      .set('page', (options.page ?? 1).toString())
+      .set('per_page', (options.perPage ?? 20).toString())
       .set('lang', lang);
+
+    if (options.sortBy) {
+      params = params.set('sort', options.sortBy);
+    }
+    if (options.sortOrder) {
+      params = params.set('order', options.sortOrder);
+    }
+    if (options.genres && options.genres.length > 0) {
+      params = params.set('genres', options.genres.join(','));
+    }
+    if (options.yearFrom) {
+      params = params.set('year_from', options.yearFrom.toString());
+    }
+    if (options.yearTo) {
+      params = params.set('year_to', options.yearTo.toString());
+    }
+    if (options.minRating) {
+      params = params.set('min_rating', options.minRating.toString());
+    }
 
     return this.http.get<ApiResponse<MoviesListResponse>>(
       `${this.baseUrl}/library/movies`,
@@ -461,11 +551,32 @@ export class ApiService {
     );
   }
 
-  listSeries(includeEmpty = false): Observable<ApiResponse<SeriesListResponse>> {
+  listSeries(options: ListFilterOptions & { includeEmpty?: boolean } = {}): Observable<ApiResponse<SeriesListResponse>> {
     const lang = this.auth.language();
-    const params = new HttpParams()
+    let params = new HttpParams()
+      .set('page', (options.page ?? 1).toString())
+      .set('per_page', (options.perPage ?? 20).toString())
       .set('lang', lang)
-      .set('include_empty', includeEmpty.toString());
+      .set('include_empty', (options.includeEmpty ?? false).toString());
+
+    if (options.sortBy) {
+      params = params.set('sort', options.sortBy);
+    }
+    if (options.sortOrder) {
+      params = params.set('order', options.sortOrder);
+    }
+    if (options.genres && options.genres.length > 0) {
+      params = params.set('genres', options.genres.join(','));
+    }
+    if (options.yearFrom) {
+      params = params.set('year_from', options.yearFrom.toString());
+    }
+    if (options.yearTo) {
+      params = params.set('year_to', options.yearTo.toString());
+    }
+    if (options.minRating) {
+      params = params.set('min_rating', options.minRating.toString());
+    }
 
     return this.http.get<ApiResponse<SeriesListResponse>>(
       `${this.baseUrl}/library/series`,
@@ -506,6 +617,25 @@ export class ApiService {
 
     return this.http.get<ApiResponse<UnmatchedListResponse>>(
       `${this.baseUrl}/library/unmatched`,
+      { params }
+    );
+  }
+
+  listGenres(): Observable<ApiResponse<GenresResponse>> {
+    return this.http.get<ApiResponse<GenresResponse>>(
+      `${this.baseUrl}/library/genres`
+    );
+  }
+
+  searchLibrary(query: string, limit = 20): Observable<ApiResponse<LibrarySearchResponse>> {
+    const lang = this.auth.language();
+    const params = new HttpParams()
+      .set('q', query)
+      .set('lang', lang)
+      .set('limit', limit.toString());
+
+    return this.http.get<ApiResponse<LibrarySearchResponse>>(
+      `${this.baseUrl}/library/search`,
       { params }
     );
   }
@@ -600,6 +730,26 @@ export class ApiService {
         // Update the token with the new one (must_change_password will be false)
         this.auth.setToken(response.data.token);
       })
+    );
+  }
+
+  // Job management endpoints
+  listJobs(options: JobListOptions = {}): Observable<ApiResponse<JobListResponse>> {
+    let params = new HttpParams();
+
+    if (options.status && options.status.length > 0) {
+      params = params.set('status', options.status.join(','));
+    }
+    if (options.type && options.type.length > 0) {
+      params = params.set('type', options.type.join(','));
+    }
+    if (options.includeOld) {
+      params = params.set('include_old', 'true');
+    }
+
+    return this.http.get<ApiResponse<JobListResponse>>(
+      `${this.baseUrl}/jobs`,
+      { params }
     );
   }
 
