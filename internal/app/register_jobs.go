@@ -3,6 +3,7 @@ package app
 import (
 	"github.com/thesystemicprogrammer/vimesrv/internal/adapters/library"
 	"github.com/thesystemicprogrammer/vimesrv/internal/adapters/metadata"
+	rebuildadapter "github.com/thesystemicprogrammer/vimesrv/internal/adapters/rebuild"
 	"github.com/thesystemicprogrammer/vimesrv/internal/adapters/transcode"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared"
 )
@@ -35,4 +36,8 @@ func registerJobs(useCases *UseCases, adapters *Adapters) {
 		)
 		adapters.HandlerRegistry.Register(shared.JobTypeFetchTranslations, fetchTranslationsJobHandler)
 	}
+
+	// Prepare Rebuild (periodic export of rebuild.json)
+	prepareRebuildJobHandler := rebuildadapter.NewPrepareRebuildJobHandler(useCases.PrepareRebuildUseCase)
+	adapters.HandlerRegistry.Register(shared.JobTypePrepareRebuild, prepareRebuildJobHandler)
 }

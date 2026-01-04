@@ -79,7 +79,12 @@ func filterGroupedByQuality(grouped *GroupedTranscodes, quality string) *Grouped
 }
 
 // extractHeight extracts height from quality string (e.g., "720p" -> 720)
+// Returns -1 for "original" quality as a sentinel value for special handling
 func extractHeight(quality string) int {
+	if quality == "original" {
+		return -1 // Sentinel value for original quality
+	}
+
 	// Remove 'p' suffix if present
 	quality = strings.TrimSuffix(quality, "p")
 

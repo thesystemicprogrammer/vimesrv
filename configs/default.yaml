@@ -151,6 +151,12 @@ websocket:
 rebuild:
   allow_rebuild: false # Must be set to true to enable --rebuild-from-dump
   tmdb_requests_per_10s: 15 # Conservative rate limit during rebuild (default TMDB limit is 35)
+  # Automatic rebuild.json export (backup of users and TMDB link mappings)
+  periodic_export:
+    enabled: true
+    cron_spec: "0 0 * * * *" # Every hour (6-field format: sec min hour day month weekday)
+    run_at_startup: true # Also run immediately on server start
+    priority: 10 # Low priority (higher number = lower priority)
 
 # Distributed transcoding worker configuration
 # When enabled, transcode jobs are processed exclusively by remote workers

@@ -251,37 +251,81 @@ func (uc *ProcessTranscodeUseCase) Execute(ctx context.Context, input ProcessTra
 
 // transcodeVideo handles video transcoding
 func (uc *ProcessTranscodeUseCase) transcodeVideo(ctx context.Context, jobID int64, media *domain.MediaFile, transcode *domain.Transcode, outputPath string) error {
-	// Find quality profile
-	var quality *config.QualityProfile
-	for _, q := range uc.config.Transcoding.QualityProfiles {
-		if q.Name == transcode.Quality {
-			quality = &q
-			break
+	var width, height, crf, maxBitrate int
+
+	// Handle "original" quality - use source resolution with settings from highest enabled profile
+	if transcode.Quality == "original" {
+		width = media.Width
+		height = media.Height
+
+		if width == 0 || height == 0 {
+			return fmt.Errorf("source video dimensions unknown, cannot create original quality transcode")
 		}
-	}
-	if quality == nil {
-		return fmt.Errorf("quality profile not found: %s", transcode.Quality)
-	}
 
-	// Parse resolution
-	parts := strings.Split(quality.Resolution, "x")
-	if len(parts) != 2 {
-		return fmt.Errorf("invalid resolution format: %s", quality.Resolution)
-	}
-	width, err := strconv.Atoi(parts[0])
-	if err != nil {
-		return fmt.Errorf("invalid width in resolution: %w", err)
-	}
-	height, err := strconv.Atoi(parts[1])
-	if err != nil {
-		return fmt.Errorf("invalid height in resolution: %w", err)
-	}
+		// Find highest enabled quality profile for CRF/bitrate settings
+		var baseProfile *config.QualityProfile
+		for i := len(uc.config.Transcoding.QualityProfiles) - 1; i >= 0; i-- {
+			if uc.config.Transcoding.QualityProfiles[i].Enabled {
+				baseProfile = &uc.config.Transcoding.QualityProfiles[i]
+				break
+			}
+		}
+		if baseProfile == nil {
+			return fmt.Errorf("no enabled quality profile found for original quality settings")
+		}
 
-	// Parse max bitrate (remove 'k' suffix)
-	maxBitrateStr := strings.TrimSuffix(quality.MaxBitrate, "k")
-	maxBitrate, err := strconv.Atoi(maxBitrateStr)
-	if err != nil {
-		return fmt.Errorf("invalid max bitrate: %w", err)
+		crf = baseProfile.CRF
+		maxBitrateStr := strings.TrimSuffix(baseProfile.MaxBitrate, "k")
+		var err error
+		maxBitrate, err = strconv.Atoi(maxBitrateStr)
+		if err != nil {
+			return fmt.Errorf("invalid max bitrate in base profile: %w", err)
+		}
+
+		logger.Info().
+			Str("transcode_id", transcode.ID).
+			Int("width", width).
+			Int("height", height).
+			Int("crf", crf).
+			Int("max_bitrate", maxBitrate).
+			Str("base_profile", baseProfile.Name).
+			Msg("Using original resolution with settings from highest enabled profile")
+	} else {
+		// Find quality profile by name
+		var quality *config.QualityProfile
+		for _, q := range uc.config.Transcoding.QualityProfiles {
+			if q.Name == transcode.Quality {
+				quality = &q
+				break
+			}
+		}
+		if quality == nil {
+			return fmt.Errorf("quality profile not found: %s", transcode.Quality)
+		}
+
+		// Parse resolution
+		parts := strings.Split(quality.Resolution, "x")
+		if len(parts) != 2 {
+			return fmt.Errorf("invalid resolution format: %s", quality.Resolution)
+		}
+		var err error
+		width, err = strconv.Atoi(parts[0])
+		if err != nil {
+			return fmt.Errorf("invalid width in resolution: %w", err)
+		}
+		height, err = strconv.Atoi(parts[1])
+		if err != nil {
+			return fmt.Errorf("invalid height in resolution: %w", err)
+		}
+
+		crf = quality.CRF
+
+		// Parse max bitrate (remove 'k' suffix)
+		maxBitrateStr := strings.TrimSuffix(quality.MaxBitrate, "k")
+		maxBitrate, err = strconv.Atoi(maxBitrateStr)
+		if err != nil {
+			return fmt.Errorf("invalid max bitrate: %w", err)
+		}
 	}
 
 	// Build transcode options
@@ -291,7 +335,7 @@ func (uc *ProcessTranscodeUseCase) transcodeVideo(ctx context.Context, jobID int
 		Width:       width,
 		Height:      height,
 		VideoCodec:  "libx264",
-		CRF:         quality.CRF,
+		CRF:         crf,
 		MaxBitrate:  maxBitrate,
 		Preset:      "medium",
 		SegmentTime: uc.config.Transcoding.SegmentDuration,

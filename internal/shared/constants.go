@@ -43,6 +43,7 @@ const (
 	JobTypeTranscodeSubtitle = "transcode_subtitle"
 	JobTypeEnrichMetadata    = "enrich_metadata"
 	JobTypeFetchTranslations = "fetch_translations"
+	JobTypePrepareRebuild    = "prepare_rebuild"
 )
 
 // Job priorities (lower value = higher priority)

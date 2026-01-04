@@ -44,6 +44,7 @@ type Adapters struct {
 	LibraryRepository            ports.LibraryRepository
 	SearchRepository             ports.SearchRepository
 	UserRepository               ports.UserRepository
+	RebuildRepository            ports.RebuildRepository
 	WebSocketHub                 *websocket.Hub
 	ProgressCache                *websocket.ProgressCache
 	JobNotifier                  ports.JobNotifier
@@ -79,6 +80,7 @@ func initAdapters(cfg *config.Config, db *database.DB) *Adapters {
 		LibraryRepository:            repository.NewLibraryRepository(db),
 		SearchRepository:             repository.NewSearchRepository(db),
 		UserRepository:               repository.NewSQLiteUserRepository(db),
+		RebuildRepository:            repository.NewSQLiteRebuildRepository(db),
 	}
 
 	// Initialize WebSocket hub if enabled

@@ -111,3 +111,69 @@ func TestParseContentPath(t *testing.T) {
 		})
 	}
 }
+
+// TestExtractHeight tests the extractHeight helper function
+func TestExtractHeight(t *testing.T) {
+	tests := []struct {
+		name    string
+		quality string
+		want    int
+	}{
+		{"360p", "360p", 360},
+		{"480p", "480p", 480},
+		{"720p", "720p", 720},
+		{"1080p", "1080p", 1080},
+		{"2160p", "2160p", 2160},
+		{"original quality", "original", -1},
+		{"without p suffix", "720", 720},
+		{"invalid string", "invalid", 0},
+		{"empty string", "", 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractHeight(tt.quality)
+			if got != tt.want {
+				t.Errorf("extractHeight(%q) = %d, want %d", tt.quality, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestParseContentPath_OriginalQuality tests that "original" quality works in content paths
+func TestParseContentPath_OriginalQuality(t *testing.T) {
+	tests := []struct {
+		name            string
+		path            string
+		wantFilePath    string
+		wantContentType string
+	}{
+		{
+			name:            "original video init segment",
+			path:            "original/video/init.mp4",
+			wantFilePath:    "transcoded/original/video/init.mp4",
+			wantContentType: "video/mp4",
+		},
+		{
+			name:            "original video chunk segment",
+			path:            "original/video/chunk-000.m4s",
+			wantFilePath:    "transcoded/original/video/chunk-000.m4s",
+			wantContentType: "video/iso.segment",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseContentPath(tt.path)
+			if result == nil {
+				t.Fatalf("parseContentPath(%q) = nil, want non-nil", tt.path)
+			}
+			if result.FilePath != tt.wantFilePath {
+				t.Errorf("parseContentPath(%q).FilePath = %q, want %q", tt.path, result.FilePath, tt.wantFilePath)
+			}
+			if result.ContentType != tt.wantContentType {
+				t.Errorf("parseContentPath(%q).ContentType = %q, want %q", tt.path, result.ContentType, tt.wantContentType)
+			}
+		})
+	}
+}

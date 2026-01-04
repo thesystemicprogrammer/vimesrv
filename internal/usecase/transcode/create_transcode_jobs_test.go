@@ -769,3 +769,346 @@ func TestCreateTranscodeJobsUseCase_Execute_MultipleSubtitles(t *testing.T) {
 	assert.True(t, subtitleIndices[1])
 	assert.True(t, subtitleIndices[2])
 }
+
+// TestCreateTranscodeJobs_SkipsHigherResolutions tests that transcode jobs are not created
+// for quality profiles with resolution higher than the source video
+func TestCreateTranscodeJobs_SkipsHigherResolutions(t *testing.T) {
+	cfg := &config.Config{
+		Transcoding: config.TranscodingConfig{
+			QualityProfiles: []config.QualityProfile{
+				{Name: "360p", Enabled: true, Resolution: "640x360", CRF: 25, MaxBitrate: "900k", AudioBitrate: "96k"},
+				{Name: "480p", Enabled: true, Resolution: "854x480", CRF: 24, MaxBitrate: "1500k", AudioBitrate: "128k"},
+				{Name: "720p", Enabled: true, Resolution: "1280x720", CRF: 23, MaxBitrate: "2800k", AudioBitrate: "128k"},
+				{Name: "1080p", Enabled: true, Resolution: "1920x1080", CRF: 21, MaxBitrate: "5500k", AudioBitrate: "192k"},
+			},
+		},
+	}
+
+	// Source video is 480p (854x480)
+	mockMediaRepo := &MockMediaRepository{
+		GetFn: func(ctx context.Context, id string) (*domain.MediaFile, error) {
+			return &domain.MediaFile{
+				ID:       id,
+				Filename: "test.mp4",
+				FilePath: "/media/test.mp4",
+				Width:    854,
+				Height:   480,
+			}, nil
+		},
+	}
+
+	mockTranscodeRepo := &MockTranscodeRepository{CreatedTranscodes: make([]*domain.Transcode, 0)}
+	mockJobRepo := &MockJobRepository{EnqueuedJobs: make([]*domain.Job, 0)}
+	mockFFProbe := &MockFFProbeService{
+		GetAudioStreamsFn: func(filePath string) ([]*ports.AudioStreamInfo, error) {
+			return []*ports.AudioStreamInfo{}, nil
+		},
+		GetSubtitleStreamsFn: func(filePath string) ([]*ports.SubtitleStreamInfo, error) {
+			return []*ports.SubtitleStreamInfo{}, nil
+		},
+	}
+
+	useCase := NewCreateTranscodeJobsUseCase(
+		mockMediaRepo,
+		mockTranscodeRepo,
+		createEnqueueJobUseCase(mockJobRepo),
+		&MockAudioStreamRepository{},
+		&MockSubtitleStreamRepository{},
+		mockFFProbe,
+		cfg,
+	)
+
+	output, err := useCase.Execute(context.Background(), CreateTranscodeJobsInput{
+		MediaID: "media123",
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, 2, output.VideoJobs, "Should create only 360p and 480p jobs (not 720p, 1080p)")
+	assert.Equal(t, 2, output.TotalJobs)
+
+	// Verify only 360p and 480p transcodes were created
+	createdQualities := make(map[string]bool)
+	for _, tc := range mockTranscodeRepo.CreatedTranscodes {
+		if tc.TrackType == domain.TrackTypeVideo {
+			createdQualities[tc.Quality] = true
+		}
+	}
+	assert.True(t, createdQualities["360p"], "Should create 360p transcode")
+	assert.True(t, createdQualities["480p"], "Should create 480p transcode")
+	assert.False(t, createdQualities["720p"], "Should NOT create 720p transcode")
+	assert.False(t, createdQualities["1080p"], "Should NOT create 1080p transcode")
+}
+
+// TestCreateTranscodeJobs_AllProfilesHigher_UsesOriginal tests that when all profiles
+// are higher resolution than source, an "original" quality transcode is created
+func TestCreateTranscodeJobs_AllProfilesHigher_UsesOriginal(t *testing.T) {
+	cfg := &config.Config{
+		Transcoding: config.TranscodingConfig{
+			QualityProfiles: []config.QualityProfile{
+				{Name: "360p", Enabled: true, Resolution: "640x360", CRF: 25, MaxBitrate: "900k", AudioBitrate: "96k"},
+				{Name: "480p", Enabled: true, Resolution: "854x480", CRF: 24, MaxBitrate: "1500k", AudioBitrate: "128k"},
+			},
+		},
+	}
+
+	// Source video is 240p (426x240) - smaller than all profiles
+	mockMediaRepo := &MockMediaRepository{
+		GetFn: func(ctx context.Context, id string) (*domain.MediaFile, error) {
+			return &domain.MediaFile{
+				ID:       id,
+				Filename: "test.mp4",
+				FilePath: "/media/test.mp4",
+				Width:    426,
+				Height:   240,
+			}, nil
+		},
+	}
+
+	mockTranscodeRepo := &MockTranscodeRepository{CreatedTranscodes: make([]*domain.Transcode, 0)}
+	mockJobRepo := &MockJobRepository{EnqueuedJobs: make([]*domain.Job, 0)}
+	mockFFProbe := &MockFFProbeService{
+		GetAudioStreamsFn: func(filePath string) ([]*ports.AudioStreamInfo, error) {
+			return []*ports.AudioStreamInfo{}, nil
+		},
+		GetSubtitleStreamsFn: func(filePath string) ([]*ports.SubtitleStreamInfo, error) {
+			return []*ports.SubtitleStreamInfo{}, nil
+		},
+	}
+
+	useCase := NewCreateTranscodeJobsUseCase(
+		mockMediaRepo,
+		mockTranscodeRepo,
+		createEnqueueJobUseCase(mockJobRepo),
+		&MockAudioStreamRepository{},
+		&MockSubtitleStreamRepository{},
+		mockFFProbe,
+		cfg,
+	)
+
+	output, err := useCase.Execute(context.Background(), CreateTranscodeJobsInput{
+		MediaID: "media123",
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, output.VideoJobs, "Should create single 'original' quality job")
+	assert.Equal(t, 1, output.TotalJobs)
+
+	// Verify "original" transcode was created
+	require.Len(t, mockTranscodeRepo.CreatedTranscodes, 1)
+	assert.Equal(t, "original", mockTranscodeRepo.CreatedTranscodes[0].Quality)
+	assert.Equal(t, domain.TrackTypeVideo, mockTranscodeRepo.CreatedTranscodes[0].TrackType)
+}
+
+// TestCreateTranscodeJobs_ExactMatchResolution tests that exact resolution matches work
+func TestCreateTranscodeJobs_ExactMatchResolution(t *testing.T) {
+	cfg := &config.Config{
+		Transcoding: config.TranscodingConfig{
+			QualityProfiles: []config.QualityProfile{
+				{Name: "360p", Enabled: true, Resolution: "640x360", CRF: 25, MaxBitrate: "900k", AudioBitrate: "96k"},
+				{Name: "720p", Enabled: true, Resolution: "1280x720", CRF: 23, MaxBitrate: "2800k", AudioBitrate: "128k"},
+			},
+		},
+	}
+
+	// Source video is exactly 720p (1280x720)
+	mockMediaRepo := &MockMediaRepository{
+		GetFn: func(ctx context.Context, id string) (*domain.MediaFile, error) {
+			return &domain.MediaFile{
+				ID:       id,
+				Filename: "test.mp4",
+				FilePath: "/media/test.mp4",
+				Width:    1280,
+				Height:   720,
+			}, nil
+		},
+	}
+
+	mockTranscodeRepo := &MockTranscodeRepository{CreatedTranscodes: make([]*domain.Transcode, 0)}
+	mockJobRepo := &MockJobRepository{EnqueuedJobs: make([]*domain.Job, 0)}
+	mockFFProbe := &MockFFProbeService{
+		GetAudioStreamsFn: func(filePath string) ([]*ports.AudioStreamInfo, error) {
+			return []*ports.AudioStreamInfo{}, nil
+		},
+		GetSubtitleStreamsFn: func(filePath string) ([]*ports.SubtitleStreamInfo, error) {
+			return []*ports.SubtitleStreamInfo{}, nil
+		},
+	}
+
+	useCase := NewCreateTranscodeJobsUseCase(
+		mockMediaRepo,
+		mockTranscodeRepo,
+		createEnqueueJobUseCase(mockJobRepo),
+		&MockAudioStreamRepository{},
+		&MockSubtitleStreamRepository{},
+		mockFFProbe,
+		cfg,
+	)
+
+	output, err := useCase.Execute(context.Background(), CreateTranscodeJobsInput{
+		MediaID: "media123",
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, 2, output.VideoJobs, "Should create both 360p and 720p jobs")
+
+	// Verify both transcodes were created
+	createdQualities := make(map[string]bool)
+	for _, tc := range mockTranscodeRepo.CreatedTranscodes {
+		if tc.TrackType == domain.TrackTypeVideo {
+			createdQualities[tc.Quality] = true
+		}
+	}
+	assert.True(t, createdQualities["360p"], "Should create 360p transcode")
+	assert.True(t, createdQualities["720p"], "Should create 720p transcode (exact match)")
+}
+
+// TestCreateTranscodeJobs_SourceLargerThanAll tests normal case where source is larger than all profiles
+func TestCreateTranscodeJobs_SourceLargerThanAll(t *testing.T) {
+	cfg := &config.Config{
+		Transcoding: config.TranscodingConfig{
+			QualityProfiles: []config.QualityProfile{
+				{Name: "360p", Enabled: true, Resolution: "640x360", CRF: 25, MaxBitrate: "900k", AudioBitrate: "96k"},
+				{Name: "720p", Enabled: true, Resolution: "1280x720", CRF: 23, MaxBitrate: "2800k", AudioBitrate: "128k"},
+				{Name: "1080p", Enabled: true, Resolution: "1920x1080", CRF: 21, MaxBitrate: "5500k", AudioBitrate: "192k"},
+			},
+		},
+	}
+
+	// Source video is 4K (3840x2160) - larger than all profiles
+	mockMediaRepo := &MockMediaRepository{
+		GetFn: func(ctx context.Context, id string) (*domain.MediaFile, error) {
+			return &domain.MediaFile{
+				ID:       id,
+				Filename: "test.mp4",
+				FilePath: "/media/test.mp4",
+				Width:    3840,
+				Height:   2160,
+			}, nil
+		},
+	}
+
+	mockTranscodeRepo := &MockTranscodeRepository{CreatedTranscodes: make([]*domain.Transcode, 0)}
+	mockJobRepo := &MockJobRepository{EnqueuedJobs: make([]*domain.Job, 0)}
+	mockFFProbe := &MockFFProbeService{
+		GetAudioStreamsFn: func(filePath string) ([]*ports.AudioStreamInfo, error) {
+			return []*ports.AudioStreamInfo{}, nil
+		},
+		GetSubtitleStreamsFn: func(filePath string) ([]*ports.SubtitleStreamInfo, error) {
+			return []*ports.SubtitleStreamInfo{}, nil
+		},
+	}
+
+	useCase := NewCreateTranscodeJobsUseCase(
+		mockMediaRepo,
+		mockTranscodeRepo,
+		createEnqueueJobUseCase(mockJobRepo),
+		&MockAudioStreamRepository{},
+		&MockSubtitleStreamRepository{},
+		mockFFProbe,
+		cfg,
+	)
+
+	output, err := useCase.Execute(context.Background(), CreateTranscodeJobsInput{
+		MediaID: "media123",
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, 3, output.VideoJobs, "Should create all 3 video jobs")
+
+	// Verify all transcodes were created
+	createdQualities := make(map[string]bool)
+	for _, tc := range mockTranscodeRepo.CreatedTranscodes {
+		if tc.TrackType == domain.TrackTypeVideo {
+			createdQualities[tc.Quality] = true
+		}
+	}
+	assert.True(t, createdQualities["360p"])
+	assert.True(t, createdQualities["720p"])
+	assert.True(t, createdQualities["1080p"])
+}
+
+// TestCreateTranscodeJobs_ZeroSourceHeight tests edge case where source height is unknown
+func TestCreateTranscodeJobs_ZeroSourceHeight(t *testing.T) {
+	cfg := &config.Config{
+		Transcoding: config.TranscodingConfig{
+			QualityProfiles: []config.QualityProfile{
+				{Name: "360p", Enabled: true, Resolution: "640x360", CRF: 25, MaxBitrate: "900k", AudioBitrate: "96k"},
+				{Name: "720p", Enabled: true, Resolution: "1280x720", CRF: 23, MaxBitrate: "2800k", AudioBitrate: "128k"},
+			},
+		},
+	}
+
+	// Source video has unknown height (0)
+	mockMediaRepo := &MockMediaRepository{
+		GetFn: func(ctx context.Context, id string) (*domain.MediaFile, error) {
+			return &domain.MediaFile{
+				ID:       id,
+				Filename: "test.mp4",
+				FilePath: "/media/test.mp4",
+				Width:    0,
+				Height:   0,
+			}, nil
+		},
+	}
+
+	mockTranscodeRepo := &MockTranscodeRepository{CreatedTranscodes: make([]*domain.Transcode, 0)}
+	mockJobRepo := &MockJobRepository{EnqueuedJobs: make([]*domain.Job, 0)}
+	mockFFProbe := &MockFFProbeService{
+		GetAudioStreamsFn: func(filePath string) ([]*ports.AudioStreamInfo, error) {
+			return []*ports.AudioStreamInfo{}, nil
+		},
+		GetSubtitleStreamsFn: func(filePath string) ([]*ports.SubtitleStreamInfo, error) {
+			return []*ports.SubtitleStreamInfo{}, nil
+		},
+	}
+
+	useCase := NewCreateTranscodeJobsUseCase(
+		mockMediaRepo,
+		mockTranscodeRepo,
+		createEnqueueJobUseCase(mockJobRepo),
+		&MockAudioStreamRepository{},
+		&MockSubtitleStreamRepository{},
+		mockFFProbe,
+		cfg,
+	)
+
+	output, err := useCase.Execute(context.Background(), CreateTranscodeJobsInput{
+		MediaID: "media123",
+	})
+
+	require.NoError(t, err)
+	// When height is unknown (0), all profiles should be created (no filtering)
+	assert.Equal(t, 2, output.VideoJobs, "Should create all profiles when source height is unknown")
+}
+
+// TestParseResolutionHeight tests the parseResolutionHeight helper function
+func TestParseResolutionHeight(t *testing.T) {
+	tests := []struct {
+		name       string
+		resolution string
+		wantHeight int
+		wantErr    bool
+	}{
+		{"valid 360p", "640x360", 360, false},
+		{"valid 480p", "854x480", 480, false},
+		{"valid 720p", "1280x720", 720, false},
+		{"valid 1080p", "1920x1080", 1080, false},
+		{"valid 4K", "3840x2160", 2160, false},
+		{"invalid format no x", "1920", 0, true},
+		{"invalid format multiple x", "1920x1080x720", 0, true},
+		{"invalid height not number", "1920xabc", 0, true},
+		{"empty string", "", 0, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseResolutionHeight(tt.resolution)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.wantHeight, got)
+			}
+		})
+	}
+}

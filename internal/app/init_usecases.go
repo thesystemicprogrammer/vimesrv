@@ -8,6 +8,7 @@ import (
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/metadata"
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/metadata/linker"
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/ports"
+	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/rebuild"
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/transcode"
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/user"
 	workeruc "github.com/thesystemicprogrammer/vimesrv/internal/usecase/worker"
@@ -65,6 +66,8 @@ type UseCases struct {
 	CompleteWorkerJobUseCase *workeruc.CompleteWorkerJobUseCase
 	FailWorkerJobUseCase     *workeruc.FailWorkerJobUseCase
 	ReportProgressUseCase    *workeruc.ReportProgressUseCase
+	// Rebuild use cases
+	PrepareRebuildUseCase *rebuild.PrepareUseCase
 }
 
 func initUseCases(cfg *config.Config, adapters *Adapters) *UseCases {
@@ -328,6 +331,13 @@ func initUseCases(cfg *config.Config, adapters *Adapters) *UseCases {
 		DeleteUserUseCase:     user.NewDeleteUserUseCase(adapters.UserRepository),
 		ResetPasswordUseCase:  user.NewResetPasswordUseCase(adapters.UserRepository),
 		ChangePasswordUseCase: user.NewChangePasswordUseCase(adapters.UserRepository),
+		// Rebuild use cases
+		PrepareRebuildUseCase: rebuild.NewPrepareUseCase(
+			cfg,
+			adapters.UserRepository,
+			adapters.RebuildRepository,
+			adapters.FileSystemService,
+		),
 	}
 
 	// Initialize worker use cases if worker mode is enabled

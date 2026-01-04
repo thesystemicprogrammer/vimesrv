@@ -179,6 +179,10 @@ func setDefaults(v *viper.Viper) {
 	// Rebuild defaults
 	v.SetDefault("rebuild.allow_rebuild", false)
 	v.SetDefault("rebuild.tmdb_requests_per_10s", 15)
+	v.SetDefault("rebuild.periodic_export.enabled", true)
+	v.SetDefault("rebuild.periodic_export.cron_spec", "0 0 * * * *") // Every hour
+	v.SetDefault("rebuild.periodic_export.run_at_startup", true)
+	v.SetDefault("rebuild.periodic_export.priority", 10)
 
 	// Worker defaults (distributed transcoding)
 	v.SetDefault("worker.enabled", false)

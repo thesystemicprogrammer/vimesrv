@@ -132,6 +132,21 @@ type LibraryConfig struct {
 	RecentlyAddedCount int `mapstructure:"recently_added_count"`
 }
 
+// PeriodicExportConfig holds configuration for automatic rebuild.json generation
+type PeriodicExportConfig struct {
+	// Enabled enables periodic export of rebuild.json
+	Enabled bool `mapstructure:"enabled"`
+
+	// CronSpec is the cron expression for the export schedule (6-field format: sec min hour day month weekday)
+	CronSpec string `mapstructure:"cron_spec"`
+
+	// RunAtStartup triggers an export immediately on server start
+	RunAtStartup bool `mapstructure:"run_at_startup"`
+
+	// Priority is the job priority (higher number = lower priority)
+	Priority int `mapstructure:"priority"`
+}
+
 // RebuildConfig holds configuration for database rebuild functionality
 type RebuildConfig struct {
 	// AllowRebuild must be true to enable the --rebuild-from-dump flag.
@@ -142,6 +157,9 @@ type RebuildConfig struct {
 	// This is intentionally lower than the normal rate limit to avoid hitting TMDB limits
 	// when re-linking a large library. Default is 15 (vs 35 for normal operation).
 	TMDBRequestsPer10s int `mapstructure:"tmdb_requests_per_10s"`
+
+	// PeriodicExport configures automatic rebuild.json generation
+	PeriodicExport PeriodicExportConfig `mapstructure:"periodic_export"`
 }
 
 // WorkerConfig holds configuration for distributed transcoding workers
@@ -214,6 +232,12 @@ func (c *Config) Validate() error {
 	if c.Worker.Enabled {
 		if err := c.Worker.Validate(); err != nil {
 			return fmt.Errorf("worker config: %w", err)
+		}
+	}
+
+	if c.Rebuild.PeriodicExport.Enabled {
+		if err := c.Rebuild.PeriodicExport.Validate(); err != nil {
+			return fmt.Errorf("rebuild.periodic_export config: %w", err)
 		}
 	}
 
@@ -590,6 +614,14 @@ func (w *WorkerConfig) Validate() error {
 		if w.FallbackAfterMinutes < 1 || w.FallbackAfterMinutes > 1440 {
 			return fmt.Errorf("fallback_after_minutes must be between 1 and 1440 (24 hours), got %d", w.FallbackAfterMinutes)
 		}
+	}
+
+	return nil
+}
+
+func (p *PeriodicExportConfig) Validate() error {
+	if p.CronSpec == "" {
+		return fmt.Errorf("cron_spec cannot be empty when periodic export is enabled")
 	}
 
 	return nil

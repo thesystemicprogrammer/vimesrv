@@ -117,12 +117,70 @@ type TranscodeJobPayload struct {
 	ChannelLayout string `json:"channel_layout,omitempty"`
 }
 
-// createVideoTranscodeJobs creates transcode jobs for each video quality profile.
+// parseResolutionHeight extracts height from a resolution string like "1280x720"
+func parseResolutionHeight(resolution string) (int, error) {
+	parts := strings.Split(resolution, "x")
+	if len(parts) != 2 {
+		return 0, fmt.Errorf("invalid resolution format: %s", resolution)
+	}
+	height, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return 0, fmt.Errorf("invalid height in resolution %s: %w", resolution, err)
+	}
+	return height, nil
+}
+
+// createVideoTranscodeJobs creates transcode jobs for each video quality profile
+// that doesn't exceed the source video's resolution.
+// If all profiles exceed the source resolution, creates a single "original" quality job.
 // Returns the number of jobs created.
 func (uc *CreateTranscodeJobsUseCase) createVideoTranscodeJobs(ctx context.Context, media *domain.MediaFile, qualities []config.QualityProfile) (int, error) {
 	var videoJobs int
 
-	for _, quality := range qualities {
+	// Filter quality profiles to only those that don't exceed source resolution
+	// If source height is unknown (0), skip filtering and create all profiles
+	var filteredQualities []config.QualityProfile
+	if media.Height > 0 {
+		for _, quality := range qualities {
+			targetHeight, err := parseResolutionHeight(quality.Resolution)
+			if err != nil {
+				logger.Warn().
+					Str("media_id", media.ID).
+					Str("quality", quality.Name).
+					Str("resolution", quality.Resolution).
+					Err(err).
+					Msg("Failed to parse quality profile resolution, skipping")
+				continue
+			}
+
+			if targetHeight <= media.Height {
+				filteredQualities = append(filteredQualities, quality)
+			} else {
+				logger.Info().
+					Str("media_id", media.ID).
+					Str("quality", quality.Name).
+					Int("target_height", targetHeight).
+					Int("source_height", media.Height).
+					Msg("Skipping quality profile: target resolution exceeds source")
+			}
+		}
+	} else {
+		// Source height unknown, use all profiles
+		filteredQualities = qualities
+	}
+
+	// If no profiles remain after filtering, create an "original" quality transcode
+	if len(filteredQualities) == 0 && media.Height > 0 {
+		logger.Info().
+			Str("media_id", media.ID).
+			Int("source_height", media.Height).
+			Msg("All quality profiles exceed source resolution, creating original quality transcode")
+
+		return uc.createOriginalQualityTranscode(ctx, media)
+	}
+
+	// Create transcode jobs for each filtered quality profile
+	for _, quality := range filteredQualities {
 		transcodeID := fmt.Sprintf("%s-video-%s", media.ID, quality.Name)
 
 		// Create transcode record
@@ -155,6 +213,40 @@ func (uc *CreateTranscodeJobsUseCase) createVideoTranscodeJobs(ctx context.Conte
 	}
 
 	return videoJobs, nil
+}
+
+// createOriginalQualityTranscode creates a single transcode job at the original resolution.
+// This is used when all configured quality profiles exceed the source video's resolution.
+func (uc *CreateTranscodeJobsUseCase) createOriginalQualityTranscode(ctx context.Context, media *domain.MediaFile) (int, error) {
+	transcodeID := fmt.Sprintf("%s-video-original", media.ID)
+
+	// Create transcode record with "original" quality
+	transcode := domain.NewTranscode(
+		transcodeID,
+		media.ID,
+		"original",
+		domain.TrackTypeVideo,
+		0, // Video track index is always 0
+	)
+
+	if err := uc.transcodeRepo.Create(ctx, transcode); err != nil {
+		return 0, fmt.Errorf("failed to create original video transcode record: %w", err)
+	}
+
+	// Create job for this transcode
+	_, err := uc.enqueueJobUseCase.Execute(ctx, job.EnqueueJobInput{
+		Type: shared.JobTypeTranscodeVideo,
+		Payload: TranscodeJobPayload{
+			TranscodeID: transcodeID,
+			Filename:    media.Filename,
+		},
+		Priority: shared.JobPriorityTranscode,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("failed to create original video transcode job: %w", err)
+	}
+
+	return 1, nil
 }
 
 // createAudioTranscodeJobs detects audio streams, saves them to the database,

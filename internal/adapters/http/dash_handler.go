@@ -228,7 +228,7 @@ func (h *DASHHandler) generateMPD(
 	sb.WriteString("\n")
 
 	// Build adaptation sets
-	sb.WriteString(h.buildVideoAdaptationSet(mediaID, qualities, grouped))
+	sb.WriteString(h.buildVideoAdaptationSet(mediaID, mediaFile, qualities, grouped))
 	sb.WriteString(h.buildAudioAdaptationSets(mediaID, audioStreams, grouped))
 	sb.WriteString(h.buildSubtitleAdaptationSets(mediaID, subtitleStreams, grouped))
 
@@ -242,7 +242,7 @@ func (h *DASHHandler) generateMPD(
 }
 
 // buildVideoAdaptationSet builds the video adaptation set XML for the MPD
-func (h *DASHHandler) buildVideoAdaptationSet(mediaID string, qualities []string, grouped *GroupedTranscodes) string {
+func (h *DASHHandler) buildVideoAdaptationSet(mediaID string, mediaFile *domain.MediaFile, qualities []string, grouped *GroupedTranscodes) string {
 	if len(qualities) == 0 {
 		return ""
 	}
@@ -263,9 +263,19 @@ func (h *DASHHandler) buildVideoAdaptationSet(mediaID string, qualities []string
 			continue
 		}
 
-		height := extractHeight(quality)
+		// Determine width and height based on quality
+		var width, height int
+		if quality == "original" {
+			// Use source video dimensions for "original" quality
+			width = mediaFile.Width
+			height = mediaFile.Height
+		} else {
+			height = extractHeight(quality)
+			width = height * 16 / 9
+		}
+
 		sb.WriteString(fmt.Sprintf(`      <Representation id="video_%s" bandwidth="%d" width="%d" height="%d" codecs="avc1.4d401f">`,
-			quality, 5000000, height*16/9, height))
+			quality, 5000000, width, height))
 		sb.WriteString("\n")
 		sb.WriteString(fmt.Sprintf(`        <BaseURL>/stream/dash/content/%s/%s/video/</BaseURL>`, mediaID, quality))
 		sb.WriteString("\n")
