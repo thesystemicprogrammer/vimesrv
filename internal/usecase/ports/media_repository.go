@@ -36,4 +36,10 @@ type MediaRepository interface {
 
 	// FindByEpisodeMetadataIDs retrieves all media files linked to any of the given episode metadata IDs
 	FindByEpisodeMetadataIDs(ctx context.Context, episodeMetadataIDs []int64) ([]*domain.MediaFile, error)
+
+	// CountBySeasonMetadataID counts media files linked to episodes in the given season
+	CountBySeasonMetadataID(ctx context.Context, seasonMetadataID int64) (int, error)
+
+	// CountBySeriesMetadataID counts media files linked to episodes in any season of the given series
+	CountBySeriesMetadataID(ctx context.Context, seriesMetadataID int64) (int, error)
 }

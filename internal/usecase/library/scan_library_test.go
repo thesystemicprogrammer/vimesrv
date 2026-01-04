@@ -203,6 +203,16 @@ func (m *MockMediaRepository) FindByEpisodeMetadataIDs(ctx context.Context, epis
 	return args.Get(0).([]*domain.MediaFile), args.Error(1)
 }
 
+func (m *MockMediaRepository) CountBySeasonMetadataID(ctx context.Context, seasonMetadataID int64) (int, error) {
+	args := m.Called(ctx, seasonMetadataID)
+	return args.Int(0), args.Error(1)
+}
+
+func (m *MockMediaRepository) CountBySeriesMetadataID(ctx context.Context, seriesMetadataID int64) (int, error) {
+	args := m.Called(ctx, seriesMetadataID)
+	return args.Int(0), args.Error(1)
+}
+
 // Helper to create test config
 func testConfig() config.MediaConfig {
 	return config.MediaConfig{

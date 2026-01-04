@@ -3,10 +3,13 @@ package transcode
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/thesystemicprogrammer/vimesrv/internal/domain"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/config"
+	"github.com/thesystemicprogrammer/vimesrv/internal/shared/logger"
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/job"
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/ports"
 )

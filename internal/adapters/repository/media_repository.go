@@ -444,3 +444,40 @@ func (r *MediaRepository) FindByEpisodeMetadataIDs(ctx context.Context, episodeM
 
 	return mediaFiles, nil
 }
+
+// CountBySeasonMetadataID counts media files linked to episodes in the given season
+func (r *MediaRepository) CountBySeasonMetadataID(ctx context.Context, seasonMetadataID int64) (int, error) {
+	query := `
+		SELECT COUNT(*)
+		FROM media_files mf
+		INNER JOIN episode_metadata em ON mf.episode_metadata_id = em.id
+		WHERE em.season_id = ?
+	`
+
+	var count int
+	err := r.db.QueryRowContext(ctx, query, seasonMetadataID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count media files by season: %w", err)
+	}
+
+	return count, nil
+}
+
+// CountBySeriesMetadataID counts media files linked to episodes in any season of the given series
+func (r *MediaRepository) CountBySeriesMetadataID(ctx context.Context, seriesMetadataID int64) (int, error) {
+	query := `
+		SELECT COUNT(*)
+		FROM media_files mf
+		INNER JOIN episode_metadata em ON mf.episode_metadata_id = em.id
+		INNER JOIN season_metadata sm ON em.season_id = sm.id
+		WHERE sm.series_id = ?
+	`
+
+	var count int
+	err := r.db.QueryRowContext(ctx, query, seriesMetadataID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count media files by series: %w", err)
+	}
+
+	return count, nil
+}

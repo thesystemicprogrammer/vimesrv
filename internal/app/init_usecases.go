@@ -275,6 +275,9 @@ func initUseCases(cfg *config.Config, adapters *Adapters) *UseCases {
 		DeleteMediaUseCase: media.NewDeleteMediaUseCase(
 			adapters.MediaRepository,
 			adapters.TranscodeRepository,
+			adapters.EpisodeMetadataRepository,
+			adapters.SeasonMetadataRepository,
+			adapters.SeriesMetadataRepository,
 			adapters.FileSystemService,
 			cfg,
 		),
@@ -301,6 +304,7 @@ func initUseCases(cfg *config.Config, adapters *Adapters) *UseCases {
 		SearchLibraryUseCase:      library.NewSearchLibraryUseCase(adapters.SearchRepository, adapters.LibraryRepository),
 		DeleteSeasonUseCase: library.NewDeleteSeasonUseCase(
 			adapters.SeasonMetadataRepository,
+			adapters.SeriesMetadataRepository,
 			adapters.EpisodeMetadataRepository,
 			adapters.MediaRepository,
 			adapters.TranscodeRepository,

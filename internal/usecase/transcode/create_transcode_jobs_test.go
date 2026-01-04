@@ -60,6 +60,14 @@ func (m *MockMediaRepository) FindByEpisodeMetadataIDs(ctx context.Context, epis
 	return nil, nil
 }
 
+func (m *MockMediaRepository) CountBySeasonMetadataID(ctx context.Context, seasonMetadataID int64) (int, error) {
+	return 0, nil
+}
+
+func (m *MockMediaRepository) CountBySeriesMetadataID(ctx context.Context, seriesMetadataID int64) (int, error) {
+	return 0, nil
+}
+
 // MockTranscodeRepository for testing
 type MockTranscodeRepository struct {
 	CreatedTranscodes []*domain.Transcode

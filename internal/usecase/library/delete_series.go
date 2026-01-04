@@ -19,8 +19,9 @@ type DeleteSeriesInput struct {
 
 // DeleteSeriesResult contains the result of the delete operation
 type DeleteSeriesResult struct {
-	DeletedMediaCount  int
-	DeletedSeasonCount int
+	DeletedMediaCount     int
+	DeletedSeasonCount    int
+	SeriesMetadataDeleted bool
 }
 
 // DeleteSeriesUseCase handles the deletion of all media files for a series
@@ -55,14 +56,15 @@ func NewDeleteSeriesUseCase(
 	}
 }
 
-// Execute deletes all media files for a series.
+// Execute deletes all media files for a series and the series metadata.
 // It performs the following steps:
 // 1. Verify series exists and get all seasons
 // 2. Get all episodes for all seasons
 // 3. Get all media files linked to episodes
 // 4. Check ALL media files for running transcode jobs (block if any)
 // 5. Delete each media file (move source to trash, delete transcodes)
-// 6. Return count of deleted media files and seasons
+// 6. Delete series metadata (CASCADE deletes seasons and episodes)
+// 7. Return count of deleted media files and seasons
 func (uc *DeleteSeriesUseCase) Execute(ctx context.Context, input DeleteSeriesInput) (*DeleteSeriesResult, error) {
 	if input.SeriesID == 0 {
 		return nil, fmt.Errorf("series ID is required")
@@ -77,7 +79,7 @@ func (uc *DeleteSeriesUseCase) Execute(ctx context.Context, input DeleteSeriesIn
 	logger.Info().
 		Int64("series_id", input.SeriesID).
 		Str("series_name", series.OriginalName).
-		Msg("Starting series media deletion")
+		Msg("Starting series deletion")
 
 	// 2. Get all seasons for this series
 	seasons, err := uc.seasonRepo.ListBySeriesID(ctx, input.SeriesID)
@@ -85,9 +87,20 @@ func (uc *DeleteSeriesUseCase) Execute(ctx context.Context, input DeleteSeriesIn
 		return nil, fmt.Errorf("failed to get seasons for series: %w", err)
 	}
 
+	result := &DeleteSeriesResult{
+		DeletedSeasonCount: len(seasons),
+	}
+
+	// Handle case with no seasons - just delete the series metadata
 	if len(seasons) == 0 {
-		logger.Info().Int64("series_id", input.SeriesID).Msg("No seasons found for series")
-		return &DeleteSeriesResult{DeletedMediaCount: 0, DeletedSeasonCount: 0}, nil
+		logger.Info().Int64("series_id", input.SeriesID).Msg("No seasons found for series, deleting series metadata only")
+
+		if err := uc.seriesRepo.Delete(ctx, input.SeriesID); err != nil {
+			return nil, fmt.Errorf("failed to delete series metadata: %w", err)
+		}
+		result.SeriesMetadataDeleted = true
+
+		return result, nil
 	}
 
 	// 3. Get all episodes for all seasons
@@ -102,9 +115,16 @@ func (uc *DeleteSeriesUseCase) Execute(ctx context.Context, input DeleteSeriesIn
 		}
 	}
 
+	// Handle case with no episodes - delete series metadata (CASCADE deletes seasons)
 	if len(allEpisodeIDs) == 0 {
-		logger.Info().Int64("series_id", input.SeriesID).Msg("No episodes found for series")
-		return &DeleteSeriesResult{DeletedMediaCount: 0, DeletedSeasonCount: len(seasons)}, nil
+		logger.Info().Int64("series_id", input.SeriesID).Msg("No episodes found for series, deleting series metadata")
+
+		if err := uc.seriesRepo.Delete(ctx, input.SeriesID); err != nil {
+			return nil, fmt.Errorf("failed to delete series metadata: %w", err)
+		}
+		result.SeriesMetadataDeleted = true
+
+		return result, nil
 	}
 
 	// 4. Get all media files linked to these episodes
@@ -113,9 +133,16 @@ func (uc *DeleteSeriesUseCase) Execute(ctx context.Context, input DeleteSeriesIn
 		return nil, fmt.Errorf("failed to get media files for episodes: %w", err)
 	}
 
+	// Handle case with no media files - delete series metadata (CASCADE deletes seasons and episodes)
 	if len(mediaFiles) == 0 {
-		logger.Info().Int64("series_id", input.SeriesID).Msg("No media files found for series")
-		return &DeleteSeriesResult{DeletedMediaCount: 0, DeletedSeasonCount: len(seasons)}, nil
+		logger.Info().Int64("series_id", input.SeriesID).Msg("No media files found for series, deleting series metadata")
+
+		if err := uc.seriesRepo.Delete(ctx, input.SeriesID); err != nil {
+			return nil, fmt.Errorf("failed to delete series metadata: %w", err)
+		}
+		result.SeriesMetadataDeleted = true
+
+		return result, nil
 	}
 
 	logger.Info().
@@ -191,14 +218,27 @@ func (uc *DeleteSeriesUseCase) Execute(ctx context.Context, input DeleteSeriesIn
 			Msg("Media file deleted")
 	}
 
+	result.DeletedMediaCount = deletedCount
+
+	// 7. Delete series metadata (CASCADE deletes seasons and episodes)
+	logger.Info().
+		Int64("series_id", input.SeriesID).
+		Str("series_name", series.OriginalName).
+		Msg("Deleting series metadata")
+
+	if err := uc.seriesRepo.Delete(ctx, input.SeriesID); err != nil {
+		logger.Error().Err(err).Int64("series_id", input.SeriesID).Msg("Failed to delete series metadata")
+		// Don't fail the operation - media was already deleted
+	} else {
+		result.SeriesMetadataDeleted = true
+	}
+
 	logger.Info().
 		Int64("series_id", input.SeriesID).
 		Int("deleted_media_count", deletedCount).
-		Int("season_count", len(seasons)).
-		Msg("Series media deletion completed")
+		Int("deleted_season_count", len(seasons)).
+		Bool("series_deleted", result.SeriesMetadataDeleted).
+		Msg("Series deletion completed")
 
-	return &DeleteSeriesResult{
-		DeletedMediaCount:  deletedCount,
-		DeletedSeasonCount: len(seasons),
-	}, nil
+	return result, nil
 }
