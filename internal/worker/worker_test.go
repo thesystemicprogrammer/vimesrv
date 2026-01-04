@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/thesystemicprogrammer/vimesrv/internal/worker/client"
+	"github.com/thesystemicprogrammer/vimesrv/internal/worker/config"
 	"github.com/thesystemicprogrammer/vimesrv/pkg/transcoding"
 )
 
@@ -158,8 +159,15 @@ func TestCountOutputFiles(t *testing.T) {
 }
 
 func TestBuildTranscodeOptions(t *testing.T) {
-	// Create a minimal worker for testing
-	w := &Worker{}
+	// Create a minimal worker for testing with empty config (no path translation)
+	w := &Worker{
+		config: &config.Config{
+			Media: config.MediaConfig{
+				MediaPath:       "/local/media",
+				ServerMediaPath: "", // No translation
+			},
+		},
+	}
 
 	t.Run("video job", func(t *testing.T) {
 		job := &client.WorkerJob{
@@ -347,5 +355,115 @@ func TestWorkerTranscodeOptionsMapping(t *testing.T) {
 	}
 	if transcodeOpts.SegmentTime != 4 {
 		t.Errorf("SegmentTime mapping failed: got %d", transcodeOpts.SegmentTime)
+	}
+}
+
+func TestTranslatePath(t *testing.T) {
+	tests := []struct {
+		name            string
+		serverMediaPath string
+		localMediaPath  string
+		inputPath       string
+		expectedPath    string
+	}{
+		{
+			name:            "no translation when server_media_path is empty",
+			serverMediaPath: "",
+			localMediaPath:  "/local/media",
+			inputPath:       "/srv/media/abc123/movie.mkv",
+			expectedPath:    "/srv/media/abc123/movie.mkv",
+		},
+		{
+			name:            "translates matching prefix",
+			serverMediaPath: "/srv/media",
+			localMediaPath:  "/mnt/nfs/media",
+			inputPath:       "/srv/media/abc123/movie.mkv",
+			expectedPath:    "/mnt/nfs/media/abc123/movie.mkv",
+		},
+		{
+			name:            "translates exact match",
+			serverMediaPath: "/srv/media",
+			localMediaPath:  "/mnt/nfs/media",
+			inputPath:       "/srv/media",
+			expectedPath:    "/mnt/nfs/media",
+		},
+		{
+			name:            "does not translate non-matching path",
+			serverMediaPath: "/srv/media",
+			localMediaPath:  "/mnt/nfs/media",
+			inputPath:       "/other/path/movie.mkv",
+			expectedPath:    "/other/path/movie.mkv",
+		},
+		{
+			name:            "handles nested paths correctly",
+			serverMediaPath: "/mnt/video/vimesrv/library/media",
+			localMediaPath:  "/nfs/vimesrv/media",
+			inputPath:       "/mnt/video/vimesrv/library/media/884cc0da/IT_Welcome.mkv",
+			expectedPath:    "/nfs/vimesrv/media/884cc0da/IT_Welcome.mkv",
+		},
+		{
+			name:            "does not match partial directory names",
+			serverMediaPath: "/srv/media",
+			localMediaPath:  "/mnt/nfs/media",
+			inputPath:       "/srv/media2/movie.mkv",
+			expectedPath:    "/srv/media2/movie.mkv",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := &Worker{
+				config: &config.Config{
+					Media: config.MediaConfig{
+						MediaPath:       tt.localMediaPath,
+						ServerMediaPath: tt.serverMediaPath,
+					},
+				},
+			}
+
+			result := w.translatePath(tt.inputPath)
+			if result != tt.expectedPath {
+				t.Errorf("translatePath(%q) = %q, want %q", tt.inputPath, result, tt.expectedPath)
+			}
+		})
+	}
+}
+
+func TestBuildTranscodeOptionsWithPathTranslation(t *testing.T) {
+	w := &Worker{
+		config: &config.Config{
+			Media: config.MediaConfig{
+				MediaPath:       "/nfs/media",
+				ServerMediaPath: "/srv/media",
+			},
+		},
+	}
+
+	job := &client.WorkerJob{
+		JobID:       123,
+		TranscodeID: "abc123",
+		TrackType:   "video",
+		TrackIndex:  0,
+		Quality:     "1080p",
+		InputPath:   "/srv/media/abc123/movie.mkv",
+		OutputPath:  "/srv/media/abc123/transcoded/1080p/video",
+		TranscodeOptions: client.WorkerTranscodeOptions{
+			Width:       1920,
+			Height:      1080,
+			VideoCodec:  "libx264",
+			SegmentTime: 4,
+		},
+	}
+
+	opts := w.buildTranscodeOptions(job)
+
+	expectedInputPath := "/nfs/media/abc123/movie.mkv"
+	expectedOutputPath := "/nfs/media/abc123/transcoded/1080p/video"
+
+	if opts.InputPath != expectedInputPath {
+		t.Errorf("InputPath = %q, want %q", opts.InputPath, expectedInputPath)
+	}
+	if opts.OutputPath != expectedOutputPath {
+		t.Errorf("OutputPath = %q, want %q", opts.OutputPath, expectedOutputPath)
 	}
 }

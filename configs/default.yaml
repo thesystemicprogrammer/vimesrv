@@ -110,13 +110,13 @@ database:
 logging:
   level: "info"
   format: "console"
-  file: ""              # Empty = stdout only; set a path to enable file logging
-  max_size_mb: 100      # Rotate when file exceeds this size (MB)
-  max_age_days: 7       # Delete logs older than this (days, 0 = no limit)
-  max_backups: 5        # Max number of old log files to keep (0 = no limit)
-  compress: true        # Compress rotated logs with gzip
-  local_time: true      # Use local timezone for backup filenames
-  rotate_at: "00:00"    # Daily rotation time in HH:MM 24-hour format (empty = disabled)
+  file: "" # Empty = stdout only; set a path to enable file logging
+  max_size_mb: 100 # Rotate when file exceeds this size (MB)
+  max_age_days: 7 # Delete logs older than this (days, 0 = no limit)
+  max_backups: 5 # Max number of old log files to keep (0 = no limit)
+  compress: true # Compress rotated logs with gzip
+  local_time: true # Use local timezone for backup filenames
+  rotate_at: "00:00" # Daily rotation time in HH:MM 24-hour format (empty = disabled)
 
 tmdb:
   enabled: false # Set to true and provide TMDB_API_KEY environment variable to enable
@@ -156,8 +156,8 @@ rebuild:
 # When enabled, transcode jobs are processed exclusively by remote workers
 # Workers must have access to the same media library (e.g., via NFS)
 worker:
-  enabled: false                      # Enable worker API and exclusive worker processing
-  auth_token: ""                      # Shared secret for worker authentication (set via WORKER_AUTH_TOKEN env var)
-  heartbeat_timeout_seconds: 60       # Worker considered dead if no heartbeat/progress within this time
-  fallback_to_local: false            # Process locally when no workers are available
-  fallback_after_minutes: 30          # Wait time before local fallback (if enabled)
+  enabled: false # Enable worker API and exclusive worker processing
+  auth_token: "" # Shared secret for worker authentication (set via WORKER_AUTH_TOKEN env var)
+  heartbeat_timeout_seconds: 60 # Worker considered dead if no heartbeat/progress within this time
+  fallback_to_local: false # Process locally when no workers are available
+  fallback_after_minutes: 30 # Wait time before local fallback (if enabled)

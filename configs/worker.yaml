@@ -37,10 +37,17 @@ worker:
 
 # Media library settings
 media:
-  # Path to the media library
-  # IMPORTANT: Must be the same files as the server's media_path
-  # This is typically a shared NFS mount or similar shared storage
+  # Path to the media library ON THIS WORKER
+  # IMPORTANT: This directory must exist and be accessible
+  # The worker validates this path exists at startup
   media_path: "/mnt/nfs/media"
+
+  # Path to the media library AS SEEN BY THE SERVER
+  # Leave empty if both server and worker use the same mount path
+  # If set, server paths are translated: server_media_path → media_path
+  # Example: If server uses /srv/media and worker mounts it at /mnt/nfs/media,
+  # set server_media_path: "/srv/media"
+  server_media_path: ""
 
 # Transcoding settings
 transcoding:

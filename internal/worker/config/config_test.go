@@ -12,6 +12,10 @@ import (
 func TestLoad_Defaults(t *testing.T) {
 	// Create a minimal valid config file
 	tmpDir := t.TempDir()
+	mediaDir := filepath.Join(tmpDir, "media")
+	err := os.MkdirAll(mediaDir, 0755)
+	require.NoError(t, err)
+
 	configPath := filepath.Join(tmpDir, "worker.yaml")
 
 	configContent := `
@@ -21,9 +25,9 @@ server:
 worker:
   name: "test-worker"
 media:
-  media_path: "/tmp/test/media"
+  media_path: "` + mediaDir + `"
 `
-	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	err = os.WriteFile(configPath, []byte(configContent), 0644)
 	require.NoError(t, err)
 
 	cfg, err := Load(configPath)
@@ -40,10 +44,16 @@ media:
 	assert.Equal(t, 7200, cfg.Transcoding.TimeoutSeconds)
 	assert.Equal(t, "info", cfg.Logging.Level)
 	assert.Equal(t, "console", cfg.Logging.Format)
+	// Check new default
+	assert.Equal(t, "", cfg.Media.ServerMediaPath)
 }
 
 func TestLoad_CustomValues(t *testing.T) {
 	tmpDir := t.TempDir()
+	mediaDir := filepath.Join(tmpDir, "media")
+	err := os.MkdirAll(mediaDir, 0755)
+	require.NoError(t, err)
+
 	configPath := filepath.Join(tmpDir, "worker.yaml")
 
 	configContent := `
@@ -58,7 +68,8 @@ worker:
   concurrency: 4
   progress_interval_seconds: 10
 media:
-  media_path: "/mnt/nfs/media"
+  media_path: "` + mediaDir + `"
+  server_media_path: "/srv/media"
 transcoding:
   ffmpeg_path: "/usr/local/bin/ffmpeg"
   ffprobe_path: "/usr/local/bin/ffprobe"
@@ -67,7 +78,7 @@ logging:
   level: "debug"
   format: "json"
 `
-	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	err = os.WriteFile(configPath, []byte(configContent), 0644)
 	require.NoError(t, err)
 
 	cfg, err := Load(configPath)
@@ -87,6 +98,7 @@ logging:
 	assert.Equal(t, 3600, cfg.Transcoding.TimeoutSeconds)
 	assert.Equal(t, "debug", cfg.Logging.Level)
 	assert.Equal(t, "json", cfg.Logging.Format)
+	assert.Equal(t, "/srv/media", cfg.Media.ServerMediaPath)
 }
 
 func TestServerConfig_Validate(t *testing.T) {
@@ -281,6 +293,9 @@ func TestWorkerSettings_Validate(t *testing.T) {
 }
 
 func TestMediaConfig_Validate(t *testing.T) {
+	// Create a temp directory for valid path tests
+	tmpDir := t.TempDir()
+
 	tests := []struct {
 		name      string
 		config    MediaConfig
@@ -288,15 +303,26 @@ func TestMediaConfig_Validate(t *testing.T) {
 		errMsg    string
 	}{
 		{
-			name:      "valid config",
-			config:    MediaConfig{MediaPath: "/mnt/media"},
+			name:      "valid config with existing path",
+			config:    MediaConfig{MediaPath: tmpDir},
 			expectErr: false,
 		},
 		{
-			name:      "empty path",
+			name:      "valid config with server_media_path",
+			config:    MediaConfig{MediaPath: tmpDir, ServerMediaPath: "/srv/media"},
+			expectErr: false,
+		},
+		{
+			name:      "empty media_path",
 			config:    MediaConfig{MediaPath: ""},
 			expectErr: true,
 			errMsg:    "media_path cannot be empty",
+		},
+		{
+			name:      "non-existent media_path",
+			config:    MediaConfig{MediaPath: "/nonexistent/path/to/media"},
+			expectErr: true,
+			errMsg:    "media_path does not exist",
 		},
 	}
 
@@ -442,6 +468,10 @@ func TestLoad_InvalidYAML(t *testing.T) {
 
 func TestLoad_ValidationFails(t *testing.T) {
 	tmpDir := t.TempDir()
+	mediaDir := filepath.Join(tmpDir, "media")
+	err := os.MkdirAll(mediaDir, 0755)
+	require.NoError(t, err)
+
 	configPath := filepath.Join(tmpDir, "worker.yaml")
 
 	// Missing required auth_token
@@ -452,9 +482,9 @@ server:
 worker:
   name: "test"
 media:
-  media_path: "/tmp"
+  media_path: "` + mediaDir + `"
 `
-	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	err = os.WriteFile(configPath, []byte(configContent), 0644)
 	require.NoError(t, err)
 
 	_, err = Load(configPath)

@@ -58,8 +58,13 @@ type WorkerSettings struct {
 
 // MediaConfig contains paths to media files
 type MediaConfig struct {
-	// MediaPath is the path to the media library (must match server's media_path via shared storage)
+	// MediaPath is the local path to the media library on this worker
 	MediaPath string `mapstructure:"media_path"`
+
+	// ServerMediaPath is the media path as seen by the server
+	// If set, paths from server are translated: ServerMediaPath → MediaPath
+	// If empty, paths are used as-is (assumes identical mount paths)
+	ServerMediaPath string `mapstructure:"server_media_path"`
 }
 
 // TranscodingConfig contains FFmpeg-related settings
@@ -147,6 +152,7 @@ func setDefaults(v *viper.Viper) {
 
 	// Media defaults
 	v.SetDefault("media.media_path", "/mnt/nfs/media")
+	v.SetDefault("media.server_media_path", "")
 
 	// Transcoding defaults
 	v.SetDefault("transcoding.ffmpeg_path", "ffmpeg")
@@ -173,6 +179,7 @@ func bindEnvVars(v *viper.Viper) {
 
 	// Media
 	v.BindEnv("media.media_path", "VIMESRV_WORKER_MEDIA_PATH")
+	v.BindEnv("media.server_media_path", "VIMESRV_WORKER_SERVER_MEDIA_PATH")
 
 	// Transcoding
 	v.BindEnv("transcoding.ffmpeg_path", "VIMESRV_WORKER_FFMPEG_PATH")
@@ -256,6 +263,11 @@ func (w *WorkerSettings) Validate() error {
 func (m *MediaConfig) Validate() error {
 	if m.MediaPath == "" {
 		return fmt.Errorf("media_path cannot be empty")
+	}
+
+	// Validate media path exists
+	if _, err := os.Stat(m.MediaPath); os.IsNotExist(err) {
+		return fmt.Errorf("media_path does not exist: %s", m.MediaPath)
 	}
 
 	return nil
