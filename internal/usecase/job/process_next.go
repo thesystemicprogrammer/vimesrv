@@ -2,6 +2,7 @@ package job
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"runtime/debug"
 	"time"
@@ -137,19 +138,23 @@ func (uc *ProcessNextJobUseCase) Execute(ctx context.Context, workerID string) (
 	duration := uc.clock.Now().Sub(start) // Use clock for end time to support MockClock
 
 	if handlerErr == nil {
+		finishedAt := uc.clock.Now()
 		_ = uc.retryStateTransition(ctx, func(retryCtx context.Context) error {
 			return uc.jobRepository.MarkSuccess(retryCtx, job.ID)
 		}, job.ID, "MarkSuccess")
 		logger.Info().Int64("ID", job.ID).Str("type", job.Type).Dur("duration", duration).Int("attempts", job.Attempts).Msg("job successfully executed")
+		job.FinishedAt = sql.NullTime{Time: finishedAt, Valid: true}
 		uc.jobNotifier.NotifyJobCompleted(job)
 		return true, nil
 	}
 
 	if job.Attempts >= job.MaxAttempts {
+		finishedAt := uc.clock.Now()
 		_ = uc.retryStateTransition(ctx, func(retryCtx context.Context) error {
 			return uc.jobRepository.MarkDead(retryCtx, job.ID, handlerErr.Error())
 		}, job.ID, "MarkDead")
 		logger.Error().Int64("ID", job.ID).Int("attempts", job.Attempts).Int("maxAttempts", job.MaxAttempts).Msg("job exceeded max attempts")
+		job.FinishedAt = sql.NullTime{Time: finishedAt, Valid: true}
 		uc.jobNotifier.NotifyJobFailed(job, handlerErr.Error())
 		return true, nil
 	}

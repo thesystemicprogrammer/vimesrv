@@ -326,7 +326,7 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
             <h2 class="text-xl font-semibold text-white mb-3">
               Part of the {{ movie()!.collection!.name }} ({{ movie()!.collection!.position }} of {{ movie()!.collection!.total_movies }})
             </h2>
-            <div class="flex gap-5 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-transparent">
+            <div class="flex gap-5 overflow-x-auto pt-1 pb-2 -mx-4 px-4 scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-transparent">
               @for (colMovie of movie()!.collection!.movies; track colMovie.tmdb_id) {
                 @if (colMovie.is_current) {
                   <!-- Current movie - yellow ring with badge -->
@@ -365,8 +365,8 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
                   </div>
                 } @else if (colMovie.in_library && colMovie.media_id) {
                   <!-- In library - blue ring, clickable -->
-                  <a
-                    [routerLink]="['/movie', colMovie.media_id]"
+                  <div
+                    (click)="navigateToMovie(colMovie.media_id)"
                     class="flex-shrink-0 w-28 group cursor-pointer"
                   >
                     <div class="aspect-[2/3] rounded-lg overflow-hidden bg-slate-700 ring-2 ring-blue-500">
@@ -398,7 +398,7 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
                       }
                     </div>
                     <span class="text-xs text-blue-400">In Library</span>
-                  </a>
+                  </div>
                 } @else {
                   <!-- Not in library - link to TMDB -->
                   <a
@@ -452,11 +452,11 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
         @if (movie()!.similar_movies && movie()!.similar_movies!.length > 0) {
           <section class="mb-8">
             <h2 class="text-xl font-semibold text-white mb-3">Similar Movies</h2>
-            <div class="flex gap-5 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-transparent">
+            <div class="flex gap-5 overflow-x-auto pt-1 pb-2 -mx-4 px-4 scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-transparent">
               @for (similar of movie()!.similar_movies; track similar.tmdb_id) {
                 @if (similar.in_library && similar.media_id) {
-                  <a
-                    [routerLink]="['/movie', similar.media_id]"
+                  <div
+                    (click)="navigateToMovie(similar.media_id)"
                     class="flex-shrink-0 w-28 group cursor-pointer"
                   >
                     <div class="aspect-[2/3] rounded-lg overflow-hidden bg-slate-700 ring-2 ring-blue-500">
@@ -488,7 +488,7 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
                       }
                     </div>
                     <span class="text-xs text-blue-400">In Library</span>
-                  </a>
+                  </div>
                 } @else {
                   <!-- Not in library - link to TMDB -->
                   <a
@@ -618,6 +618,7 @@ export class MovieDetailComponent implements OnInit, OnDestroy {
 
   private mediaId: string | null = null;
   private languageSubscription: Subscription | null = null;
+  private routeSubscription: Subscription | null = null;
 
   @ViewChild('matchModal') matchModal!: MetadataMatchModalComponent;
 
@@ -650,17 +651,21 @@ export class MovieDetailComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.languageSubscription?.unsubscribe();
+    this.routeSubscription?.unsubscribe();
   }
 
   ngOnInit(): void {
-    this.mediaId = this.route.snapshot.paramMap.get('id');
-    if (!this.mediaId) {
-      this.error.set('Invalid movie ID');
-      this.loading.set(false);
-      return;
-    }
-
-    this.loadMovie(this.mediaId);
+    // Subscribe to route param changes to handle navigation between movies
+    this.routeSubscription = this.route.paramMap.subscribe(params => {
+      const id = params.get('id');
+      if (!id) {
+        this.error.set('Invalid movie ID');
+        this.loading.set(false);
+        return;
+      }
+      this.mediaId = id;
+      this.loadMovie(this.mediaId);
+    });
   }
 
   loadMovie(mediaId: string): void {
@@ -702,6 +707,10 @@ export class MovieDetailComponent implements OnInit, OnDestroy {
 
   goBack(): void {
     this.router.navigate(['/library']);
+  }
+
+  navigateToMovie(mediaId: string): void {
+    this.router.navigate(['/movie', mediaId]);
   }
 
   formatDuration(seconds: number): string {

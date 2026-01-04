@@ -679,8 +679,8 @@ export class JobsComponent implements OnInit, OnDestroy {
     if (!transcodeId) return null;
 
     if (job.type === 'transcode_video') {
-      // Format: "{mediaID}-video-{quality}" e.g., "abc123-video-720p"
-      const match = transcodeId.match(/-video-(\d+p)$/);
+      // Format: "{mediaID}-video-{quality}" e.g., "abc123-video-720p" or "abc123-video-original"
+      const match = transcodeId.match(/-video-(\d+p|original)$/);
       return match ? match[1] : null;
     }
 

@@ -2,10 +2,12 @@ package worker
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/thesystemicprogrammer/vimesrv/internal/adapters/worker"
 	"github.com/thesystemicprogrammer/vimesrv/internal/domain"
@@ -107,6 +109,7 @@ func (uc *CompleteWorkerJobUseCase) Execute(ctx context.Context, input CompleteJ
 	uc.workerRegistry.DecrementActiveJobs(input.WorkerID)
 
 	// 10. Notify via WebSocket
+	job.FinishedAt = sql.NullTime{Time: time.Now(), Valid: true}
 	uc.jobNotifier.NotifyJobCompleted(job)
 
 	logger.Info().

@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -111,6 +112,7 @@ func (uc *FailWorkerJobUseCase) Execute(ctx context.Context, input FailJobInput)
 			Str("error", input.Error).
 			Msg("Worker job failed permanently")
 
+		job.FinishedAt = sql.NullTime{Time: time.Now(), Valid: true}
 		uc.jobNotifier.NotifyJobFailed(job, input.Error)
 	}
 

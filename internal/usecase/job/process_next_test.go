@@ -100,6 +100,7 @@ func TestProcessNextJobUseCase_Execute_SuccessfulJob(t *testing.T) {
 	mockRepo.On("ClaimNextJobDue", ctx, "worker-1").Return(job, true, nil)
 	mockClock.On("Now").Return(startTime).Once()
 	mockClock.On("Now").Return(endTime).Once()
+	mockClock.On("Now").Return(endTime).Once() // For finishedAt timestamp in notification
 
 	handler := ports.JobHandler(func(ctx context.Context, job *domain.Job) error {
 		return nil // Success
@@ -210,7 +211,7 @@ func TestProcessNextJobUseCase_Execute_MaxAttemptsExceeded(t *testing.T) {
 	now := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
 
 	mockRepo.On("ClaimNextJobDue", ctx, "worker-1").Return(job, true, nil)
-	mockClock.On("Now").Return(now).Times(2) // start and end (no next run needed for dead jobs)
+	mockClock.On("Now").Return(now).Times(3) // start, end, and finishedAt for notification
 
 	jobError := errors.New("permanent failure")
 	handler := ports.JobHandler(func(ctx context.Context, job *domain.Job) error {
@@ -340,6 +341,7 @@ func TestProcessNextJobUseCase_Execute_StateTransitionRetry(t *testing.T) {
 	// First call fails, second succeeds (tests retry logic)
 	mockRepo.On("MarkSuccess", mock.Anything, int64(1)).Return(errors.New("transient db error")).Once()
 	mockRepo.On("MarkSuccess", mock.Anything, int64(1)).Return(nil).Once()
+	mockClock.On("Now").Return(now).Once() // For finishedAt timestamp in notification
 
 	uc := NewProcessNextJobUseCase(mockRepo, mockResolver, mockBackoff, mockClock, &ports.NoOpJobNotifier{})
 
@@ -380,6 +382,7 @@ func TestProcessNextJobUseCase_Execute_ScheduledJobTracking(t *testing.T) {
 	})
 	mockResolver.On("Get", "scheduled-job").Return(handler, true)
 	mockRepo.On("MarkSuccess", mock.Anything, int64(1)).Return(nil)
+	mockClock.On("Now").Return(now).Once() // For finishedAt timestamp in notification
 
 	uc := NewProcessNextJobUseCase(mockRepo, mockResolver, mockBackoff, mockClock, &ports.NoOpJobNotifier{})
 
