@@ -1085,6 +1085,134 @@ func TestCreateTranscodeJobs_ZeroSourceHeight(t *testing.T) {
 	assert.Equal(t, 2, output.VideoJobs, "Should create all profiles when source height is unknown")
 }
 
+// TestSubtitleStream_IsTextBased tests the SubtitleStream.IsTextBased() domain method
+func TestSubtitleStream_IsTextBased(t *testing.T) {
+	tests := []struct {
+		codec    string
+		expected bool
+	}{
+		// Text-based codecs that should be allowed
+		{"subrip", true},
+		{"srt", true},
+		{"ass", true},
+		{"ssa", true},
+		{"webvtt", true},
+		{"mov_text", true},
+		{"text", true},
+		// Case insensitivity
+		{"SUBRIP", true},
+		{"SRT", true},
+		{"ASS", true},
+		// Bitmap-based codecs that should be rejected
+		{"hdmv_pgs_subtitle", false},
+		{"pgssub", false},
+		{"dvd_subtitle", false},
+		{"dvdsub", false},
+		{"dvb_subtitle", false},
+		// Unknown codecs should be rejected (safe default)
+		{"unknown_codec", false},
+		{"", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.codec, func(t *testing.T) {
+			stream := domain.NewSubtitleStream("media-1", 0, tt.codec, "eng", "", false)
+			result := stream.IsTextBased()
+			assert.Equal(t, tt.expected, result, "SubtitleStream.IsTextBased() for codec %q should return %v", tt.codec, tt.expected)
+		})
+	}
+}
+
+// TestCreateTranscodeJobs_SkipsBitmapSubtitles tests that bitmap-based subtitles are skipped
+func TestCreateTranscodeJobs_SkipsBitmapSubtitles(t *testing.T) {
+	cfg := &config.Config{
+		Media: config.MediaConfig{
+			MediaPath:              "/media",
+			TranscodeOutputPattern: "{media_path}/{media_id}/transcoded",
+		},
+		Transcoding: config.TranscodingConfig{
+			SegmentDuration: 4,
+			QualityProfiles: []config.QualityProfile{
+				{Name: "360p", Enabled: true, Resolution: "640x360", CRF: 25, MaxBitrate: "900k", AudioBitrate: "96k"},
+			},
+		},
+	}
+
+	mockMediaRepo := &MockMediaRepository{
+		GetFn: func(ctx context.Context, id string) (*domain.MediaFile, error) {
+			return &domain.MediaFile{
+				ID:       id,
+				Filename: "test.mkv",
+				FilePath: "/media/test.mkv",
+				Height:   1080,
+			}, nil
+		},
+	}
+
+	mockTranscodeRepo := &MockTranscodeRepository{CreatedTranscodes: make([]*domain.Transcode, 0)}
+	mockJobRepo := &MockJobRepository{EnqueuedJobs: make([]*domain.Job, 0)}
+	mockAudioStreamRepo := &MockAudioStreamRepository{CreatedStreams: make([]*domain.AudioStream, 0)}
+	mockSubtitleStreamRepo := &MockSubtitleStreamRepository{CreatedStreams: make([]*domain.SubtitleStream, 0)}
+
+	mockFFProbe := &MockFFProbeService{
+		GetAudioStreamsFn: func(filePath string) ([]*ports.AudioStreamInfo, error) {
+			return []*ports.AudioStreamInfo{}, nil
+		},
+		GetSubtitleStreamsFn: func(filePath string) ([]*ports.SubtitleStreamInfo, error) {
+			// Return a mix of text-based and bitmap-based subtitles
+			return []*ports.SubtitleStreamInfo{
+				{StreamIndex: 3, Codec: "subrip", Language: "eng", Title: "English"},           // Text - should create job
+				{StreamIndex: 4, Codec: "hdmv_pgs_subtitle", Language: "ger", Title: "German"}, // Bitmap - should skip
+				{StreamIndex: 5, Codec: "ass", Language: "spa", Title: "Spanish"},              // Text - should create job
+				{StreamIndex: 6, Codec: "dvd_subtitle", Language: "fra", Title: "French"},      // Bitmap - should skip
+			}, nil
+		},
+	}
+
+	useCase := NewCreateTranscodeJobsUseCase(
+		mockMediaRepo,
+		mockTranscodeRepo,
+		createEnqueueJobUseCase(mockJobRepo),
+		mockAudioStreamRepo,
+		mockSubtitleStreamRepo,
+		mockFFProbe,
+		cfg,
+	)
+
+	output, err := useCase.Execute(context.Background(), CreateTranscodeJobsInput{
+		MediaID: "media123",
+	})
+
+	require.NoError(t, err)
+	assert.NotNil(t, output)
+
+	// Should only create 2 subtitle jobs (subrip and ass), not 4
+	assert.Equal(t, 2, output.SubtitleJobs, "Should only create jobs for text-based subtitles")
+
+	// All 4 subtitle streams should still be saved to database
+	assert.Equal(t, 4, len(mockSubtitleStreamRepo.CreatedStreams), "All subtitle streams should be saved to database")
+
+	// Verify only text-based subtitle transcodes were created
+	subtitleTranscodes := 0
+	for _, tc := range mockTranscodeRepo.CreatedTranscodes {
+		if tc.TrackType == domain.TrackTypeSubtitle {
+			subtitleTranscodes++
+			// Should only have stream indices 3 and 5 (the text-based ones)
+			assert.Contains(t, []int{3, 5}, tc.TrackIndex, "Should only create transcodes for text-based subtitles")
+		}
+	}
+	assert.Equal(t, 2, subtitleTranscodes, "Should only create 2 subtitle transcode records")
+
+	// Verify only 2 subtitle jobs were enqueued
+	subtitleJobCount := 0
+	for _, job := range mockJobRepo.EnqueuedJobs {
+		if job.Type == "transcode_subtitle" {
+			subtitleJobCount++
+		}
+	}
+	assert.Equal(t, 2, subtitleJobCount, "Should only enqueue 2 subtitle transcode jobs")
+}
+
 // TestParseResolutionHeight tests the parseResolutionHeight helper function
 func TestParseResolutionHeight(t *testing.T) {
 	tests := []struct {

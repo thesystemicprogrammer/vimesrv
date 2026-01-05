@@ -324,7 +324,9 @@ func (uc *CreateTranscodeJobsUseCase) createSubtitleTranscodeJobs(ctx context.Co
 		return 0, fmt.Errorf("failed to detect subtitle streams: %w", err)
 	}
 
-	// Save subtitle streams to database
+	// Save subtitle streams to database and create transcode jobs for text-based subtitles
+	var subtitleJobs int
+
 	for _, subtitleInfo := range subtitleStreams {
 		subtitleStream := domain.NewSubtitleStream(
 			media.ID,
@@ -337,12 +339,18 @@ func (uc *CreateTranscodeJobsUseCase) createSubtitleTranscodeJobs(ctx context.Co
 		if err := uc.subtitleStreamRepo.Create(ctx, subtitleStream); err != nil {
 			return 0, fmt.Errorf("failed to save subtitle stream %d: %w", subtitleInfo.StreamIndex, err)
 		}
-	}
 
-	var subtitleJobs int
+		// Skip bitmap-based subtitles (PGS, DVD, DVB) as they cannot be converted to WebVTT
+		if !subtitleStream.IsTextBased() {
+			logger.Info().
+				Str("media_id", media.ID).
+				Int("stream_index", subtitleStream.StreamIndex).
+				Str("codec", subtitleStream.Codec).
+				Str("language", subtitleStream.Language).
+				Msg("Skipping bitmap-based subtitle: cannot convert to WebVTT without OCR")
+			continue
+		}
 
-	// Create subtitle transcode jobs (one per subtitle stream)
-	for _, subtitleStream := range subtitleStreams {
 		transcodeID := fmt.Sprintf("%s-subtitle-%d", media.ID, subtitleStream.StreamIndex)
 
 		// Create transcode record (quality empty for subtitles)

@@ -29,8 +29,6 @@ type CompleteWorkerJobUseCase struct {
 	transcodeRepo  ports.TranscodeRepository
 	workerRegistry *worker.Registry
 	jobNotifier    ports.JobNotifier
-	transcoder     ports.Transcoder
-	filesystem     ports.FileSystemService
 }
 
 // NewCompleteWorkerJobUseCase creates a new CompleteWorkerJobUseCase
@@ -39,16 +37,12 @@ func NewCompleteWorkerJobUseCase(
 	transcodeRepo ports.TranscodeRepository,
 	workerRegistry *worker.Registry,
 	jobNotifier ports.JobNotifier,
-	transcoder ports.Transcoder,
-	filesystem ports.FileSystemService,
 ) *CompleteWorkerJobUseCase {
 	return &CompleteWorkerJobUseCase{
 		jobRepo:        jobRepo,
 		transcodeRepo:  transcodeRepo,
 		workerRegistry: workerRegistry,
 		jobNotifier:    jobNotifier,
-		transcoder:     transcoder,
-		filesystem:     filesystem,
 	}
 }
 
@@ -83,32 +77,20 @@ func (uc *CompleteWorkerJobUseCase) Execute(ctx context.Context, input CompleteJ
 		return fmt.Errorf("output validation failed: %w", err)
 	}
 
-	// 6. For video/audio: probe segment durations and save segments.json
-	if transcode.TrackType == domain.TrackTypeVideo || transcode.TrackType == domain.TrackTypeAudio {
-		segments, err := uc.transcoder.ProbeSegmentDurations(ctx, transcode.OutputPath)
-		if err != nil {
-			logger.Warn().Err(err).Str("transcode_id", transcode.ID).Msg("failed to probe segment durations")
-		} else {
-			if saveErr := uc.saveSegmentsJSON(transcode.OutputPath, segments); saveErr != nil {
-				logger.Warn().Err(saveErr).Str("transcode_id", transcode.ID).Msg("failed to save segments.json")
-			}
-		}
-	}
-
-	// 7. Mark transcode as completed
+	// 6. Mark transcode as completed
 	if err := uc.transcodeRepo.MarkCompleted(ctx, transcode.ID, transcode.OutputPath); err != nil {
 		return fmt.Errorf("failed to mark transcode as completed: %w", err)
 	}
 
-	// 8. Mark job as succeeded
+	// 7. Mark job as succeeded
 	if err := uc.jobRepo.MarkSuccess(ctx, job.ID); err != nil {
 		return fmt.Errorf("failed to mark job as succeeded: %w", err)
 	}
 
-	// 9. Decrement worker's active job count
+	// 8. Decrement worker's active job count
 	uc.workerRegistry.DecrementActiveJobs(input.WorkerID)
 
-	// 10. Notify via WebSocket
+	// 9. Notify via WebSocket
 	job.FinishedAt = sql.NullTime{Time: time.Now(), Valid: true}
 	uc.jobNotifier.NotifyJobCompleted(job)
 
@@ -150,21 +132,4 @@ func (uc *CompleteWorkerJobUseCase) validateOutput(outputPath string, trackType 
 	}
 
 	return nil
-}
-
-// saveSegmentsJSON saves segment timing data to segments.json
-func (uc *CompleteWorkerJobUseCase) saveSegmentsJSON(outputPath string, segments []ports.SegmentInfo) error {
-	data := struct {
-		Segments []ports.SegmentInfo `json:"segments"`
-	}{
-		Segments: segments,
-	}
-
-	jsonData, err := json.MarshalIndent(data, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal segment timings: %w", err)
-	}
-
-	timingFilePath := filepath.Join(outputPath, "segments.json")
-	return uc.filesystem.WriteFile(timingFilePath, jsonData)
 }

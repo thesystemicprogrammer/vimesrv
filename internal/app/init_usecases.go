@@ -391,6 +391,7 @@ func initUseCases(cfg *config.Config, adapters *Adapters) *UseCases {
 			adapters.MediaRepository,
 			adapters.WorkerRegistry,
 			adapters.JobNotifier,
+			adapters.BackoffStrategy,
 			cfg,
 		)
 		useCases.CompleteWorkerJobUseCase = workeruc.NewCompleteWorkerJobUseCase(
@@ -398,8 +399,6 @@ func initUseCases(cfg *config.Config, adapters *Adapters) *UseCases {
 			adapters.TranscodeRepository,
 			adapters.WorkerRegistry,
 			adapters.JobNotifier,
-			adapters.Transcoder,
-			adapters.FileSystemService,
 		)
 		useCases.FailWorkerJobUseCase = workeruc.NewFailWorkerJobUseCase(
 			adapters.JobRepository,

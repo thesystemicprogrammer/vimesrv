@@ -3,6 +3,7 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -222,9 +223,30 @@ func (w *Worker) processJob(ctx context.Context, job *client.WorkerJob, workerNu
 	// Count output files for reporting
 	segmentCount, outputFiles := countOutputFiles(job.OutputPath, job.TrackType)
 
-	// Report completion
-	if err := w.client.CompleteJob(ctx, job.JobID, w.id, segmentCount, outputFiles); err != nil {
-		logger.Error().Err(err).Msg("Failed to report job completion")
+	// For video/audio tracks, probe segment durations and save to segments.json locally
+	if job.TrackType == "video" || job.TrackType == "audio" {
+		resolvedOutputPath := w.resolvePath(job.OutputPath)
+		segments, err := w.transcoder.ProbeSegmentDurations(ctx, resolvedOutputPath)
+		if err != nil {
+			logger.Error().Err(err).Msg("Failed to probe segment durations")
+			if reportErr := w.client.FailJob(ctx, job.JobID, w.id, "segment probing failed: "+err.Error(), true); reportErr != nil {
+				logger.Error().Err(reportErr).Msg("Failed to report job failure")
+			}
+			return
+		}
+		if err := saveSegmentsJSON(resolvedOutputPath, segments); err != nil {
+			logger.Error().Err(err).Msg("Failed to save segments.json")
+			if reportErr := w.client.FailJob(ctx, job.JobID, w.id, "failed to save segments.json: "+err.Error(), true); reportErr != nil {
+				logger.Error().Err(reportErr).Msg("Failed to report job failure")
+			}
+			return
+		}
+		logger.Info().Int("segment_count", len(segments)).Msg("Probed and saved segment durations")
+	}
+
+	// Report completion with retry logic
+	if err := w.completeJobWithRetry(ctx, job.JobID, segmentCount, outputFiles, logger); err != nil {
+		logger.Error().Err(err).Msg("Failed to report job completion after retries")
 		return
 	}
 
@@ -233,6 +255,49 @@ func (w *Worker) processJob(ctx context.Context, job *client.WorkerJob, workerNu
 		Dur("duration", elapsed).
 		Int("segments", segmentCount).
 		Msg("Job completed successfully")
+}
+
+// completeJobWithRetry attempts to report job completion with exponential backoff retry
+func (w *Worker) completeJobWithRetry(ctx context.Context, jobID int64, segmentCount int, outputFiles []string, logger zerolog.Logger) error {
+	completeFunc := func() error {
+		return w.client.CompleteJob(ctx, jobID, w.id, segmentCount, outputFiles)
+	}
+	return retryWithExponentialBackoff(ctx, completeFunc, 3, 2*time.Second, logger)
+}
+
+// retryWithExponentialBackoff executes the given function with exponential backoff retry.
+// maxRetries is the maximum number of attempts, baseDelay is the initial delay (doubles each retry).
+func retryWithExponentialBackoff(ctx context.Context, fn func() error, maxRetries int, baseDelay time.Duration, logger zerolog.Logger) error {
+	var lastErr error
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		err := fn()
+		if err == nil {
+			if attempt > 1 {
+				logger.Info().Int("attempt", attempt).Msg("Operation succeeded after retry")
+			}
+			return nil
+		}
+
+		lastErr = err
+		if attempt < maxRetries {
+			delay := baseDelay * time.Duration(1<<(attempt-1)) // Exponential: 2s, 4s, 8s
+			logger.Warn().
+				Err(err).
+				Int("attempt", attempt).
+				Int("max_retries", maxRetries).
+				Dur("retry_delay", delay).
+				Msg("Operation failed, retrying...")
+
+			select {
+			case <-ctx.Done():
+				return fmt.Errorf("context cancelled while retrying: %w", ctx.Err())
+			case <-time.After(delay):
+				// Continue to next retry
+			}
+		}
+	}
+
+	return fmt.Errorf("operation failed after %d attempts: %w", maxRetries, lastErr)
 }
 
 // buildTranscodeOptions converts a WorkerJob to transcoding.Options
@@ -334,4 +399,20 @@ func countOutputFiles(outputPath, trackType string) (int, []string) {
 	}
 
 	return segmentCount, files
+}
+
+// saveSegmentsJSON saves segment timing data to segments.json in the output directory
+func saveSegmentsJSON(outputPath string, segments []transcoding.SegmentInfo) error {
+	data := struct {
+		Segments []transcoding.SegmentInfo `json:"segments"`
+	}{
+		Segments: segments,
+	}
+
+	jsonData, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal segments: %w", err)
+	}
+
+	return os.WriteFile(filepath.Join(outputPath, "segments.json"), jsonData, 0644)
 }

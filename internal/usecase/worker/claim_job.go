@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/thesystemicprogrammer/vimesrv/internal/adapters/worker"
 	"github.com/thesystemicprogrammer/vimesrv/internal/domain"
@@ -58,6 +59,7 @@ type ClaimJobForWorkerUseCase struct {
 	mediaRepo      ports.MediaRepository
 	workerRegistry *worker.Registry
 	jobNotifier    ports.JobNotifier
+	backoff        ports.BackoffStrategy
 	config         *config.Config
 }
 
@@ -68,6 +70,7 @@ func NewClaimJobForWorkerUseCase(
 	mediaRepo ports.MediaRepository,
 	workerRegistry *worker.Registry,
 	jobNotifier ports.JobNotifier,
+	backoff ports.BackoffStrategy,
 	cfg *config.Config,
 ) *ClaimJobForWorkerUseCase {
 	return &ClaimJobForWorkerUseCase{
@@ -76,6 +79,7 @@ func NewClaimJobForWorkerUseCase(
 		mediaRepo:      mediaRepo,
 		workerRegistry: workerRegistry,
 		jobNotifier:    jobNotifier,
+		backoff:        backoff,
 		config:         cfg,
 	}
 }
@@ -100,29 +104,29 @@ func (uc *ClaimJobForWorkerUseCase) Execute(ctx context.Context, workerID string
 	// 3. Parse job payload to get transcode ID
 	var payload TranscodeJobPayload
 	if err := json.Unmarshal(job.Payload, &payload); err != nil {
-		// Release job and return error
-		uc.jobRepo.Reschedule(ctx, job.ID, job.RunAt, "invalid payload: "+err.Error())
+		// Fail job with proper retry logic
+		uc.failClaimedJob(ctx, job, "invalid payload: "+err.Error())
 		return nil, fmt.Errorf("invalid job payload: %w", err)
 	}
 
 	// 4. Fetch transcode record
 	transcode, err := uc.transcodeRepo.Get(ctx, payload.TranscodeID)
 	if err != nil {
-		uc.jobRepo.Reschedule(ctx, job.ID, job.RunAt, "transcode not found: "+err.Error())
+		uc.failClaimedJob(ctx, job, "transcode not found: "+err.Error())
 		return nil, fmt.Errorf("transcode not found: %w", err)
 	}
 
 	// 5. Fetch media file
 	media, err := uc.mediaRepo.Get(ctx, transcode.MediaID)
 	if err != nil {
-		uc.jobRepo.Reschedule(ctx, job.ID, job.RunAt, "media not found: "+err.Error())
+		uc.failClaimedJob(ctx, job, "media not found: "+err.Error())
 		return nil, fmt.Errorf("media not found: %w", err)
 	}
 
 	// 6. Build transcode options based on track type
 	opts, err := uc.buildTranscodeOptions(transcode)
 	if err != nil {
-		uc.jobRepo.Reschedule(ctx, job.ID, job.RunAt, "failed to build options: "+err.Error())
+		uc.failClaimedJob(ctx, job, "failed to build options: "+err.Error())
 		return nil, err
 	}
 
@@ -172,45 +176,84 @@ func (uc *ClaimJobForWorkerUseCase) buildTranscodeOptions(transcode *domain.Tran
 
 	switch transcode.TrackType {
 	case domain.TrackTypeVideo:
-		// Find quality profile
-		var quality *config.QualityProfile
-		for _, q := range uc.config.Transcoding.QualityProfiles {
-			if q.Name == transcode.Quality {
-				quality = &q
-				break
+		// Handle "original" quality - keep original resolution, use settings from highest enabled profile
+		if transcode.Quality == "original" {
+			// Don't set width/height - FFmpeg will keep the original resolution
+			// This also ensures rotation metadata is handled correctly without dimension distortion
+			opts.Width = 0
+			opts.Height = 0
+
+			// Find highest enabled quality profile for CRF/bitrate settings
+			var baseProfile *config.QualityProfile
+			for i := len(uc.config.Transcoding.QualityProfiles) - 1; i >= 0; i-- {
+				if uc.config.Transcoding.QualityProfiles[i].Enabled {
+					baseProfile = &uc.config.Transcoding.QualityProfiles[i]
+					break
+				}
 			}
-		}
-		if quality == nil {
-			return opts, fmt.Errorf("quality profile not found: %s", transcode.Quality)
-		}
+			if baseProfile == nil {
+				return opts, fmt.Errorf("no enabled quality profile found for original quality settings")
+			}
 
-		// Parse resolution
-		parts := strings.Split(quality.Resolution, "x")
-		if len(parts) != 2 {
-			return opts, fmt.Errorf("invalid resolution format: %s", quality.Resolution)
-		}
-		width, err := strconv.Atoi(parts[0])
-		if err != nil {
-			return opts, fmt.Errorf("invalid width in resolution: %w", err)
-		}
-		height, err := strconv.Atoi(parts[1])
-		if err != nil {
-			return opts, fmt.Errorf("invalid height in resolution: %w", err)
-		}
+			// Parse max bitrate from base profile
+			maxBitrateStr := strings.TrimSuffix(baseProfile.MaxBitrate, "k")
+			maxBitrate, err := strconv.Atoi(maxBitrateStr)
+			if err != nil {
+				return opts, fmt.Errorf("invalid max bitrate in base profile: %w", err)
+			}
 
-		// Parse max bitrate (remove 'k' suffix)
-		maxBitrateStr := strings.TrimSuffix(quality.MaxBitrate, "k")
-		maxBitrate, err := strconv.Atoi(maxBitrateStr)
-		if err != nil {
-			return opts, fmt.Errorf("invalid max bitrate: %w", err)
-		}
+			opts.VideoCodec = "libx264"
+			opts.CRF = baseProfile.CRF
+			opts.MaxBitrate = maxBitrate
+			opts.Preset = "medium"
 
-		opts.Width = width
-		opts.Height = height
-		opts.VideoCodec = "libx264"
-		opts.CRF = quality.CRF
-		opts.MaxBitrate = maxBitrate
-		opts.Preset = "medium"
+			logger.Info().
+				Str("transcode_id", transcode.ID).
+				Int("crf", opts.CRF).
+				Int("max_bitrate", opts.MaxBitrate).
+				Str("base_profile", baseProfile.Name).
+				Msg("Using original resolution (no scaling) with settings from highest enabled profile")
+		} else {
+			// Find quality profile by name
+			var quality *config.QualityProfile
+			for _, q := range uc.config.Transcoding.QualityProfiles {
+				if q.Name == transcode.Quality {
+					quality = &q
+					break
+				}
+			}
+			if quality == nil {
+				return opts, fmt.Errorf("quality profile not found: %s", transcode.Quality)
+			}
+
+			// Parse resolution
+			parts := strings.Split(quality.Resolution, "x")
+			if len(parts) != 2 {
+				return opts, fmt.Errorf("invalid resolution format: %s", quality.Resolution)
+			}
+			width, err := strconv.Atoi(parts[0])
+			if err != nil {
+				return opts, fmt.Errorf("invalid width in resolution: %w", err)
+			}
+			height, err := strconv.Atoi(parts[1])
+			if err != nil {
+				return opts, fmt.Errorf("invalid height in resolution: %w", err)
+			}
+
+			// Parse max bitrate (remove 'k' suffix)
+			maxBitrateStr := strings.TrimSuffix(quality.MaxBitrate, "k")
+			maxBitrate, err := strconv.Atoi(maxBitrateStr)
+			if err != nil {
+				return opts, fmt.Errorf("invalid max bitrate: %w", err)
+			}
+
+			opts.Width = width
+			opts.Height = height
+			opts.VideoCodec = "libx264"
+			opts.CRF = quality.CRF
+			opts.MaxBitrate = maxBitrate
+			opts.Preset = "medium"
+		}
 
 	case domain.TrackTypeAudio:
 		// Use audio bitrate from first enabled quality profile
@@ -273,5 +316,51 @@ func (uc *ClaimJobForWorkerUseCase) buildOutputPath(media *domain.MediaFile, tra
 		return filepath.Join(basePath, fmt.Sprintf("subtitle-%d.vtt", transcode.TrackIndex))
 	default:
 		return basePath
+	}
+}
+
+// failClaimedJob handles failure of a job that was already claimed.
+// It respects max attempts and uses proper backoff, unlike a simple Reschedule.
+func (uc *ClaimJobForWorkerUseCase) failClaimedJob(ctx context.Context, job *domain.Job, errMsg string) {
+	// Check if we should retry or mark as dead
+	if job.Attempts < job.MaxAttempts {
+		// Reschedule with backoff
+		delay := uc.backoff.NextDelay(job.Attempts)
+		nextRun := time.Now().Add(delay)
+
+		if err := uc.jobRepo.Reschedule(ctx, job.ID, nextRun, errMsg); err != nil {
+			logger.Error().Err(err).Int64("job_id", job.ID).Msg("failed to reschedule job during claim failure")
+			return
+		}
+
+		logger.Warn().
+			Int64("job_id", job.ID).
+			Int("attempt", job.Attempts).
+			Int("max_attempts", job.MaxAttempts).
+			Str("error", errMsg).
+			Time("next_run", nextRun).
+			Msg("Job failed during claim, rescheduled for retry")
+	} else {
+		// Max attempts reached, mark as dead
+		if err := uc.jobRepo.MarkDead(ctx, job.ID, errMsg); err != nil {
+			logger.Error().Err(err).Int64("job_id", job.ID).Msg("failed to mark job as dead during claim failure")
+			return
+		}
+
+		// Try to mark transcode as failed
+		var payload TranscodeJobPayload
+		if err := json.Unmarshal(job.Payload, &payload); err == nil && payload.TranscodeID != "" {
+			if err := uc.transcodeRepo.MarkFailed(ctx, payload.TranscodeID); err != nil {
+				logger.Warn().Err(err).Str("transcode_id", payload.TranscodeID).Msg("failed to mark transcode as failed")
+			}
+		}
+
+		logger.Error().
+			Int64("job_id", job.ID).
+			Int("attempts", job.Attempts).
+			Str("error", errMsg).
+			Msg("Job failed permanently during claim")
+
+		uc.jobNotifier.NotifyJobFailed(job, errMsg)
 	}
 }

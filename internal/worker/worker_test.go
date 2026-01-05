@@ -1,10 +1,16 @@
 package worker
 
 import (
+	"context"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/rs/zerolog"
 	"github.com/thesystemicprogrammer/vimesrv/internal/worker/client"
 	"github.com/thesystemicprogrammer/vimesrv/internal/worker/config"
 	"github.com/thesystemicprogrammer/vimesrv/pkg/transcoding"
@@ -409,6 +415,148 @@ func TestResolvePath(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRetryWithExponentialBackoff(t *testing.T) {
+	logger := zerolog.New(io.Discard)
+
+	t.Run("succeeds on first attempt", func(t *testing.T) {
+		callCount := 0
+		fn := func() error {
+			callCount++
+			return nil
+		}
+
+		err := retryWithExponentialBackoff(context.Background(), fn, 3, 10*time.Millisecond, logger)
+
+		if err != nil {
+			t.Errorf("expected no error, got %v", err)
+		}
+		if callCount != 1 {
+			t.Errorf("expected 1 call, got %d", callCount)
+		}
+	})
+
+	t.Run("succeeds on second attempt", func(t *testing.T) {
+		callCount := 0
+		fn := func() error {
+			callCount++
+			if callCount == 1 {
+				return fmt.Errorf("transient error")
+			}
+			return nil
+		}
+
+		err := retryWithExponentialBackoff(context.Background(), fn, 3, 10*time.Millisecond, logger)
+
+		if err != nil {
+			t.Errorf("expected no error, got %v", err)
+		}
+		if callCount != 2 {
+			t.Errorf("expected 2 calls, got %d", callCount)
+		}
+	})
+
+	t.Run("succeeds on third attempt", func(t *testing.T) {
+		callCount := 0
+		fn := func() error {
+			callCount++
+			if callCount < 3 {
+				return fmt.Errorf("transient error %d", callCount)
+			}
+			return nil
+		}
+
+		err := retryWithExponentialBackoff(context.Background(), fn, 3, 10*time.Millisecond, logger)
+
+		if err != nil {
+			t.Errorf("expected no error, got %v", err)
+		}
+		if callCount != 3 {
+			t.Errorf("expected 3 calls, got %d", callCount)
+		}
+	})
+
+	t.Run("fails after max retries", func(t *testing.T) {
+		callCount := 0
+		fn := func() error {
+			callCount++
+			return fmt.Errorf("persistent error")
+		}
+
+		err := retryWithExponentialBackoff(context.Background(), fn, 3, 10*time.Millisecond, logger)
+
+		if err == nil {
+			t.Error("expected error, got nil")
+		}
+		if callCount != 3 {
+			t.Errorf("expected 3 calls, got %d", callCount)
+		}
+		if !strings.Contains(err.Error(), "3 attempts") {
+			t.Errorf("expected error to mention 3 attempts, got %v", err)
+		}
+		if !strings.Contains(err.Error(), "persistent error") {
+			t.Errorf("expected error to contain original error, got %v", err)
+		}
+	})
+
+	t.Run("respects context cancellation", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		callCount := 0
+		fn := func() error {
+			callCount++
+			cancel() // Cancel after first attempt
+			return fmt.Errorf("error triggering retry")
+		}
+
+		err := retryWithExponentialBackoff(ctx, fn, 3, 10*time.Millisecond, logger)
+
+		if err == nil {
+			t.Error("expected error, got nil")
+		}
+		if callCount != 1 {
+			t.Errorf("expected 1 call before cancellation, got %d", callCount)
+		}
+		if !strings.Contains(err.Error(), "context cancelled") {
+			t.Errorf("expected context cancellation error, got %v", err)
+		}
+	})
+
+	t.Run("exponential delay increases correctly", func(t *testing.T) {
+		callCount := 0
+		callTimes := make([]time.Time, 0, 3)
+		fn := func() error {
+			callTimes = append(callTimes, time.Now())
+			callCount++
+			if callCount < 3 {
+				return fmt.Errorf("error %d", callCount)
+			}
+			return nil
+		}
+
+		baseDelay := 50 * time.Millisecond
+		err := retryWithExponentialBackoff(context.Background(), fn, 3, baseDelay, logger)
+
+		if err != nil {
+			t.Errorf("expected no error, got %v", err)
+		}
+		if len(callTimes) != 3 {
+			t.Fatalf("expected 3 call times, got %d", len(callTimes))
+		}
+
+		// First delay should be ~baseDelay (50ms)
+		firstDelay := callTimes[1].Sub(callTimes[0])
+		if firstDelay < baseDelay/2 || firstDelay > baseDelay*3 {
+			t.Errorf("first delay %v not within expected range around %v", firstDelay, baseDelay)
+		}
+
+		// Second delay should be ~2*baseDelay (100ms)
+		secondDelay := callTimes[2].Sub(callTimes[1])
+		expectedSecondDelay := 2 * baseDelay
+		if secondDelay < expectedSecondDelay/2 || secondDelay > expectedSecondDelay*3 {
+			t.Errorf("second delay %v not within expected range around %v", secondDelay, expectedSecondDelay)
+		}
+	})
 }
 
 func TestBuildTranscodeOptionsWithPathResolution(t *testing.T) {

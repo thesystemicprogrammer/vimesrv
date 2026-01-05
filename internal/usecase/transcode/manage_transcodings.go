@@ -408,6 +408,11 @@ func (uc *AddTranscodingUseCase) Execute(ctx context.Context, input AddTranscodi
 			return nil, fmt.Errorf("subtitle stream %d not found", input.TrackIndex)
 		}
 
+		// Check if subtitle is text-based (can be converted to WebVTT)
+		if !subtitleStream.IsTextBased() {
+			return nil, fmt.Errorf("subtitle stream %d uses bitmap-based codec '%s' which cannot be converted to WebVTT without OCR", input.TrackIndex, subtitleStream.Codec)
+		}
+
 		transcodeID = fmt.Sprintf("%s-subtitle-%d", media.ID, input.TrackIndex)
 		jobType = shared.JobTypeTranscodeSubtitle
 		payload = TranscodeJobPayload{
@@ -580,22 +585,31 @@ func (uc *RecreateTranscodingUseCase) Execute(ctx context.Context, input Recreat
 
 	case domain.TrackTypeSubtitle:
 		jobType = shared.JobTypeTranscodeSubtitle
-		// Get subtitle stream info for language
+		// Get subtitle stream info for language and codec validation
 		subtitleStreams, err := uc.subtitleStreamRepo.GetByMediaID(ctx, transcode.MediaID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get subtitle streams: %w", err)
 		}
-		var language string
+		var subtitleStream *domain.SubtitleStream
 		for _, ss := range subtitleStreams {
 			if ss.StreamIndex == transcode.TrackIndex {
-				language = ss.Language
+				subtitleStream = ss
 				break
 			}
 		}
+		if subtitleStream == nil {
+			return nil, fmt.Errorf("subtitle stream %d not found", transcode.TrackIndex)
+		}
+
+		// Check if subtitle is text-based (can be converted to WebVTT)
+		if !subtitleStream.IsTextBased() {
+			return nil, fmt.Errorf("subtitle stream %d uses bitmap-based codec '%s' which cannot be converted to WebVTT without OCR", transcode.TrackIndex, subtitleStream.Codec)
+		}
+
 		payload = TranscodeJobPayload{
 			TranscodeID: transcode.ID,
 			Filename:    media.Filename,
-			Language:    language,
+			Language:    subtitleStream.Language,
 		}
 	}
 
