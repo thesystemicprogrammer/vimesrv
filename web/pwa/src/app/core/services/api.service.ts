@@ -931,7 +931,7 @@ export class ApiService {
    */
   getMediaTranscodings(mediaId: string): Observable<ApiResponse<MediaTranscodingDetails>> {
     return this.http.get<ApiResponse<MediaTranscodingDetails>>(
-      `${this.baseUrl}/admin/transcodings/${mediaId}`
+      `${this.baseUrl}/admin/transcodings/media/${mediaId}`
     );
   }
 
@@ -940,7 +940,7 @@ export class ApiService {
    */
   addTranscoding(mediaId: string, request: AddTranscodingRequest): Observable<ApiResponse<AddTranscodingResponse>> {
     return this.http.post<ApiResponse<AddTranscodingResponse>>(
-      `${this.baseUrl}/admin/transcodings/${mediaId}`,
+      `${this.baseUrl}/admin/transcodings/media/${mediaId}`,
       request
     );
   }
@@ -950,7 +950,7 @@ export class ApiService {
    */
   recreateTranscoding(transcodeId: string): Observable<ApiResponse<RecreateTranscodingResponse>> {
     return this.http.post<ApiResponse<RecreateTranscodingResponse>>(
-      `${this.baseUrl}/admin/transcodings/${transcodeId}/recreate`,
+      `${this.baseUrl}/admin/transcodings/transcode/${transcodeId}/recreate`,
       {}
     );
   }
@@ -960,7 +960,7 @@ export class ApiService {
    */
   deleteTranscoding(transcodeId: string): Observable<ApiResponse<DeleteTranscodingResponse>> {
     return this.http.delete<ApiResponse<DeleteTranscodingResponse>>(
-      `${this.baseUrl}/admin/transcodings/${transcodeId}`
+      `${this.baseUrl}/admin/transcodings/transcode/${transcodeId}`
     );
   }
 }

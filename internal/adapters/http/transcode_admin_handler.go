@@ -51,17 +51,13 @@ func (h *TranscodeAdminHandler) RegisterRoutes(router *gin.RouterGroup) {
 		// Search media files
 		adminGroup.GET("/search", h.SearchMedia)
 
-		// Get transcoding details for a media file
-		adminGroup.GET("/:mediaId", h.GetDetails)
+		// Media-specific routes (get details, add transcoding)
+		adminGroup.GET("/media/:mediaId", h.GetDetails)
+		adminGroup.POST("/media/:mediaId", h.AddTranscoding)
 
-		// Add new transcoding
-		adminGroup.POST("/:mediaId", h.AddTranscoding)
-
-		// Recreate existing transcoding
-		adminGroup.POST("/:transcodeId/recreate", h.RecreateTranscoding)
-
-		// Delete transcoding
-		adminGroup.DELETE("/:transcodeId", h.DeleteTranscoding)
+		// Transcode-specific routes (recreate, delete)
+		adminGroup.POST("/transcode/:transcodeId/recreate", h.RecreateTranscoding)
+		adminGroup.DELETE("/transcode/:transcodeId", h.DeleteTranscoding)
 	}
 	logger.Debug().Msg("Transcode admin routes registered")
 }
