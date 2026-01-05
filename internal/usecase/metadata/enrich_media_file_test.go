@@ -224,6 +224,10 @@ func (m *mockMediaRepository) CountBySeriesMetadataID(ctx context.Context, serie
 	return 0, nil
 }
 
+func (m *mockMediaRepository) Search(ctx context.Context, query string, limit int) ([]*domain.MediaFile, error) {
+	return nil, nil
+}
+
 type mockMovieMetadataRepository struct {
 	getByTMDBIDFunc       func(ctx context.Context, tmdbID int) (*domain.MovieMetadata, error)
 	createFunc            func(ctx context.Context, metadata *domain.MovieMetadata) error

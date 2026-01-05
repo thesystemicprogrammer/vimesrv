@@ -27,6 +27,13 @@ type UseCases struct {
 	GetMediaUseCase            *media.GetMediaUseCase
 	ListMediaUseCase           *media.ListMediaUseCase
 	DeleteMediaUseCase         *media.DeleteMediaUseCase
+	// Transcode admin use cases
+	GetTranscodingDetailsUseCase      *transcode.GetTranscodingDetailsUseCase
+	AddTranscodingUseCase             *transcode.AddTranscodingUseCase
+	RecreateTranscodingUseCase        *transcode.RecreateTranscodingUseCase
+	DeleteTranscodingUseCase          *transcode.DeleteTranscodingUseCase
+	SearchMediaForTranscodingsUseCase *transcode.SearchMediaForTranscodingsUseCase
+	GetQualityProfilesUseCase         *transcode.GetQualityProfilesUseCase
 	// Metadata enrichment use cases
 	EnrichMediaFileUseCase *metadata.EnrichMediaFileUseCase
 	GetCandidatesUseCase   *metadata.GetCandidatesUseCase
@@ -284,13 +291,47 @@ func initUseCases(cfg *config.Config, adapters *Adapters) *UseCases {
 			adapters.FileSystemService,
 			cfg,
 		),
-		EnrichMediaFileUseCase: enrichMediaFileUseCase,
-		GetCandidatesUseCase:   getCandidatesUseCase,
-		LinkMetadataUseCase:    linkMetadataUseCase,
-		SearchMetadataUseCase:  searchMetadataUseCase,
-		LinkFromSearchUseCase:  linkFromSearchUseCase,
-		SkipEnrichmentUseCase:  skipEnrichmentUseCase,
-		ResetEnrichmentUseCase: resetEnrichmentUseCase,
+		// Transcode admin use cases
+		GetTranscodingDetailsUseCase: transcode.NewGetTranscodingDetailsUseCase(
+			adapters.MediaRepository,
+			adapters.TranscodeRepository,
+			adapters.AudioStreamRepository,
+			adapters.SubtitleStreamRepository,
+			cfg,
+		),
+		AddTranscodingUseCase: transcode.NewAddTranscodingUseCase(
+			adapters.MediaRepository,
+			adapters.TranscodeRepository,
+			adapters.AudioStreamRepository,
+			adapters.SubtitleStreamRepository,
+			enqueueJobUseCase,
+			cfg,
+		),
+		RecreateTranscodingUseCase: transcode.NewRecreateTranscodingUseCase(
+			adapters.MediaRepository,
+			adapters.TranscodeRepository,
+			adapters.AudioStreamRepository,
+			adapters.SubtitleStreamRepository,
+			adapters.FileSystemService,
+			enqueueJobUseCase,
+			cfg,
+		),
+		DeleteTranscodingUseCase: transcode.NewDeleteTranscodingUseCase(
+			adapters.TranscodeRepository,
+			adapters.FileSystemService,
+			cfg,
+		),
+		SearchMediaForTranscodingsUseCase: transcode.NewSearchMediaForTranscodingsUseCase(
+			adapters.MediaRepository,
+		),
+		GetQualityProfilesUseCase: transcode.NewGetQualityProfilesUseCase(cfg),
+		EnrichMediaFileUseCase:    enrichMediaFileUseCase,
+		GetCandidatesUseCase:      getCandidatesUseCase,
+		LinkMetadataUseCase:       linkMetadataUseCase,
+		SearchMetadataUseCase:     searchMetadataUseCase,
+		LinkFromSearchUseCase:     linkFromSearchUseCase,
+		SkipEnrichmentUseCase:     skipEnrichmentUseCase,
+		ResetEnrichmentUseCase:    resetEnrichmentUseCase,
 		// Library browsing use cases
 		ListMoviesUseCase:         library.NewListMoviesUseCase(adapters.LibraryRepository),
 		GetMovieUseCase:           library.NewGetMovieUseCase(adapters.LibraryRepository, getSimilarMoviesUseCase, getMovieCollectionUseCase, cfg.TMDB.MaxCastMembers),

@@ -42,4 +42,8 @@ type MediaRepository interface {
 
 	// CountBySeriesMetadataID counts media files linked to episodes in any season of the given series
 	CountBySeriesMetadataID(ctx context.Context, seriesMetadataID int64) (int, error)
+
+	// Search searches media files by title or filename
+	// Returns up to limit results, ordered by relevance
+	Search(ctx context.Context, query string, limit int) ([]*domain.MediaFile, error)
 }

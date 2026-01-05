@@ -253,14 +253,12 @@ func (uc *ProcessTranscodeUseCase) Execute(ctx context.Context, input ProcessTra
 func (uc *ProcessTranscodeUseCase) transcodeVideo(ctx context.Context, jobID int64, media *domain.MediaFile, transcode *domain.Transcode, outputPath string) error {
 	var width, height, crf, maxBitrate int
 
-	// Handle "original" quality - use source resolution with settings from highest enabled profile
+	// Handle "original" quality - keep original resolution, use settings from highest enabled profile
 	if transcode.Quality == "original" {
-		width = media.Width
-		height = media.Height
-
-		if width == 0 || height == 0 {
-			return fmt.Errorf("source video dimensions unknown, cannot create original quality transcode")
-		}
+		// Don't set width/height - FFmpeg will keep the original resolution
+		// This also ensures rotation metadata is handled correctly without dimension distortion
+		width = 0
+		height = 0
 
 		// Find highest enabled quality profile for CRF/bitrate settings
 		var baseProfile *config.QualityProfile
@@ -284,12 +282,10 @@ func (uc *ProcessTranscodeUseCase) transcodeVideo(ctx context.Context, jobID int
 
 		logger.Info().
 			Str("transcode_id", transcode.ID).
-			Int("width", width).
-			Int("height", height).
 			Int("crf", crf).
 			Int("max_bitrate", maxBitrate).
 			Str("base_profile", baseProfile.Name).
-			Msg("Using original resolution with settings from highest enabled profile")
+			Msg("Using original resolution (no scaling) with settings from highest enabled profile")
 	} else {
 		// Find quality profile by name
 		var quality *config.QualityProfile

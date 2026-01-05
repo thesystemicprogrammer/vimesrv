@@ -65,6 +65,11 @@ export const routes: Routes = [
     loadComponent: () => import('./features/jobs/jobs.component').then(m => m.JobsComponent)
   },
   {
+    path: 'transcodings',
+    canActivate: [managerGuard, passwordChangeGuard],
+    loadComponent: () => import('./features/admin/transcoding-admin.component').then(m => m.TranscodingAdminComponent)
+  },
+  {
     path: '**',
     redirectTo: ''
   }

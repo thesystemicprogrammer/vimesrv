@@ -223,8 +223,9 @@ func (t *FFmpegTranscoder) validateVideoOptions(opts Options) error {
 	if err := t.validateCommonOptions(opts); err != nil {
 		return err
 	}
-	if opts.Width <= 0 || opts.Height <= 0 {
-		return fmt.Errorf("invalid dimensions: %dx%d", opts.Width, opts.Height)
+	// Dimensions can be 0x0 (keep original) or both must be positive
+	if (opts.Width < 0 || opts.Height < 0) || (opts.Width == 0) != (opts.Height == 0) {
+		return fmt.Errorf("invalid dimensions: %dx%d (must be both 0 for original or both positive)", opts.Width, opts.Height)
 	}
 	if opts.CRF <= 0 && opts.VideoBitrate <= 0 {
 		return fmt.Errorf("either CRF or video bitrate must be specified")
@@ -309,9 +310,11 @@ func (t *FFmpegTranscoder) buildVideoArgs(opts Options) []string {
 		)
 	}
 
-	// Scaling and GOP settings
+	// Scaling (only if dimensions are specified) and GOP settings
+	if opts.Width > 0 && opts.Height > 0 {
+		args = append(args, "-vf", fmt.Sprintf("scale=%d:%d", opts.Width, opts.Height))
+	}
 	args = append(args,
-		"-vf", fmt.Sprintf("scale=%d:%d", opts.Width, opts.Height),
 		"-g", fmt.Sprintf("%d", gopSize),
 		"-keyint_min", fmt.Sprintf("%d", gopSize),
 		"-sc_threshold", "0",

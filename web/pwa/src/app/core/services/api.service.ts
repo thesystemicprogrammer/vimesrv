@@ -452,6 +452,96 @@ export interface JobListOptions {
   includeOld?: boolean;
 }
 
+// Transcoding admin types
+export interface QualityProfileInfo {
+  name: string;
+  enabled: boolean;
+  resolution: string;
+  has_transcode: boolean;
+  is_qualified: boolean;
+}
+
+export interface AudioStreamInfo {
+  index: number;
+  language: string;
+  title: string;
+  channels: number;
+  has_transcode: boolean;
+}
+
+export interface SubtitleStreamInfo {
+  index: number;
+  language: string;
+  title: string;
+  has_transcode: boolean;
+}
+
+export interface TranscodeInfo {
+  id: string;
+  quality?: string;
+  track_index: number;
+  language?: string;
+  title?: string;
+  channels?: number;
+  status: string;
+}
+
+export interface MediaTranscodingDetails {
+  media_id: string;
+  title: string;
+  filename: string;
+  resolution: string;
+  height: number;
+  video_transcodes: TranscodeInfo[];
+  audio_transcodes: TranscodeInfo[];
+  subtitle_transcodes: TranscodeInfo[];
+  available_audio_streams: AudioStreamInfo[];
+  available_subtitle_streams: SubtitleStreamInfo[];
+  qualified_quality_profiles: QualityProfileInfo[];
+}
+
+export interface MediaSearchResult {
+  id: string;
+  title: string;
+  filename: string;
+  resolution: string;
+}
+
+export interface TranscodingSearchResponse {
+  results: MediaSearchResult[];
+  count: number;
+}
+
+export interface TranscodingConfigResponse {
+  quality_profiles: Array<{
+    name: string;
+    enabled: boolean;
+    resolution: string;
+    video_bitrate: string;
+    audio_bitrate: string;
+  }>;
+}
+
+export interface AddTranscodingRequest {
+  type: 'video' | 'audio' | 'subtitle';
+  quality?: string;
+  track_index?: number;
+}
+
+export interface AddTranscodingResponse {
+  transcode_id: string;
+  job_enqueued: boolean;
+}
+
+export interface RecreateTranscodingResponse {
+  transcode_id: string;
+  job_enqueued: boolean;
+}
+
+export interface DeleteTranscodingResponse {
+  deleted: boolean;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -812,5 +902,65 @@ export class ApiService {
     }
     const separator = manifestUrl.includes('?') ? '&' : '?';
     return `${manifestUrl}${separator}token=${token}`;
+  }
+
+  // Transcoding admin endpoints
+
+  /**
+   * Get transcoding configuration (quality profiles)
+   */
+  getTranscodingConfig(): Observable<ApiResponse<TranscodingConfigResponse>> {
+    return this.http.get<ApiResponse<TranscodingConfigResponse>>(
+      `${this.baseUrl}/admin/transcodings/config`
+    );
+  }
+
+  /**
+   * Search media files for transcoding management
+   */
+  searchMediaForTranscodings(query: string): Observable<ApiResponse<TranscodingSearchResponse>> {
+    const params = new HttpParams().set('q', query);
+    return this.http.get<ApiResponse<TranscodingSearchResponse>>(
+      `${this.baseUrl}/admin/transcodings/search`,
+      { params }
+    );
+  }
+
+  /**
+   * Get transcoding details for a media file
+   */
+  getMediaTranscodings(mediaId: string): Observable<ApiResponse<MediaTranscodingDetails>> {
+    return this.http.get<ApiResponse<MediaTranscodingDetails>>(
+      `${this.baseUrl}/admin/transcodings/${mediaId}`
+    );
+  }
+
+  /**
+   * Add a new transcoding for a media file
+   */
+  addTranscoding(mediaId: string, request: AddTranscodingRequest): Observable<ApiResponse<AddTranscodingResponse>> {
+    return this.http.post<ApiResponse<AddTranscodingResponse>>(
+      `${this.baseUrl}/admin/transcodings/${mediaId}`,
+      request
+    );
+  }
+
+  /**
+   * Recreate an existing transcoding (delete files and re-enqueue job)
+   */
+  recreateTranscoding(transcodeId: string): Observable<ApiResponse<RecreateTranscodingResponse>> {
+    return this.http.post<ApiResponse<RecreateTranscodingResponse>>(
+      `${this.baseUrl}/admin/transcodings/${transcodeId}/recreate`,
+      {}
+    );
+  }
+
+  /**
+   * Delete a transcoding and its output files
+   */
+  deleteTranscoding(transcodeId: string): Observable<ApiResponse<DeleteTranscodingResponse>> {
+    return this.http.delete<ApiResponse<DeleteTranscodingResponse>>(
+      `${this.baseUrl}/admin/transcodings/${transcodeId}`
+    );
   }
 }

@@ -481,3 +481,54 @@ func (r *MediaRepository) CountBySeriesMetadataID(ctx context.Context, seriesMet
 
 	return count, nil
 }
+
+// Search searches media files by title or filename
+// Returns up to limit results, ordered by relevance (exact matches first, then partial matches)
+func (r *MediaRepository) Search(ctx context.Context, searchQuery string, limit int) ([]*domain.MediaFile, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+
+	// Use LIKE for case-insensitive search on title and filename
+	// Order by exact match first, then by created_at descending
+	query := `
+		SELECT 
+			id, fingerprint, file_path, original_filename, filename,
+			title, duration, file_size, format, video_codec, audio_codecs,
+			resolution, width, height, bitrate, audio_tracks, subtitle_tracks,
+			subtitle_languages, status, created_at, updated_at, scanned_at,
+			enrichment_status, metadata_type, movie_metadata_id, episode_metadata_id, edition
+		FROM media_files
+		WHERE title LIKE ? OR filename LIKE ?
+		ORDER BY 
+			CASE 
+				WHEN LOWER(title) = LOWER(?) THEN 0
+				WHEN LOWER(filename) = LOWER(?) THEN 1
+				ELSE 2
+			END,
+			created_at DESC
+		LIMIT ?
+	`
+
+	searchPattern := "%" + searchQuery + "%"
+	rows, err := r.db.QueryContext(ctx, query, searchPattern, searchPattern, searchQuery, searchQuery, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search media files: %w", err)
+	}
+	defer rows.Close()
+
+	var mediaFiles []*domain.MediaFile
+	for rows.Next() {
+		media, err := r.scanMediaRow(rows)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan media file: %w", err)
+		}
+		mediaFiles = append(mediaFiles, media)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating media files: %w", err)
+	}
+
+	return mediaFiles, nil
+}

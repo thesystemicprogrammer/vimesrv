@@ -58,6 +58,10 @@ func (m *mockMediaRepository) CountBySeriesMetadataID(ctx context.Context, serie
 	return 0, nil
 }
 
+func (m *mockMediaRepository) Search(ctx context.Context, query string, limit int) ([]*domain.MediaFile, error) {
+	return nil, nil
+}
+
 // MockTranscodeRepository for testing
 type mockTranscodeRepository struct {
 	GetByMediaIDFn func(ctx context.Context, mediaID string) ([]*domain.Transcode, error)

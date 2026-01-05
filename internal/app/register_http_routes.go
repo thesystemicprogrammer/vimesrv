@@ -94,6 +94,17 @@ func registerHTTPHandlers(useCases *UseCases, adapters *Adapters, httpServer *se
 		// Job API (admin/manager only)
 		jobHandler := http.NewJobHandler(useCases.ListJobsUseCase, adapters.ProgressCache)
 		jobHandler.RegisterRoutes(apiGroup)
+
+		// Transcode Admin API (admin/manager only)
+		transcodeAdminHandler := http.NewTranscodeAdminHandler(
+			useCases.GetTranscodingDetailsUseCase,
+			useCases.AddTranscodingUseCase,
+			useCases.RecreateTranscodingUseCase,
+			useCases.DeleteTranscodingUseCase,
+			useCases.SearchMediaForTranscodingsUseCase,
+			useCases.GetQualityProfilesUseCase,
+		)
+		transcodeAdminHandler.RegisterRoutes(apiGroup)
 	}
 
 	// === Protected Streaming Routes ===

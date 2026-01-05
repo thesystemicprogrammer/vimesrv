@@ -213,6 +213,14 @@ func (m *MockMediaRepository) CountBySeriesMetadataID(ctx context.Context, serie
 	return args.Int(0), args.Error(1)
 }
 
+func (m *MockMediaRepository) Search(ctx context.Context, query string, limit int) ([]*domain.MediaFile, error) {
+	args := m.Called(ctx, query, limit)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.MediaFile), args.Error(1)
+}
+
 // Helper to create test config
 func testConfig() config.MediaConfig {
 	return config.MediaConfig{
