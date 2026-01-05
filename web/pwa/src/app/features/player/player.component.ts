@@ -1,15 +1,29 @@
 import { Component, OnInit, OnDestroy, ViewChild, ElementRef, signal, inject, HostListener } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, DecimalPipe } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
+import { Subscription } from 'rxjs';
 import * as dashjs from 'dashjs';
 import { ApiService, MediaDetail, AudioStream, SubtitleStream } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
+import { PlaybackDecisionService, PlaybackMode, PlaybackDecision } from '../../core/services/playback-decision.service';
+import { PlaybackMonitorService, FallbackEvent } from '../../core/services/playback-monitor.service';
+import { BandwidthService } from '../../core/services/bandwidth.service';
 
 interface QualityLevel {
   index: number;       // Original index from dash.js getRepresentationsByType()
   id: string;          // Representation ID
   height: number;
   bandwidth: number;
+}
+
+interface DebugStats {
+  playbackMode: 'Direct Play' | 'Direct Stream' | 'Adaptive';
+  bandwidthMbps: number | null;
+  bufferAhead: number;
+  stallCount: number;
+  mediaBitrateMbps: number;
+  currentQuality: string | null;  // e.g., "1080p" or "1080p (auto)"
+  abrEnabled: boolean | null;     // only for DASH
 }
 
 @Component({
@@ -49,6 +63,43 @@ interface QualityLevel {
               </svg>
               <p class="text-lg">{{ error() }}</p>
               <a routerLink="/" class="mt-4 inline-block text-blue-400 hover:text-blue-300">Back to Library</a>
+            </div>
+          </div>
+        }
+
+        <!-- Fallback Notification -->
+        @if (notificationMessage()) {
+          <div class="absolute top-4 left-1/2 -translate-x-1/2 z-20 bg-zinc-800/95 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 animate-fade-in">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span class="text-sm">{{ notificationMessage() }}</span>
+          </div>
+        }
+
+        <!-- Debug Panel -->
+        @if (showDebugPanel() && debugStats()) {
+          <div class="absolute top-12 right-4 z-30 bg-black/85 text-white text-xs font-mono p-3 rounded-lg min-w-48 backdrop-blur-sm">
+            <div class="font-bold mb-2 flex items-center gap-2">
+              Playback Debug
+              <span class="w-2 h-2 rounded-full"
+                    [class.bg-green-500]="debugStats()?.playbackMode === 'Direct Play'"
+                    [class.bg-yellow-500]="debugStats()?.playbackMode === 'Direct Stream'"
+                    [class.bg-blue-500]="debugStats()?.playbackMode === 'Adaptive'">
+              </span>
+            </div>
+            <div class="space-y-0.5 text-zinc-300">
+              <div>Mode: <span class="text-white">{{ debugStats()?.playbackMode }}</span></div>
+              <div>Bandwidth: <span class="text-white">{{ debugStats()?.bandwidthMbps !== null ? (debugStats()?.bandwidthMbps | number:'1.1-1') + ' Mbps' : '?' }}</span></div>
+              <div>Buffer: <span class="text-white">{{ debugStats()?.bufferAhead | number:'1.1-1' }}s</span></div>
+              <div>Stalls: <span class="text-white">{{ debugStats()?.stallCount }}</span></div>
+              <div>Media: <span class="text-white">{{ debugStats()?.mediaBitrateMbps | number:'1.1-1' }} Mbps</span></div>
+              @if (debugStats()?.currentQuality) {
+                <div>Quality: <span class="text-white">{{ debugStats()?.currentQuality }}</span></div>
+              }
+              @if (debugStats()?.abrEnabled !== null) {
+                <div>ABR: <span class="text-white">{{ debugStats()?.abrEnabled ? 'enabled' : 'disabled' }}</span></div>
+              }
             </div>
           </div>
         }
@@ -136,6 +187,14 @@ interface QualityLevel {
               <div class="text-white text-sm">
                 {{ formatTime(currentTime()) }} / {{ formatTime(duration()) }}
               </div>
+
+              <!-- Playback Mode Indicator -->
+              @if (playbackModeLabel()) {
+                <div class="text-xs px-2 py-0.5 rounded"
+                     [class]="playbackModeLabel() === 'Adaptive' ? 'bg-zinc-700 text-zinc-300' : 'bg-green-700 text-green-100'">
+                  {{ playbackModeLabel() }}
+                </div>
+              }
 
               <!-- Spacer -->
               <div class="flex-1"></div>
@@ -240,6 +299,15 @@ interface QualityLevel {
       cursor: pointer;
       border: none;
     }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translate(-50%, -10px); }
+      to { opacity: 1; transform: translate(-50%, 0); }
+    }
+    
+    .animate-fade-in {
+      animation: fadeIn 0.3s ease-out forwards;
+    }
   `]
 })
 export class PlayerComponent implements OnInit, OnDestroy {
@@ -251,15 +319,32 @@ export class PlayerComponent implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
+  private readonly playbackDecision = inject(PlaybackDecisionService);
+  private readonly playbackMonitor = inject(PlaybackMonitorService);
+  private readonly bandwidthService = inject(BandwidthService);
 
   private player: dashjs.MediaPlayerClass | null = null;
   private streamToken: string | null = null;
   private controlsTimeout: any = null;
+  private currentPlaybackMode: PlaybackMode = 'dash';
+  private fallbackSubscription: Subscription | null = null;
+  private notificationTimeout: any = null;
+
+  // DASH pre-warming
+  private manifestPrewarmPromise: Promise<void> | null = null;
+
+  // Debug panel
+  private tapCount = 0;
+  private tapTimeout: any = null;
+  private debugPanelTimeout: any = null;
+  private debugStatsInterval: any = null;
 
   // State signals
   loading = signal(true);
   error = signal<string | null>(null);
   media = signal<MediaDetail | null>(null);
+  playbackModeLabel = signal<string>('');  // "Direct Play", "Direct Stream", "Adaptive"
+  notificationMessage = signal<string | null>(null);  // Fallback notification
   
   // Playback signals
   isPlaying = signal(false);
@@ -280,6 +365,10 @@ export class PlayerComponent implements OnInit, OnDestroy {
   // Quality signals
   qualityLevels = signal<QualityLevel[]>([]);
   currentQualityIndex = signal(-1); // -1 = auto
+
+  // Debug panel
+  showDebugPanel = signal(false);
+  debugStats = signal<DebugStats | null>(null);
 
   @HostListener('document:keydown', ['$event'])
   onKeyDown(event: KeyboardEvent): void {
@@ -316,6 +405,10 @@ export class PlayerComponent implements OnInit, OnDestroy {
         event.preventDefault();
         this.toggleFullscreen();
         break;
+      case 'KeyD':
+        event.preventDefault();
+        this.toggleDebugPanel();
+        break;
     }
   }
 
@@ -340,6 +433,22 @@ export class PlayerComponent implements OnInit, OnDestroy {
     if (this.controlsTimeout) {
       clearTimeout(this.controlsTimeout);
     }
+    if (this.notificationTimeout) {
+      clearTimeout(this.notificationTimeout);
+    }
+    if (this.tapTimeout) {
+      clearTimeout(this.tapTimeout);
+    }
+    if (this.debugPanelTimeout) {
+      clearTimeout(this.debugPanelTimeout);
+    }
+    if (this.debugStatsInterval) {
+      clearInterval(this.debugStatsInterval);
+    }
+    if (this.fallbackSubscription) {
+      this.fallbackSubscription.unsubscribe();
+    }
+    this.playbackMonitor.stopMonitoring();
   }
 
   private async loadMedia(mediaId: string): Promise<void> {
@@ -362,11 +471,24 @@ export class PlayerComponent implements OnInit, OnDestroy {
       }
       this.streamToken = tokenResponse.data.token;
 
-      // Build manifest URL (token will be sent via Authorization header)
-      const manifestUrl = media.dash_manifest_url;
-      
-      // Initialize dash.js player
-      this.initializePlayer(manifestUrl);
+      // Make playback decision
+      const decision = await this.playbackDecision.decide(media);
+      console.log('Playback decision:', decision);
+
+      this.currentPlaybackMode = decision.mode;
+
+      if (decision.mode === 'direct' || decision.mode === 'direct-stream') {
+        // Pre-warm DASH manifest in background for faster fallback
+        this.prewarmDashManifest(media.dash_manifest_url);
+
+        // Initialize direct player
+        await this.initializeDirectPlayer(decision.url);
+        this.playbackModeLabel.set(decision.mode === 'direct' ? 'Direct Play' : 'Direct Stream');
+      } else {
+        // Fall back to DASH
+        this.initializeDashPlayer(media.dash_manifest_url);
+        this.playbackModeLabel.set('Adaptive');
+      }
       
     } catch (err) {
       console.error('Failed to load media:', err);
@@ -375,7 +497,207 @@ export class PlayerComponent implements OnInit, OnDestroy {
     }
   }
 
-  private initializePlayer(manifestUrl: string): void {
+  /**
+   * Pre-warm DASH manifest in background for faster fallback
+   */
+  private prewarmDashManifest(manifestUrl: string): void {
+    if (!manifestUrl || !this.streamToken) return;
+
+    this.manifestPrewarmPromise = fetch(manifestUrl, {
+      headers: { 'Authorization': `Bearer ${this.streamToken}` }
+    })
+    .then(response => {
+      if (response.ok) {
+        console.log('DASH manifest pre-warmed');
+      }
+    })
+    .catch(err => {
+      console.warn('DASH manifest pre-warm failed:', err);
+    });
+  }
+
+  /**
+   * Initialize direct player for native video playback
+   * Uses query param token for authentication (Range requests require this)
+   */
+  private async initializeDirectPlayer(url: string): Promise<void> {
+    try {
+      const video = this.videoElement.nativeElement;
+
+      // Build URL with stream token as query param
+      // This is necessary because video element Range requests can't use custom headers
+      const separator = url.includes('?') ? '&' : '?';
+      const directUrl = `${url}${separator}token=${this.streamToken}`;
+
+      // Set video source
+      video.src = directUrl;
+
+      video.onerror = () => {
+        console.error('Direct playback error:', video.error);
+        // Attempt fallback to DASH
+        this.fallbackToDash();
+      };
+
+      video.onloadedmetadata = () => {
+        this.loading.set(false);
+        // Load VTT subtitles for direct play
+        this.loadSubtitlesForDirectPlay();
+
+        // Start monitoring for playback issues
+        this.startPlaybackMonitoring();
+      };
+
+      // Start playback
+      try {
+        await video.play();
+      } catch (playErr) {
+        console.warn('Autoplay blocked:', playErr);
+        // Autoplay blocked - user will need to click play
+        this.loading.set(false);
+      }
+
+    } catch (err) {
+      console.error('Direct playback initialization failed:', err);
+      // Attempt fallback to DASH
+      this.fallbackToDash();
+    }
+  }
+
+  /**
+   * Load VTT subtitles as <track> elements for direct play mode
+   */
+  private loadSubtitlesForDirectPlay(): void {
+    const media = this.media();
+    if (!media || !media.subtitle_streams?.length) return;
+
+    const video = this.videoElement.nativeElement;
+
+    // Remove any existing tracks
+    while (video.firstChild) {
+      video.removeChild(video.firstChild);
+    }
+
+    // Add track elements for each subtitle
+    media.subtitle_streams.forEach((sub, idx) => {
+      const track = document.createElement('track');
+      track.kind = 'subtitles';
+      track.label = sub.title || sub.language || `Track ${idx + 1}`;
+      track.srclang = sub.language || 'und';
+
+      // VTT files are served via DASH handler at same path pattern
+      // Add stream token as query param since track elements can't use custom headers
+      const baseUrl = `/stream/dash/content/${media.id}/subtitle-${sub.index}.vtt`;
+      track.src = this.streamToken ? `${baseUrl}?token=${this.streamToken}` : baseUrl;
+
+      video.appendChild(track);
+    });
+  }
+
+  /**
+   * Start monitoring playback for issues that would trigger fallback
+   */
+  private startPlaybackMonitoring(): void {
+    const video = this.videoElement.nativeElement;
+
+    // Subscribe to fallback events
+    this.fallbackSubscription = this.playbackMonitor.fallbackNeeded$.subscribe(
+      (event: FallbackEvent) => {
+        console.log('Fallback triggered by monitor:', event);
+        this.handleMonitorFallback(event);
+      }
+    );
+
+    // Start monitoring
+    this.playbackMonitor.startMonitoring(video);
+  }
+
+  /**
+   * Handle fallback triggered by the playback monitor
+   */
+  private handleMonitorFallback(event: FallbackEvent): void {
+    // Save current position before switching
+    const currentPosition = event.currentTime;
+
+    // Show notification
+    this.showNotification('Switching to adaptive streaming...');
+
+    // Perform fallback
+    this.fallbackToDash(currentPosition);
+  }
+
+  /**
+   * Show a temporary notification message
+   */
+  private showNotification(message: string, durationMs: number = 3000): void {
+    this.notificationMessage.set(message);
+
+    if (this.notificationTimeout) {
+      clearTimeout(this.notificationTimeout);
+    }
+
+    this.notificationTimeout = setTimeout(() => {
+      this.notificationMessage.set(null);
+    }, durationMs);
+  }
+
+  /**
+   * Fall back from direct play to DASH streaming
+   */
+  private async fallbackToDash(resumePosition?: number): Promise<void> {
+    const media = this.media();
+    if (!media?.dash_manifest_url) {
+      this.error.set('Playback failed and no fallback available');
+      this.loading.set(false);
+      return;
+    }
+
+    console.log('Falling back to DASH streaming', resumePosition ? `at ${resumePosition}s` : '');
+
+    // Wait for pre-warmed manifest (max 500ms)
+    if (this.manifestPrewarmPromise) {
+      await Promise.race([
+        this.manifestPrewarmPromise,
+        new Promise(resolve => setTimeout(resolve, 500))
+      ]);
+    }
+
+    // Stop monitoring
+    this.playbackMonitor.stopMonitoring();
+    if (this.fallbackSubscription) {
+      this.fallbackSubscription.unsubscribe();
+      this.fallbackSubscription = null;
+    }
+
+    // Clean up direct play
+    this.cleanupDirectPlay();
+
+    // Initialize DASH player
+    this.currentPlaybackMode = 'dash';
+    this.playbackModeLabel.set('Adaptive');
+    this.initializeDashPlayer(media.dash_manifest_url, resumePosition);
+  }
+
+  /**
+   * Clean up direct play resources (video src, tracks)
+   */
+  private cleanupDirectPlay(): void {
+    const video = this.videoElement.nativeElement;
+
+    // Remove tracks
+    while (video.firstChild) {
+      video.removeChild(video.firstChild);
+    }
+
+    // Clear event handlers
+    video.onerror = null;
+    video.onloadedmetadata = null;
+
+    // Clear video source
+    video.removeAttribute('src');
+    video.load();
+  }
+
+  private initializeDashPlayer(manifestUrl: string, startPosition?: number): void {
     try {
       this.player = dashjs.MediaPlayer().create();
       
@@ -410,6 +732,11 @@ export class PlayerComponent implements OnInit, OnDestroy {
       this.player.on(dashjs.MediaPlayer.events.STREAM_INITIALIZED, () => {
         this.loading.set(false);
         this.updateQualityLevels();
+
+        // Seek to resume position if provided
+        if (startPosition && startPosition > 0 && this.player) {
+          this.player.seek(startPosition);
+        }
       });
 
       this.player.on(dashjs.MediaPlayer.events.ERROR, (e: any) => {
@@ -472,10 +799,14 @@ export class PlayerComponent implements OnInit, OnDestroy {
   }
 
   private destroyPlayer(): void {
+    // Clean up DASH player
     if (this.player) {
       this.player.reset();
       this.player = null;
     }
+
+    // Clean up direct play resources
+    this.cleanupDirectPlay();
   }
 
   // Video event handlers
@@ -505,9 +836,32 @@ export class PlayerComponent implements OnInit, OnDestroy {
 
   // Control handlers
   onVideoClick(event: Event): void {
-    // Only toggle play if clicking directly on video, not on controls
-    if (event.target === this.videoElement.nativeElement) {
-      this.togglePlay();
+    // Only handle clicks directly on video, not on controls
+    if (event.target !== this.videoElement.nativeElement) {
+      return;
+    }
+
+    // Track taps for triple-tap detection
+    this.tapCount++;
+
+    if (this.tapTimeout) {
+      clearTimeout(this.tapTimeout);
+    }
+
+    if (this.tapCount >= 3) {
+      // Triple tap - toggle debug panel
+      this.toggleDebugPanel();
+      this.tapCount = 0;
+    } else {
+      // Wait to see if more taps are coming
+      this.tapTimeout = setTimeout(() => {
+        if (this.tapCount === 1) {
+          // Single tap - toggle play
+          this.togglePlay();
+        }
+        // Double tap is handled by dblclick for fullscreen
+        this.tapCount = 0;
+      }, 300);
     }
   }
 
@@ -563,12 +917,30 @@ export class PlayerComponent implements OnInit, OnDestroy {
     const rect = progressBar.getBoundingClientRect();
     const percent = (event.clientX - rect.left) / rect.width;
     const video = this.videoElement.nativeElement;
-    video.currentTime = percent * video.duration;
+    const newTime = percent * video.duration;
+
+    // In direct-stream mode, backward seek triggers fallback to DASH
+    if (this.currentPlaybackMode === 'direct-stream' && newTime < video.currentTime) {
+      this.showNotification('Seeking backward, switching to adaptive streaming...');
+      this.fallbackToDash(newTime);
+      return;
+    }
+
+    video.currentTime = newTime;
   }
 
   seek(seconds: number): void {
     const video = this.videoElement.nativeElement;
-    video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + seconds));
+    const newTime = Math.max(0, Math.min(video.duration, video.currentTime + seconds));
+
+    // In direct-stream mode, backward seek triggers fallback to DASH
+    if (this.currentPlaybackMode === 'direct-stream' && newTime < video.currentTime) {
+      this.showNotification('Seeking backward, switching to adaptive streaming...');
+      this.fallbackToDash(newTime);
+      return;
+    }
+
+    video.currentTime = newTime;
   }
 
   toggleFullscreen(): void {
@@ -663,5 +1035,115 @@ export class PlayerComponent implements OnInit, OnDestroy {
       return (bitrate / 1000000).toFixed(1) + ' Mbps';
     }
     return (bitrate / 1000).toFixed(0) + ' Kbps';
+  }
+
+  /**
+   * Toggle debug panel visibility
+   */
+  toggleDebugPanel(): void {
+    const newValue = !this.showDebugPanel();
+    this.showDebugPanel.set(newValue);
+
+    // Clear existing timeout
+    if (this.debugPanelTimeout) {
+      clearTimeout(this.debugPanelTimeout);
+      this.debugPanelTimeout = null;
+    }
+
+    if (newValue) {
+      // Start updating stats
+      this.updateDebugStats();
+      this.debugStatsInterval = setInterval(() => this.updateDebugStats(), 1000);
+
+      // Auto-hide after 1 minute
+      this.debugPanelTimeout = setTimeout(() => {
+        this.showDebugPanel.set(false);
+        if (this.debugStatsInterval) {
+          clearInterval(this.debugStatsInterval);
+          this.debugStatsInterval = null;
+        }
+      }, 60_000);
+    } else {
+      // Stop updating stats
+      if (this.debugStatsInterval) {
+        clearInterval(this.debugStatsInterval);
+        this.debugStatsInterval = null;
+      }
+    }
+  }
+
+  /**
+   * Update debug stats from current playback state
+   */
+  private updateDebugStats(): void {
+    const video = this.videoElement?.nativeElement;
+    const media = this.media();
+
+    if (!video || !media) {
+      this.debugStats.set(null);
+      return;
+    }
+
+    // Get buffer ahead
+    let bufferAhead = 0;
+    const buffered = video.buffered;
+    for (let i = 0; i < buffered.length; i++) {
+      if (video.currentTime >= buffered.start(i) && video.currentTime <= buffered.end(i)) {
+        bufferAhead = buffered.end(i) - video.currentTime;
+        break;
+      }
+    }
+
+    // Get bandwidth from cached measurement
+    const bandwidthMeasurement = this.bandwidthService.getCached();
+    const bandwidthMbps = bandwidthMeasurement
+      ? bandwidthMeasurement.bitsPerSecond / 1_000_000
+      : null;
+
+    // Get playback mode label
+    let playbackMode: 'Direct Play' | 'Direct Stream' | 'Adaptive';
+    if (this.currentPlaybackMode === 'direct') {
+      playbackMode = 'Direct Play';
+    } else if (this.currentPlaybackMode === 'direct-stream') {
+      playbackMode = 'Direct Stream';
+    } else {
+      playbackMode = 'Adaptive';
+    }
+
+    // Get quality info (DASH only)
+    let currentQuality: string | null = null;
+    let abrEnabled: boolean | null = null;
+
+    if (this.player && this.currentPlaybackMode === 'dash') {
+      const settings = this.player.getSettings();
+      abrEnabled = settings.streaming?.abr?.autoSwitchBitrate?.video ?? true;
+
+      try {
+        const currentRep = this.player.getCurrentRepresentationForType('video');
+        if (currentRep) {
+          currentQuality = `${currentRep.height}p${abrEnabled ? ' (auto)' : ''}`;
+        }
+      } catch {
+        // Ignore errors getting representation
+      }
+    } else if (this.currentPlaybackMode === 'direct' || this.currentPlaybackMode === 'direct-stream') {
+      // For direct play, show source resolution
+      if (media.height) {
+        currentQuality = `${media.height}p (source)`;
+      }
+    }
+
+    // Get stall count from monitor
+    const health = this.playbackMonitor.getHealth();
+
+    this.debugStats.set({
+      playbackMode,
+      bandwidthMbps,
+      bufferAhead,
+      stallCount: health.stallCount,
+      mediaBitrateMbps: media.bitrate / 1_000_000,
+      currentQuality,
+      abrEnabled
+    });
   }
 }

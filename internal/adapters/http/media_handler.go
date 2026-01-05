@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/thesystemicprogrammer/vimesrv/internal/domain"
@@ -95,6 +96,19 @@ type MediaDetailResponse struct {
 	AudioStreams       []AudioStreamDTO `json:"audio_streams"`
 	SubtitleStreams    []SubtitleDTO    `json:"subtitle_streams"`
 	AvailableQualities []string         `json:"available_qualities"`
+
+	// Source file info for playback decision
+	Format      string   `json:"format"`       // "mp4", "mkv", "avi", "mov"
+	VideoCodec  string   `json:"video_codec"`  // "h264", "hevc", "av1", "vp9"
+	AudioCodecs []string `json:"audio_codecs"` // ["aac", "ac3", "dts", "eac3"]
+	Bitrate     int      `json:"bitrate"`      // Total bitrate in bits/sec
+	FileSize    int64    `json:"file_size"`    // File size in bytes
+
+	// Direct play eligibility (computed server-side)
+	DirectPlaySupported   bool   `json:"direct_play_supported"`       // true if MP4/MOV
+	DirectStreamSupported bool   `json:"direct_stream_supported"`     // true if MKV/AVI (needs remux)
+	DirectPlayURL         string `json:"direct_play_url,omitempty"`   // /stream/direct/{id}
+	DirectStreamURL       string `json:"direct_stream_url,omitempty"` // /stream/remux/{id}
 }
 
 // AudioStreamDTO represents an audio stream in the API response
@@ -227,7 +241,12 @@ func (h *MediaHandler) buildMediaDetailResponse(result *media.GetMediaOutput) Me
 		qualities = append(qualities, q)
 	}
 
-	return MediaDetailResponse{
+	// Determine direct play support based on container format
+	format := strings.ToLower(m.Format)
+	directPlaySupported := format == "mp4" || format == "mov" || format == "m4v"
+	directStreamSupported := format == "mkv" || format == "matroska" || format == "avi" || format == "webm"
+
+	response := MediaDetailResponse{
 		ID:                 m.ID,
 		Title:              title,
 		Filename:           m.Filename,
@@ -240,7 +259,28 @@ func (h *MediaHandler) buildMediaDetailResponse(result *media.GetMediaOutput) Me
 		AudioStreams:       audioStreams,
 		SubtitleStreams:    subtitleStreams,
 		AvailableQualities: qualities,
+
+		// Source info
+		Format:      m.Format,
+		VideoCodec:  m.VideoCodec,
+		AudioCodecs: m.AudioCodecs,
+		Bitrate:     m.Bitrate,
+		FileSize:    m.FileSize,
+
+		// Direct play eligibility
+		DirectPlaySupported:   directPlaySupported,
+		DirectStreamSupported: directStreamSupported,
 	}
+
+	// Set URLs if supported
+	if directPlaySupported {
+		response.DirectPlayURL = fmt.Sprintf("/stream/direct/%s", m.ID)
+	}
+	if directStreamSupported {
+		response.DirectStreamURL = fmt.Sprintf("/stream/remux/%s", m.ID)
+	}
+
+	return response
 }
 
 // DeleteMedia handles DELETE /api/v1/media/:id (admin only)

@@ -112,6 +112,15 @@ func registerHTTPHandlers(useCases *UseCases, adapters *Adapters, httpServer *se
 	// DASH Streaming with stream auth middleware
 	dashHandler := http.NewDASHHandler(useCases.GetMediaUseCase, cfg)
 
+	// Direct Play handler for serving original files
+	directHandler := http.NewDirectHandler(useCases.GetMediaUseCase, cfg)
+
+	// Remux handler for on-the-fly MKV/AVI/WebM to fragmented MP4
+	remuxHandler := http.NewRemuxHandler(useCases.GetMediaUseCase, cfg)
+
+	// Probe handler for bandwidth measurement
+	probeHandler := http.NewProbeHandler()
+
 	// Stream routes require stream token auth
 	streamGroup := router.Group("/stream")
 	streamGroup.Use(server.StreamAuthMiddleware(&cfg.Auth))
@@ -121,6 +130,15 @@ func registerHTTPHandlers(useCases *UseCases, adapters *Adapters, httpServer *se
 
 		// Content endpoint (video/audio segments, subtitles)
 		streamGroup.Match([]string{"GET", "HEAD"}, "/dash/content/:id/*path", dashHandler.ServeContent)
+
+		// Direct play endpoint (serves original MP4/MOV files with Range support)
+		streamGroup.Match([]string{"GET", "HEAD"}, "/direct/:id", directHandler.Serve)
+
+		// Remux endpoint (on-the-fly MKV/AVI/WebM to fragmented MP4)
+		streamGroup.GET("/remux/:id", remuxHandler.Serve)
+
+		// Bandwidth probe endpoint
+		streamGroup.GET("/probe", probeHandler.Serve)
 	}
 
 	// === Worker API Routes (separate auth via worker token) ===

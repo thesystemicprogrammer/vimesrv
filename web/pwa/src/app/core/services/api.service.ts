@@ -74,6 +74,19 @@ export interface MediaDetail {
   audio_streams: AudioStream[];
   subtitle_streams: SubtitleStream[];
   available_qualities: string[];
+
+  // Source file info for playback decision
+  format: string;              // "mp4", "mkv", "avi", "mov"
+  video_codec: string;         // "h264", "hevc", "av1", "vp9"
+  audio_codecs: string[];      // ["aac", "ac3", "dts", "eac3"]
+  bitrate: number;             // Total bitrate in bits/sec
+  file_size: number;           // File size in bytes
+
+  // Direct play eligibility (computed server-side)
+  direct_play_supported: boolean;    // true if MP4/MOV
+  direct_stream_supported: boolean;  // true if MKV/AVI (needs remux)
+  direct_play_url?: string;          // /stream/direct/{id}
+  direct_stream_url?: string;        // /stream/remux/{id}
 }
 
 // Library types
@@ -902,6 +915,21 @@ export class ApiService {
     }
     const separator = manifestUrl.includes('?') ? '&' : '?';
     return `${manifestUrl}${separator}token=${token}`;
+  }
+
+  /**
+   * Bandwidth probe for measuring network throughput
+   * Fetches N bytes of random data from the server
+   */
+  probe(bytes: number = 2_000_000): Observable<ArrayBuffer> {
+    const token = this.auth.streamToken();
+    return this.http.get(`/stream/probe?bytes=${bytes}`, {
+      responseType: 'arraybuffer',
+      headers: {
+        'Cache-Control': 'no-store',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      }
+    });
   }
 
   // Transcoding admin endpoints
