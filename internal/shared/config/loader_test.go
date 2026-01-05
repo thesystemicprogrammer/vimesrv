@@ -30,7 +30,7 @@ func TestSetDefaults(t *testing.T) {
 
 	// Transcoding defaults
 	assert.Equal(t, 4, v.GetInt("transcoding.segment_duration"))
-	assert.Equal(t, "chunk-%03d.m4s", v.GetString("transcoding.segment_pattern"))
+	assert.Equal(t, "chunk-%05d.m4s", v.GetString("transcoding.segment_pattern"))
 
 	// Quality profiles defaults
 	qualityProfiles := v.Get("transcoding.quality_profiles")

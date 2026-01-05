@@ -274,7 +274,7 @@ func (h *DASHHandler) buildVideoAdaptationSet(mediaID string, mediaFile *domain.
 			width = height * 16 / 9
 		}
 
-		sb.WriteString(fmt.Sprintf(`      <Representation id="video_%s" bandwidth="%d" width="%d" height="%d" codecs="avc1.4d401f">`,
+		sb.WriteString(fmt.Sprintf(`      <Representation id="video_%s" bandwidth="%d" width="%d" height="%d" codecs="avc1.4d4028">`,
 			quality, 5000000, width, height))
 		sb.WriteString("\n")
 		sb.WriteString(fmt.Sprintf(`        <BaseURL>/stream/dash/content/%s/%s/video/</BaseURL>`, mediaID, quality))

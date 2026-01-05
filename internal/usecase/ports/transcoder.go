@@ -27,7 +27,7 @@ type TranscodeOptions struct {
 
 	// Segmentation options (for CMAF output)
 	SegmentTime    int    // Segment duration in seconds (default 4)
-	SegmentPattern string // Segment filename pattern (default "chunk-%03d.m4s")
+	SegmentPattern string // Segment filename pattern (default "chunk-%05d.m4s")
 
 	// Track type identifier
 	TrackType string // Track type: "video", "audio-0", "audio-1", "subtitle-0", etc.

@@ -163,8 +163,11 @@ func (t *FFmpegTranscoder) ProbeSegmentDurations(ctx context.Context, outputPath
 		return nil, fmt.Errorf("no segment files found in %s", outputPath)
 	}
 
-	// Sort segment files by name
-	sort.Strings(segmentFiles)
+	// Sort segment files numerically by segment number
+	// (alphabetical sort fails for >999 segments: chunk-1000 comes before chunk-100)
+	sort.Slice(segmentFiles, func(i, j int) bool {
+		return extractSegmentNumber(segmentFiles[i]) < extractSegmentNumber(segmentFiles[j])
+	})
 
 	// Probe each segment to get cumulative durations
 	var cumulativeDurations []int64
@@ -399,7 +402,7 @@ func (t *FFmpegTranscoder) addCMAFSegmentingArgs(args []string, opts Options) []
 
 	segmentPattern := opts.SegmentPattern
 	if segmentPattern == "" {
-		segmentPattern = "chunk-%03d.m4s"
+		segmentPattern = "chunk-%05d.m4s"
 	}
 
 	segmentFilePath := filepath.Join(opts.OutputPath, segmentPattern)
@@ -678,4 +681,22 @@ func VerifyOutput(outputPath string, trackType string) error {
 	}
 
 	return nil
+}
+
+// extractSegmentNumber extracts the numeric segment number from a filename like "chunk-000.m4s"
+// Returns 0 if the number cannot be extracted
+func extractSegmentNumber(filename string) int {
+	// Remove .m4s extension
+	name := strings.TrimSuffix(filename, ".m4s")
+	// Find the last dash and extract the number after it
+	lastDash := strings.LastIndex(name, "-")
+	if lastDash == -1 || lastDash >= len(name)-1 {
+		return 0
+	}
+	numStr := name[lastDash+1:]
+	num, err := strconv.Atoi(numStr)
+	if err != nil {
+		return 0
+	}
+	return num
 }
