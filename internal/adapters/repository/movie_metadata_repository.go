@@ -277,8 +277,8 @@ func (r *SQLiteMovieMetadataRepository) ExistsByTMDBID(ctx context.Context, tmdb
 func (r *SQLiteMovieMetadataRepository) CreateTranslation(ctx context.Context, translation *domain.MovieMetadataTranslation) error {
 	query := `
 		INSERT INTO movie_metadata_translations (
-			movie_metadata_id, language, title, tagline, overview, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?)
+			movie_metadata_id, language, title, tagline, overview, poster_path, backdrop_path, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	now := time.Now()
@@ -288,6 +288,8 @@ func (r *SQLiteMovieMetadataRepository) CreateTranslation(ctx context.Context, t
 		translation.Title,
 		translation.Tagline,
 		translation.Overview,
+		translation.PosterPath,
+		translation.BackdropPath,
 		now,
 		now,
 	)
@@ -310,7 +312,7 @@ func (r *SQLiteMovieMetadataRepository) CreateTranslation(ctx context.Context, t
 // GetTranslation retrieves a specific translation for a movie
 func (r *SQLiteMovieMetadataRepository) GetTranslation(ctx context.Context, movieMetadataID int64, language string) (*domain.MovieMetadataTranslation, error) {
 	query := `
-		SELECT id, movie_metadata_id, language, title, tagline, overview, created_at, updated_at
+		SELECT id, movie_metadata_id, language, title, tagline, overview, poster_path, backdrop_path, created_at, updated_at
 		FROM movie_metadata_translations
 		WHERE movie_metadata_id = ? AND language = ?
 	`
@@ -323,6 +325,8 @@ func (r *SQLiteMovieMetadataRepository) GetTranslation(ctx context.Context, movi
 		&translation.Title,
 		&translation.Tagline,
 		&translation.Overview,
+		&translation.PosterPath,
+		&translation.BackdropPath,
 		&translation.CreatedAt,
 		&translation.UpdatedAt,
 	)
@@ -339,7 +343,7 @@ func (r *SQLiteMovieMetadataRepository) GetTranslation(ctx context.Context, movi
 // GetTranslations retrieves all translations for a movie
 func (r *SQLiteMovieMetadataRepository) GetTranslations(ctx context.Context, movieMetadataID int64) ([]domain.MovieMetadataTranslation, error) {
 	query := `
-		SELECT id, movie_metadata_id, language, title, tagline, overview, created_at, updated_at
+		SELECT id, movie_metadata_id, language, title, tagline, overview, poster_path, backdrop_path, created_at, updated_at
 		FROM movie_metadata_translations
 		WHERE movie_metadata_id = ?
 		ORDER BY language
@@ -361,6 +365,8 @@ func (r *SQLiteMovieMetadataRepository) GetTranslations(ctx context.Context, mov
 			&t.Title,
 			&t.Tagline,
 			&t.Overview,
+			&t.PosterPath,
+			&t.BackdropPath,
 			&t.CreatedAt,
 			&t.UpdatedAt,
 		); err != nil {
@@ -380,12 +386,14 @@ func (r *SQLiteMovieMetadataRepository) GetTranslations(ctx context.Context, mov
 func (r *SQLiteMovieMetadataRepository) UpsertTranslation(ctx context.Context, translation *domain.MovieMetadataTranslation) error {
 	query := `
 		INSERT INTO movie_metadata_translations (
-			movie_metadata_id, language, title, tagline, overview, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?)
+			movie_metadata_id, language, title, tagline, overview, poster_path, backdrop_path, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(movie_metadata_id, language) DO UPDATE SET
 			title = excluded.title,
 			tagline = excluded.tagline,
 			overview = excluded.overview,
+			poster_path = excluded.poster_path,
+			backdrop_path = excluded.backdrop_path,
 			updated_at = excluded.updated_at
 	`
 
@@ -396,6 +404,8 @@ func (r *SQLiteMovieMetadataRepository) UpsertTranslation(ctx context.Context, t
 		translation.Title,
 		translation.Tagline,
 		translation.Overview,
+		translation.PosterPath,
+		translation.BackdropPath,
 		now,
 		now,
 	)
@@ -418,6 +428,7 @@ func (r *SQLiteMovieMetadataRepository) UpsertTranslation(ctx context.Context, t
 }
 
 // ListIDsWithoutTranslation returns movie metadata IDs that don't have a translation for the given language
+// or have a translation but are missing image paths
 func (r *SQLiteMovieMetadataRepository) ListIDsWithoutTranslation(ctx context.Context, language string) ([]ports.MovieMetadataForTranslation, error) {
 	exact, base := movieLanguageParams(language)
 
@@ -429,10 +440,16 @@ func (r *SQLiteMovieMetadataRepository) ListIDsWithoutTranslation(ctx context.Co
 			WHERE t.movie_metadata_id = mm.id 
 			AND (t.language = ? OR t.language LIKE ? || '%')
 		)
+		OR EXISTS (
+			SELECT 1 FROM movie_metadata_translations t
+			WHERE t.movie_metadata_id = mm.id 
+			AND (t.language = ? OR t.language LIKE ? || '%')
+			AND (t.poster_path IS NULL OR t.poster_path = '')
+		)
 		ORDER BY mm.id
 	`
 
-	rows, err := r.db.QueryContext(ctx, query, exact, base)
+	rows, err := r.db.QueryContext(ctx, query, exact, base, exact, base)
 	if err != nil {
 		return nil, fmt.Errorf("query movies without translation: %w", err)
 	}

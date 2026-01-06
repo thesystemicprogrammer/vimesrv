@@ -773,6 +773,28 @@ DROP TABLE IF EXISTS series_search;
 DROP TABLE IF EXISTS movie_search;
 `,
 	},
+	{
+		version: 12,
+		name:    "add_translation_image_columns",
+		up: `
+-- Add image columns to movie translations
+ALTER TABLE movie_metadata_translations ADD COLUMN poster_path TEXT;
+ALTER TABLE movie_metadata_translations ADD COLUMN backdrop_path TEXT;
+
+-- Add image columns to series translations
+ALTER TABLE series_metadata_translations ADD COLUMN poster_path TEXT;
+ALTER TABLE series_metadata_translations ADD COLUMN backdrop_path TEXT;
+
+-- Add poster column to season translations
+ALTER TABLE season_metadata_translations ADD COLUMN poster_path TEXT;
+
+-- Add still column to episode translations
+ALTER TABLE episode_metadata_translations ADD COLUMN still_path TEXT;
+`,
+		down: `
+-- SQLite doesn't support DROP COLUMN
+`,
+	},
 }
 
 func NewDatabaseMigration(db *sql.DB) *DatabaseMigration {

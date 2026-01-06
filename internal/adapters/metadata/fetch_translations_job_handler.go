@@ -22,6 +22,8 @@ type FetchTranslationsJobHandler struct {
 	seasonMetadataRepo  ports.SeasonMetadataRepository
 	episodeMetadataRepo ports.EpisodeMetadataRepository
 	tmdbClient          ports.TMDBClient
+	imageDownloader     ports.ImageDownloader
+	downloadImages      bool
 }
 
 // NewFetchTranslationsJobHandler creates a new FetchTranslationsJobHandler
@@ -31,6 +33,8 @@ func NewFetchTranslationsJobHandler(
 	seasonMetadataRepo ports.SeasonMetadataRepository,
 	episodeMetadataRepo ports.EpisodeMetadataRepository,
 	tmdbClient ports.TMDBClient,
+	imageDownloader ports.ImageDownloader,
+	downloadImages bool,
 ) ports.JobHandler {
 	h := &FetchTranslationsJobHandler{
 		movieMetadataRepo:   movieMetadataRepo,
@@ -38,6 +42,8 @@ func NewFetchTranslationsJobHandler(
 		seasonMetadataRepo:  seasonMetadataRepo,
 		episodeMetadataRepo: episodeMetadataRepo,
 		tmdbClient:          tmdbClient,
+		imageDownloader:     imageDownloader,
+		downloadImages:      downloadImages,
 	}
 	return h.Handle
 }
@@ -115,6 +121,33 @@ func (h *FetchTranslationsJobHandler) fetchMovieTranslations(ctx context.Context
 			translation := domain.NewMovieMetadataTranslation(m.ID, language, details.Title)
 			translation.Tagline = details.Tagline
 			translation.Overview = details.Overview
+			translation.PosterPath = details.PosterPath
+			translation.BackdropPath = details.BackdropPath
+
+			// Download images if enabled
+			if h.downloadImages && h.imageDownloader != nil {
+				if details.PosterPath != "" {
+					if _, err := h.imageDownloader.DownloadImageWithLanguage(
+						ctx, details.PosterPath, ports.ImageTypeMoviePoster, m.TMDBID, language,
+					); err != nil {
+						logger.Warn().
+							Err(err).
+							Int64("movie_id", m.ID).
+							Msg("failed to download movie poster")
+					}
+				}
+
+				if details.BackdropPath != "" {
+					if _, err := h.imageDownloader.DownloadImageWithLanguage(
+						ctx, details.BackdropPath, ports.ImageTypeMovieBackdrop, m.TMDBID, language,
+					); err != nil {
+						logger.Warn().
+							Err(err).
+							Int64("movie_id", m.ID).
+							Msg("failed to download movie backdrop")
+					}
+				}
+			}
 
 			if err := h.movieMetadataRepo.UpsertTranslation(ctx, translation); err != nil {
 				logger.Warn().
@@ -161,6 +194,33 @@ func (h *FetchTranslationsJobHandler) fetchSeriesTranslations(ctx context.Contex
 		if details.Name != "" {
 			translation := domain.NewSeriesMetadataTranslation(s.ID, language, details.Name)
 			translation.Overview = details.Overview
+			translation.PosterPath = details.PosterPath
+			translation.BackdropPath = details.BackdropPath
+
+			// Download images if enabled
+			if h.downloadImages && h.imageDownloader != nil {
+				if details.PosterPath != "" {
+					if _, err := h.imageDownloader.DownloadImageWithLanguage(
+						ctx, details.PosterPath, ports.ImageTypeSeriesPoster, s.TMDBID, language,
+					); err != nil {
+						logger.Warn().
+							Err(err).
+							Int64("series_id", s.ID).
+							Msg("failed to download series poster")
+					}
+				}
+
+				if details.BackdropPath != "" {
+					if _, err := h.imageDownloader.DownloadImageWithLanguage(
+						ctx, details.BackdropPath, ports.ImageTypeSeriesBackdrop, s.TMDBID, language,
+					); err != nil {
+						logger.Warn().
+							Err(err).
+							Int64("series_id", s.ID).
+							Msg("failed to download series backdrop")
+					}
+				}
+			}
 
 			if err := h.seriesMetadataRepo.UpsertTranslation(ctx, translation); err != nil {
 				logger.Warn().
@@ -208,6 +268,19 @@ func (h *FetchTranslationsJobHandler) fetchSeasonTranslations(ctx context.Contex
 		if details.Name != "" {
 			translation := domain.NewSeasonMetadataTranslation(s.ID, language, details.Name)
 			translation.Overview = details.Overview
+			translation.PosterPath = details.PosterPath
+
+			// Download images if enabled
+			if h.downloadImages && h.imageDownloader != nil && details.PosterPath != "" {
+				if _, err := h.imageDownloader.DownloadSeasonImageWithLanguage(
+					ctx, details.PosterPath, s.SeriesTMDBID, s.SeasonNumber, language,
+				); err != nil {
+					logger.Warn().
+						Err(err).
+						Int64("season_id", s.ID).
+						Msg("failed to download season poster")
+				}
+			}
 
 			if err := h.seasonMetadataRepo.UpsertTranslation(ctx, translation); err != nil {
 				logger.Warn().
@@ -255,6 +328,19 @@ func (h *FetchTranslationsJobHandler) fetchEpisodeTranslations(ctx context.Conte
 		if details.Name != "" {
 			translation := domain.NewEpisodeMetadataTranslation(e.ID, language, details.Name)
 			translation.Overview = details.Overview
+			translation.StillPath = details.StillPath
+
+			// Download images if enabled
+			if h.downloadImages && h.imageDownloader != nil && details.StillPath != "" {
+				if _, err := h.imageDownloader.DownloadEpisodeImageWithLanguage(
+					ctx, details.StillPath, e.SeriesTMDBID, e.SeasonNumber, e.EpisodeNumber, language,
+				); err != nil {
+					logger.Warn().
+						Err(err).
+						Int64("episode_id", e.ID).
+						Msg("failed to download episode still")
+				}
+			}
 
 			if err := h.episodeMetadataRepo.UpsertTranslation(ctx, translation); err != nil {
 				logger.Warn().

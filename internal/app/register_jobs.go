@@ -6,9 +6,10 @@ import (
 	rebuildadapter "github.com/thesystemicprogrammer/vimesrv/internal/adapters/rebuild"
 	"github.com/thesystemicprogrammer/vimesrv/internal/adapters/transcode"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared"
+	"github.com/thesystemicprogrammer/vimesrv/internal/shared/config"
 )
 
-func registerJobs(useCases *UseCases, adapters *Adapters) {
+func registerJobs(cfg *config.Config, useCases *UseCases, adapters *Adapters) {
 	// Scan Library
 	scanLibraryJobHandler := library.NewScanLibraryJobHandler(useCases.ScanLibraryUseCase)
 	adapters.HandlerRegistry.Register(shared.JobTypeScanLibrary, scanLibraryJobHandler)
@@ -33,6 +34,8 @@ func registerJobs(useCases *UseCases, adapters *Adapters) {
 			adapters.SeasonMetadataRepository,
 			adapters.EpisodeMetadataRepository,
 			adapters.TMDBClient,
+			adapters.ImageDownloader,
+			cfg.TMDB.DownloadImages,
 		)
 		adapters.HandlerRegistry.Register(shared.JobTypeFetchTranslations, fetchTranslationsJobHandler)
 	}

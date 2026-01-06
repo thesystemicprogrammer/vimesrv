@@ -34,6 +34,8 @@ type MovieMetadataTranslation struct {
 	Title           string    `json:"title"`
 	Tagline         string    `json:"tagline,omitempty"`
 	Overview        string    `json:"overview,omitempty"`
+	PosterPath      string    `json:"poster_path,omitempty"`
+	BackdropPath    string    `json:"backdrop_path,omitempty"`
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
 }
@@ -95,6 +97,22 @@ func (m *MovieMetadata) GetTagline(language string) string {
 		return t.Tagline
 	}
 	return ""
+}
+
+// GetPosterPath returns the poster path for the specified language, falling back to base poster
+func (m *MovieMetadata) GetPosterPath(language string) string {
+	if t := m.GetTranslation(language); t != nil && t.PosterPath != "" {
+		return t.PosterPath
+	}
+	return m.PosterPath
+}
+
+// GetBackdropPath returns the backdrop path for the specified language, falling back to base backdrop
+func (m *MovieMetadata) GetBackdropPath(language string) string {
+	if t := m.GetTranslation(language); t != nil && t.BackdropPath != "" {
+		return t.BackdropPath
+	}
+	return m.BackdropPath
 }
 
 // AddTranslation adds or updates a translation for the movie

@@ -170,6 +170,26 @@ func (d *integrationTestImageDownloader) ImageExists(imageType string, id int) b
 	return false
 }
 
+func (d *integrationTestImageDownloader) DownloadImageWithLanguage(ctx context.Context, path string, imageType string, tmdbID int, language string) (string, error) {
+	return "/cache/images/" + path, nil
+}
+
+func (d *integrationTestImageDownloader) DownloadSeasonImageWithLanguage(ctx context.Context, path string, seriesID, seasonNumber int, language string) (string, error) {
+	return "/cache/images/seasons/" + path, nil
+}
+
+func (d *integrationTestImageDownloader) DownloadEpisodeImageWithLanguage(ctx context.Context, path string, seriesID, seasonNumber, episodeNumber int, language string) (string, error) {
+	return "/cache/images/episodes/" + path, nil
+}
+
+func (d *integrationTestImageDownloader) GetLocalPathWithLanguage(imageType string, id int, language string) string {
+	return "/cache/images/local_" + language
+}
+
+func (d *integrationTestImageDownloader) ImageExistsWithLanguage(imageType string, id int, language string) bool {
+	return false
+}
+
 // ===========================
 // Integration Tests
 // ===========================

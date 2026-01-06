@@ -107,14 +107,14 @@ func (r *LibraryRepository) ListMovies(ctx context.Context, language string, lim
 			mm.original_title,
 			COALESCE(mt.title, mm.original_title) as title,
 			COALESCE(SUBSTR(mm.release_date, 1, 4), '') as year,
-			COALESCE(mm.poster_path, '') as poster_path,
-			COALESCE(mm.backdrop_path, '') as backdrop_path,
+			COALESCE(mt.poster_path, mm.poster_path, '') as poster_path,
+			COALESCE(mt.backdrop_path, mm.backdrop_path, '') as backdrop_path,
 			mm.vote_average,
 			COALESCE(mm.genres, '[]') as genres
 		FROM media_files mf
 		LEFT JOIN movie_metadata mm ON mf.movie_metadata_id = mm.id
 		LEFT JOIN (
-			SELECT movie_metadata_id, title, tagline, overview,
+			SELECT movie_metadata_id, title, tagline, overview, poster_path, backdrop_path,
 				ROW_NUMBER() OVER (PARTITION BY movie_metadata_id ORDER BY 
 					CASE 
 						WHEN language = ? THEN 0 
@@ -210,14 +210,14 @@ func (r *LibraryRepository) GetMovie(ctx context.Context, mediaID string, langua
 			mm.original_title,
 			COALESCE(mt.title, mm.original_title) as title,
 			COALESCE(SUBSTR(mm.release_date, 1, 4), '') as year,
-			COALESCE(mm.poster_path, '') as poster_path,
-			COALESCE(mm.backdrop_path, '') as backdrop_path,
+			COALESCE(mt.poster_path, mm.poster_path, '') as poster_path,
+			COALESCE(mt.backdrop_path, mm.backdrop_path, '') as backdrop_path,
 			mm.vote_average,
 			COALESCE(mm.genres, '[]') as genres
 		FROM media_files mf
 		LEFT JOIN movie_metadata mm ON mf.movie_metadata_id = mm.id
 		LEFT JOIN (
-			SELECT movie_metadata_id, title, tagline, overview,
+			SELECT movie_metadata_id, title, tagline, overview, poster_path, backdrop_path,
 				ROW_NUMBER() OVER (PARTITION BY movie_metadata_id ORDER BY 
 					CASE 
 						WHEN language = ? THEN 0 
@@ -296,8 +296,8 @@ func (r *LibraryRepository) GetMovieDetail(ctx context.Context, mediaID string, 
 			mm.original_title,
 			COALESCE(mt.title, mm.original_title) as title,
 			COALESCE(SUBSTR(mm.release_date, 1, 4), '') as year,
-			COALESCE(mm.poster_path, '') as poster_path,
-			COALESCE(mm.backdrop_path, '') as backdrop_path,
+			COALESCE(mt.poster_path, mm.poster_path, '') as poster_path,
+			COALESCE(mt.backdrop_path, mm.backdrop_path, '') as backdrop_path,
 			mm.vote_average,
 			COALESCE(mm.genres, '[]') as genres,
 			COALESCE(mt.tagline, '') as tagline,
@@ -311,8 +311,8 @@ func (r *LibraryRepository) GetMovieDetail(ctx context.Context, mediaID string, 
 		FROM media_files mf
 		LEFT JOIN movie_metadata mm ON mf.movie_metadata_id = mm.id
 		LEFT JOIN (
-			SELECT movie_metadata_id, title, tagline, overview,
-				ROW_NUMBER() OVER (PARTITION BY movie_metadata_id ORDER BY 
+		SELECT movie_metadata_id, title, tagline, overview, poster_path, backdrop_path,
+			ROW_NUMBER() OVER (PARTITION BY movie_metadata_id ORDER BY
 					CASE 
 						WHEN language = ? THEN 0 
 						WHEN language LIKE ? || '%' THEN 1 
@@ -672,8 +672,8 @@ func (r *LibraryRepository) ListSeries(ctx context.Context, language string, inc
 			sm.tmdb_id,
 			COALESCE(st.name, sm.original_name) as name,
 			COALESCE(SUBSTR(sm.first_air_date, 1, 4), '') as year,
-			COALESCE(sm.poster_path, '') as poster_path,
-			COALESCE(sm.backdrop_path, '') as backdrop_path,
+			COALESCE(st.poster_path, sm.poster_path, '') as poster_path,
+			COALESCE(st.backdrop_path, sm.backdrop_path, '') as backdrop_path,
 			sm.vote_average,
 			COALESCE(sm.genres, '[]') as genres,
 			sm.number_of_seasons,
@@ -681,19 +681,19 @@ func (r *LibraryRepository) ListSeries(ctx context.Context, language string, inc
 			COALESCE(episode_count.available, 0) as available_episodes
 		FROM series_metadata sm
 		LEFT JOIN (
-			SELECT series_metadata_id, name, overview,
-				ROW_NUMBER() OVER (PARTITION BY series_metadata_id ORDER BY 
-					CASE 
-						WHEN language = ? THEN 0 
-						WHEN language LIKE ? || '%%' THEN 1 
-						WHEN language = 'en' THEN 2
-						WHEN language LIKE 'en%%' THEN 3
-						ELSE 4 
-					END
-				) as rn
-			FROM series_metadata_translations
-			WHERE language = ? OR language LIKE ? || '%%' OR language = 'en' OR language LIKE 'en%%'
-		) st ON sm.id = st.series_metadata_id AND st.rn = 1
+		SELECT series_metadata_id, name, overview, poster_path, backdrop_path,
+			ROW_NUMBER() OVER (PARTITION BY series_metadata_id ORDER BY 
+				CASE 
+					WHEN language = ? THEN 0 
+					WHEN language LIKE ? || '%%' THEN 1 
+					WHEN language = 'en' THEN 2
+					WHEN language LIKE 'en%%' THEN 3
+					ELSE 4 
+				END
+			) as rn
+		FROM series_metadata_translations
+		WHERE language = ? OR language LIKE ? || '%%' OR language = 'en' OR language LIKE 'en%%'
+	) st ON sm.id = st.series_metadata_id AND st.rn = 1
 		LEFT JOIN (
 			SELECT 
 				ssm.series_id,
@@ -764,8 +764,8 @@ func (r *LibraryRepository) GetSeriesDetail(ctx context.Context, seriesID int64,
 			sm.tmdb_id,
 			COALESCE(st.name, sm.original_name) as name,
 			COALESCE(SUBSTR(sm.first_air_date, 1, 4), '') as year,
-			COALESCE(sm.poster_path, '') as poster_path,
-			COALESCE(sm.backdrop_path, '') as backdrop_path,
+			COALESCE(st.poster_path, sm.poster_path, '') as poster_path,
+			COALESCE(st.backdrop_path, sm.backdrop_path, '') as backdrop_path,
 			sm.vote_average,
 			COALESCE(sm.genres, '[]') as genres,
 			sm.number_of_seasons,
@@ -773,7 +773,7 @@ func (r *LibraryRepository) GetSeriesDetail(ctx context.Context, seriesID int64,
 			COALESCE(st.overview, '') as overview
 		FROM series_metadata sm
 		LEFT JOIN (
-			SELECT series_metadata_id, name, overview,
+			SELECT series_metadata_id, name, overview, poster_path, backdrop_path,
 				ROW_NUMBER() OVER (PARTITION BY series_metadata_id ORDER BY 
 					CASE 
 						WHEN language = ? THEN 0 
@@ -821,12 +821,12 @@ func (r *LibraryRepository) GetSeriesDetail(ctx context.Context, seriesID int64,
 			ssm.season_number,
 			COALESCE(sst.name, '') as name,
 			COALESCE(sst.overview, '') as overview,
-			COALESCE(ssm.poster_path, '') as poster_path,
+			COALESCE(sst.poster_path, ssm.poster_path, '') as poster_path,
 			COALESCE(ssm.air_date, '') as air_date,
 			ssm.episode_count
 		FROM season_metadata ssm
 		LEFT JOIN (
-			SELECT season_metadata_id, name, overview,
+			SELECT season_metadata_id, name, overview, poster_path,
 				ROW_NUMBER() OVER (PARTITION BY season_metadata_id ORDER BY 
 					CASE 
 						WHEN language = ? THEN 0 
@@ -900,7 +900,7 @@ func (r *LibraryRepository) GetSeriesDetail(ctx context.Context, seriesID int64,
 			COALESCE(et.name, '') as name,
 			COALESCE(et.overview, '') as overview,
 			COALESCE(em.air_date, '') as air_date,
-			COALESCE(em.still_path, '') as still_path,
+			COALESCE(et.still_path, em.still_path, '') as still_path,
 			em.vote_average,
 			em.runtime,
 			mf.id as media_id,
@@ -909,7 +909,7 @@ func (r *LibraryRepository) GetSeriesDetail(ctx context.Context, seriesID int64,
 		FROM episode_metadata em
 		JOIN season_metadata ssm ON em.season_id = ssm.id
 		LEFT JOIN (
-			SELECT episode_metadata_id, name, overview,
+			SELECT episode_metadata_id, name, overview, still_path,
 				ROW_NUMBER() OVER (PARTITION BY episode_metadata_id ORDER BY 
 					CASE 
 						WHEN language = ? THEN 0 
@@ -1114,8 +1114,8 @@ func (r *LibraryRepository) ListRecentlyAdded(ctx context.Context, language stri
 				'movie' as item_type,
 				COALESCE(mt.title, mm.original_title, mf.filename) as title,
 				COALESCE(SUBSTR(mm.release_date, 1, 4), '') as year,
-				COALESCE(mm.poster_path, '') as poster_path,
-				COALESCE(mm.backdrop_path, '') as backdrop_path,
+				COALESCE(mt.poster_path, mm.poster_path, '') as poster_path,
+				COALESCE(mt.backdrop_path, mm.backdrop_path, '') as backdrop_path,
 				COALESCE(mm.vote_average, 0) as vote_average,
 				mf.created_at,
 				mf.id as media_id,
@@ -1127,7 +1127,7 @@ func (r *LibraryRepository) ListRecentlyAdded(ctx context.Context, language stri
 			FROM media_files mf
 			JOIN movie_metadata mm ON mf.movie_metadata_id = mm.id
 			LEFT JOIN (
-				SELECT movie_metadata_id, title,
+				SELECT movie_metadata_id, title, poster_path, backdrop_path,
 					ROW_NUMBER() OVER (PARTITION BY movie_metadata_id ORDER BY 
 						CASE 
 							WHEN language = ? THEN 0 
@@ -1157,8 +1157,8 @@ func (r *LibraryRepository) ListRecentlyAdded(ctx context.Context, language stri
 				'season' as item_type,
 				COALESCE(st.name, sm.original_name, '') || ' - Season ' || ssm.season_number as title,
 				COALESCE(SUBSTR(sm.first_air_date, 1, 4), '') as year,
-				COALESCE(ssm.poster_path, sm.poster_path, '') as poster_path,
-				COALESCE(sm.backdrop_path, '') as backdrop_path,
+				COALESCE(sst.poster_path, ssm.poster_path, sm.poster_path, '') as poster_path,
+				COALESCE(st.backdrop_path, sm.backdrop_path, '') as backdrop_path,
 				COALESCE(sm.vote_average, 0) as vote_average,
 				MAX(mf.created_at) as created_at,
 				NULL as media_id,
@@ -1172,7 +1172,7 @@ func (r *LibraryRepository) ListRecentlyAdded(ctx context.Context, language stri
 			JOIN season_metadata ssm ON em.season_id = ssm.id
 			JOIN series_metadata sm ON ssm.series_id = sm.id
 			LEFT JOIN (
-				SELECT series_metadata_id, name,
+				SELECT series_metadata_id, name, poster_path, backdrop_path,
 					ROW_NUMBER() OVER (PARTITION BY series_metadata_id ORDER BY 
 						CASE 
 							WHEN language = ? THEN 0 
@@ -1185,6 +1185,20 @@ func (r *LibraryRepository) ListRecentlyAdded(ctx context.Context, language stri
 				FROM series_metadata_translations
 				WHERE language = ? OR language LIKE ? || '%' OR language = 'en' OR language LIKE 'en%'
 			) st ON sm.id = st.series_metadata_id AND st.rn = 1
+			LEFT JOIN (
+				SELECT season_metadata_id, poster_path,
+					ROW_NUMBER() OVER (PARTITION BY season_metadata_id ORDER BY 
+						CASE 
+							WHEN language = ? THEN 0 
+							WHEN language LIKE ? || '%' THEN 1 
+							WHEN language = 'en' THEN 2
+							WHEN language LIKE 'en%' THEN 3
+							ELSE 4 
+						END
+					) as rn
+				FROM season_metadata_translations
+				WHERE language = ? OR language LIKE ? || '%' OR language = 'en' OR language LIKE 'en%'
+			) sst ON ssm.id = sst.season_metadata_id AND sst.rn = 1
 			WHERE mf.metadata_type = 'episode' AND mf.enrichment_status IN ('linked', 'auto_linked')
 			GROUP BY sm.id, ssm.season_number
 		)
@@ -1195,6 +1209,7 @@ func (r *LibraryRepository) ListRecentlyAdded(ctx context.Context, language stri
 	rows, err := r.db.QueryContext(ctx, query,
 		exactLang, baseLang, exactLang, baseLang, // movie translations
 		exactLang, baseLang, exactLang, baseLang, // series translations
+		exactLang, baseLang, exactLang, baseLang, // season translations
 		limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query recently added: %w", err)

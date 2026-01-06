@@ -209,8 +209,8 @@ func (r *SQLiteEpisodeMetadataRepository) Delete(ctx context.Context, id int64) 
 func (r *SQLiteEpisodeMetadataRepository) CreateTranslation(ctx context.Context, translation *domain.EpisodeMetadataTranslation) error {
 	query := `
 		INSERT INTO episode_metadata_translations (
-			episode_metadata_id, language, name, overview, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?)
+			episode_metadata_id, language, name, overview, still_path, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?)
 	`
 
 	now := time.Now()
@@ -219,6 +219,7 @@ func (r *SQLiteEpisodeMetadataRepository) CreateTranslation(ctx context.Context,
 		translation.Language,
 		translation.Name,
 		translation.Overview,
+		translation.StillPath,
 		now,
 		now,
 	)
@@ -241,7 +242,7 @@ func (r *SQLiteEpisodeMetadataRepository) CreateTranslation(ctx context.Context,
 // GetTranslation retrieves a specific translation for an episode
 func (r *SQLiteEpisodeMetadataRepository) GetTranslation(ctx context.Context, episodeMetadataID int64, language string) (*domain.EpisodeMetadataTranslation, error) {
 	query := `
-		SELECT id, episode_metadata_id, language, name, overview, created_at, updated_at
+		SELECT id, episode_metadata_id, language, name, overview, still_path, created_at, updated_at
 		FROM episode_metadata_translations
 		WHERE episode_metadata_id = ? AND language = ?
 	`
@@ -253,6 +254,7 @@ func (r *SQLiteEpisodeMetadataRepository) GetTranslation(ctx context.Context, ep
 		&translation.Language,
 		&translation.Name,
 		&translation.Overview,
+		&translation.StillPath,
 		&translation.CreatedAt,
 		&translation.UpdatedAt,
 	)
@@ -269,7 +271,7 @@ func (r *SQLiteEpisodeMetadataRepository) GetTranslation(ctx context.Context, ep
 // GetTranslations retrieves all translations for an episode
 func (r *SQLiteEpisodeMetadataRepository) GetTranslations(ctx context.Context, episodeMetadataID int64) ([]domain.EpisodeMetadataTranslation, error) {
 	query := `
-		SELECT id, episode_metadata_id, language, name, overview, created_at, updated_at
+		SELECT id, episode_metadata_id, language, name, overview, still_path, created_at, updated_at
 		FROM episode_metadata_translations
 		WHERE episode_metadata_id = ?
 		ORDER BY language
@@ -290,6 +292,7 @@ func (r *SQLiteEpisodeMetadataRepository) GetTranslations(ctx context.Context, e
 			&t.Language,
 			&t.Name,
 			&t.Overview,
+			&t.StillPath,
 			&t.CreatedAt,
 			&t.UpdatedAt,
 		); err != nil {
@@ -309,11 +312,12 @@ func (r *SQLiteEpisodeMetadataRepository) GetTranslations(ctx context.Context, e
 func (r *SQLiteEpisodeMetadataRepository) UpsertTranslation(ctx context.Context, translation *domain.EpisodeMetadataTranslation) error {
 	query := `
 		INSERT INTO episode_metadata_translations (
-			episode_metadata_id, language, name, overview, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?)
+			episode_metadata_id, language, name, overview, still_path, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(episode_metadata_id, language) DO UPDATE SET
 			name = excluded.name,
 			overview = excluded.overview,
+			still_path = excluded.still_path,
 			updated_at = excluded.updated_at
 	`
 
@@ -323,6 +327,7 @@ func (r *SQLiteEpisodeMetadataRepository) UpsertTranslation(ctx context.Context,
 		translation.Language,
 		translation.Name,
 		translation.Overview,
+		translation.StillPath,
 		now,
 		now,
 	)
@@ -345,6 +350,7 @@ func (r *SQLiteEpisodeMetadataRepository) UpsertTranslation(ctx context.Context,
 }
 
 // ListIDsWithoutTranslation returns episode metadata IDs that don't have a translation for the given language
+// or have a translation but are missing image paths
 func (r *SQLiteEpisodeMetadataRepository) ListIDsWithoutTranslation(ctx context.Context, language string) ([]ports.EpisodeMetadataForTranslation, error) {
 	exact, base := episodeLanguageParams(language)
 
@@ -359,10 +365,16 @@ func (r *SQLiteEpisodeMetadataRepository) ListIDsWithoutTranslation(ctx context.
 			WHERE t.episode_metadata_id = ep.id 
 			AND (t.language = ? OR t.language LIKE ? || '%')
 		)
+		OR EXISTS (
+			SELECT 1 FROM episode_metadata_translations t
+			WHERE t.episode_metadata_id = ep.id 
+			AND (t.language = ? OR t.language LIKE ? || '%')
+			AND (t.still_path IS NULL OR t.still_path = '')
+		)
 		ORDER BY ep.id
 	`
 
-	rows, err := r.db.QueryContext(ctx, query, exact, base)
+	rows, err := r.db.QueryContext(ctx, query, exact, base, exact, base)
 	if err != nil {
 		return nil, fmt.Errorf("query episodes without translation: %w", err)
 	}

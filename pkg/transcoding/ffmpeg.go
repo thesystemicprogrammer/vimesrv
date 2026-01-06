@@ -361,8 +361,9 @@ func (t *FFmpegTranscoder) buildAudioArgs(opts Options) []string {
 	}
 
 	args = append(args,
-		"-vn", // No video
-		"-sn", // No subtitles
+		"-af", "aresample=async=1:first_pts=0",
+		"-vn",
+		"-sn",
 	)
 
 	// Add CMAF segmentation

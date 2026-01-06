@@ -27,6 +27,7 @@ type SeasonMetadataTranslation struct {
 	Language         string    `json:"language"`
 	Name             string    `json:"name"`
 	Overview         string    `json:"overview,omitempty"`
+	PosterPath       string    `json:"poster_path,omitempty"`
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
 }
@@ -82,6 +83,14 @@ func (s *SeasonMetadata) GetOverview(language string) string {
 		return t.Overview
 	}
 	return ""
+}
+
+// GetPosterPath returns the poster path for the specified language, falling back to base poster
+func (s *SeasonMetadata) GetPosterPath(language string) string {
+	if t := s.GetTranslation(language); t != nil && t.PosterPath != "" {
+		return t.PosterPath
+	}
+	return s.PosterPath
 }
 
 // AddTranslation adds or updates a translation for the season

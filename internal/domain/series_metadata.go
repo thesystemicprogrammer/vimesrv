@@ -36,6 +36,8 @@ type SeriesMetadataTranslation struct {
 	Language         string    `json:"language"`
 	Name             string    `json:"name"`
 	Overview         string    `json:"overview,omitempty"`
+	PosterPath       string    `json:"poster_path,omitempty"`
+	BackdropPath     string    `json:"backdrop_path,omitempty"`
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
 }
@@ -91,6 +93,22 @@ func (s *SeriesMetadata) GetOverview(language string) string {
 		return t.Overview
 	}
 	return ""
+}
+
+// GetPosterPath returns the poster path for the specified language, falling back to base poster
+func (s *SeriesMetadata) GetPosterPath(language string) string {
+	if t := s.GetTranslation(language); t != nil && t.PosterPath != "" {
+		return t.PosterPath
+	}
+	return s.PosterPath
+}
+
+// GetBackdropPath returns the backdrop path for the specified language, falling back to base backdrop
+func (s *SeriesMetadata) GetBackdropPath(language string) string {
+	if t := s.GetTranslation(language); t != nil && t.BackdropPath != "" {
+		return t.BackdropPath
+	}
+	return s.BackdropPath
 }
 
 // AddTranslation adds or updates a translation for the series

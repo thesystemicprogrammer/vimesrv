@@ -219,8 +219,8 @@ func (r *SQLiteSeasonMetadataRepository) Delete(ctx context.Context, id int64) e
 func (r *SQLiteSeasonMetadataRepository) CreateTranslation(ctx context.Context, translation *domain.SeasonMetadataTranslation) error {
 	query := `
 		INSERT INTO season_metadata_translations (
-			season_metadata_id, language, name, overview, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?)
+			season_metadata_id, language, name, overview, poster_path, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?)
 	`
 
 	now := time.Now()
@@ -229,6 +229,7 @@ func (r *SQLiteSeasonMetadataRepository) CreateTranslation(ctx context.Context, 
 		translation.Language,
 		translation.Name,
 		translation.Overview,
+		translation.PosterPath,
 		now,
 		now,
 	)
@@ -251,7 +252,7 @@ func (r *SQLiteSeasonMetadataRepository) CreateTranslation(ctx context.Context, 
 // GetTranslation retrieves a specific translation for a season
 func (r *SQLiteSeasonMetadataRepository) GetTranslation(ctx context.Context, seasonMetadataID int64, language string) (*domain.SeasonMetadataTranslation, error) {
 	query := `
-		SELECT id, season_metadata_id, language, name, overview, created_at, updated_at
+		SELECT id, season_metadata_id, language, name, overview, poster_path, created_at, updated_at
 		FROM season_metadata_translations
 		WHERE season_metadata_id = ? AND language = ?
 	`
@@ -263,6 +264,7 @@ func (r *SQLiteSeasonMetadataRepository) GetTranslation(ctx context.Context, sea
 		&translation.Language,
 		&translation.Name,
 		&translation.Overview,
+		&translation.PosterPath,
 		&translation.CreatedAt,
 		&translation.UpdatedAt,
 	)
@@ -279,7 +281,7 @@ func (r *SQLiteSeasonMetadataRepository) GetTranslation(ctx context.Context, sea
 // GetTranslations retrieves all translations for a season
 func (r *SQLiteSeasonMetadataRepository) GetTranslations(ctx context.Context, seasonMetadataID int64) ([]domain.SeasonMetadataTranslation, error) {
 	query := `
-		SELECT id, season_metadata_id, language, name, overview, created_at, updated_at
+		SELECT id, season_metadata_id, language, name, overview, poster_path, created_at, updated_at
 		FROM season_metadata_translations
 		WHERE season_metadata_id = ?
 		ORDER BY language
@@ -300,6 +302,7 @@ func (r *SQLiteSeasonMetadataRepository) GetTranslations(ctx context.Context, se
 			&t.Language,
 			&t.Name,
 			&t.Overview,
+			&t.PosterPath,
 			&t.CreatedAt,
 			&t.UpdatedAt,
 		); err != nil {
@@ -319,11 +322,12 @@ func (r *SQLiteSeasonMetadataRepository) GetTranslations(ctx context.Context, se
 func (r *SQLiteSeasonMetadataRepository) UpsertTranslation(ctx context.Context, translation *domain.SeasonMetadataTranslation) error {
 	query := `
 		INSERT INTO season_metadata_translations (
-			season_metadata_id, language, name, overview, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?)
+			season_metadata_id, language, name, overview, poster_path, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(season_metadata_id, language) DO UPDATE SET
 			name = excluded.name,
 			overview = excluded.overview,
+			poster_path = excluded.poster_path,
 			updated_at = excluded.updated_at
 	`
 
@@ -333,6 +337,7 @@ func (r *SQLiteSeasonMetadataRepository) UpsertTranslation(ctx context.Context, 
 		translation.Language,
 		translation.Name,
 		translation.Overview,
+		translation.PosterPath,
 		now,
 		now,
 	)
@@ -355,6 +360,7 @@ func (r *SQLiteSeasonMetadataRepository) UpsertTranslation(ctx context.Context, 
 }
 
 // ListIDsWithoutTranslation returns season metadata IDs that don't have a translation for the given language
+// or have a translation but are missing image paths
 func (r *SQLiteSeasonMetadataRepository) ListIDsWithoutTranslation(ctx context.Context, language string) ([]ports.SeasonMetadataForTranslation, error) {
 	exact, base := seasonLanguageParams(language)
 
@@ -368,10 +374,16 @@ func (r *SQLiteSeasonMetadataRepository) ListIDsWithoutTranslation(ctx context.C
 			WHERE t.season_metadata_id = sea.id 
 			AND (t.language = ? OR t.language LIKE ? || '%')
 		)
+		OR EXISTS (
+			SELECT 1 FROM season_metadata_translations t
+			WHERE t.season_metadata_id = sea.id 
+			AND (t.language = ? OR t.language LIKE ? || '%')
+			AND (t.poster_path IS NULL OR t.poster_path = '')
+		)
 		ORDER BY sea.id
 	`
 
-	rows, err := r.db.QueryContext(ctx, query, exact, base)
+	rows, err := r.db.QueryContext(ctx, query, exact, base, exact, base)
 	if err != nil {
 		return nil, fmt.Errorf("query seasons without translation: %w", err)
 	}

@@ -27,6 +27,7 @@ type EpisodeMetadataTranslation struct {
 	Language          string    `json:"language"`
 	Name              string    `json:"name"`
 	Overview          string    `json:"overview,omitempty"`
+	StillPath         string    `json:"still_path,omitempty"`
 	CreatedAt         time.Time `json:"created_at"`
 	UpdatedAt         time.Time `json:"updated_at"`
 }
@@ -80,6 +81,14 @@ func (e *EpisodeMetadata) GetOverview(language string) string {
 		return t.Overview
 	}
 	return ""
+}
+
+// GetStillPath returns the still path for the specified language, falling back to base still
+func (e *EpisodeMetadata) GetStillPath(language string) string {
+	if t := e.GetTranslation(language); t != nil && t.StillPath != "" {
+		return t.StillPath
+	}
+	return e.StillPath
 }
 
 // AddTranslation adds or updates a translation for the episode

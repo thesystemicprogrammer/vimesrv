@@ -157,6 +157,26 @@ func (m *mockImageDownloader) ImageExists(imageType string, id int) bool {
 	return false
 }
 
+func (m *mockImageDownloader) DownloadImageWithLanguage(ctx context.Context, tmdbPath string, imageType string, id int, language string) (string, error) {
+	return "/path/to/image_" + language + ".jpg", nil
+}
+
+func (m *mockImageDownloader) DownloadSeasonImageWithLanguage(ctx context.Context, tmdbPath string, seriesID int, seasonNumber int, language string) (string, error) {
+	return "/path/to/season_" + language + ".jpg", nil
+}
+
+func (m *mockImageDownloader) DownloadEpisodeImageWithLanguage(ctx context.Context, tmdbPath string, seriesID int, seasonNumber int, episodeNumber int, language string) (string, error) {
+	return "/path/to/episode_" + language + ".jpg", nil
+}
+
+func (m *mockImageDownloader) GetLocalPathWithLanguage(imageType string, id int, language string) string {
+	return "/path/to/local_" + language
+}
+
+func (m *mockImageDownloader) ImageExistsWithLanguage(imageType string, id int, language string) bool {
+	return false
+}
+
 type mockMediaRepository struct {
 	getFunc                 func(ctx context.Context, id string) (*domain.MediaFile, error)
 	updateFunc              func(ctx context.Context, media *domain.MediaFile) error

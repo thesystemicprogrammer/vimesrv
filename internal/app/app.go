@@ -73,7 +73,7 @@ func (app *Application) initialize() error {
 	}
 	app.jobManager = jobManager
 
-	registerJobs(app.useCases, app.adapters)
+	registerJobs(app.config, app.useCases, app.adapters)
 
 	// Validate that all required job handlers are registered
 	if err := validateJobHandlers(app.adapters.HandlerRegistry); err != nil {

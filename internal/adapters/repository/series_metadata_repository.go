@@ -254,8 +254,8 @@ func (r *SQLiteSeriesMetadataRepository) ExistsByTMDBID(ctx context.Context, tmd
 func (r *SQLiteSeriesMetadataRepository) CreateTranslation(ctx context.Context, translation *domain.SeriesMetadataTranslation) error {
 	query := `
 		INSERT INTO series_metadata_translations (
-			series_metadata_id, language, name, overview, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?)
+			series_metadata_id, language, name, overview, poster_path, backdrop_path, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	now := time.Now()
@@ -264,6 +264,8 @@ func (r *SQLiteSeriesMetadataRepository) CreateTranslation(ctx context.Context, 
 		translation.Language,
 		translation.Name,
 		translation.Overview,
+		translation.PosterPath,
+		translation.BackdropPath,
 		now,
 		now,
 	)
@@ -286,7 +288,7 @@ func (r *SQLiteSeriesMetadataRepository) CreateTranslation(ctx context.Context, 
 // GetTranslation retrieves a specific translation for a series
 func (r *SQLiteSeriesMetadataRepository) GetTranslation(ctx context.Context, seriesMetadataID int64, language string) (*domain.SeriesMetadataTranslation, error) {
 	query := `
-		SELECT id, series_metadata_id, language, name, overview, created_at, updated_at
+		SELECT id, series_metadata_id, language, name, overview, poster_path, backdrop_path, created_at, updated_at
 		FROM series_metadata_translations
 		WHERE series_metadata_id = ? AND language = ?
 	`
@@ -298,6 +300,8 @@ func (r *SQLiteSeriesMetadataRepository) GetTranslation(ctx context.Context, ser
 		&translation.Language,
 		&translation.Name,
 		&translation.Overview,
+		&translation.PosterPath,
+		&translation.BackdropPath,
 		&translation.CreatedAt,
 		&translation.UpdatedAt,
 	)
@@ -314,7 +318,7 @@ func (r *SQLiteSeriesMetadataRepository) GetTranslation(ctx context.Context, ser
 // GetTranslations retrieves all translations for a series
 func (r *SQLiteSeriesMetadataRepository) GetTranslations(ctx context.Context, seriesMetadataID int64) ([]domain.SeriesMetadataTranslation, error) {
 	query := `
-		SELECT id, series_metadata_id, language, name, overview, created_at, updated_at
+		SELECT id, series_metadata_id, language, name, overview, poster_path, backdrop_path, created_at, updated_at
 		FROM series_metadata_translations
 		WHERE series_metadata_id = ?
 		ORDER BY language
@@ -335,6 +339,8 @@ func (r *SQLiteSeriesMetadataRepository) GetTranslations(ctx context.Context, se
 			&t.Language,
 			&t.Name,
 			&t.Overview,
+			&t.PosterPath,
+			&t.BackdropPath,
 			&t.CreatedAt,
 			&t.UpdatedAt,
 		); err != nil {
@@ -354,11 +360,13 @@ func (r *SQLiteSeriesMetadataRepository) GetTranslations(ctx context.Context, se
 func (r *SQLiteSeriesMetadataRepository) UpsertTranslation(ctx context.Context, translation *domain.SeriesMetadataTranslation) error {
 	query := `
 		INSERT INTO series_metadata_translations (
-			series_metadata_id, language, name, overview, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?)
+			series_metadata_id, language, name, overview, poster_path, backdrop_path, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(series_metadata_id, language) DO UPDATE SET
 			name = excluded.name,
 			overview = excluded.overview,
+			poster_path = excluded.poster_path,
+			backdrop_path = excluded.backdrop_path,
 			updated_at = excluded.updated_at
 	`
 
@@ -368,6 +376,8 @@ func (r *SQLiteSeriesMetadataRepository) UpsertTranslation(ctx context.Context, 
 		translation.Language,
 		translation.Name,
 		translation.Overview,
+		translation.PosterPath,
+		translation.BackdropPath,
 		now,
 		now,
 	)
@@ -390,6 +400,7 @@ func (r *SQLiteSeriesMetadataRepository) UpsertTranslation(ctx context.Context, 
 }
 
 // ListIDsWithoutTranslation returns series metadata IDs that don't have a translation for the given language
+// or have a translation but are missing image paths
 func (r *SQLiteSeriesMetadataRepository) ListIDsWithoutTranslation(ctx context.Context, language string) ([]ports.SeriesMetadataForTranslation, error) {
 	exact, base := seriesLanguageParams(language)
 
@@ -401,10 +412,16 @@ func (r *SQLiteSeriesMetadataRepository) ListIDsWithoutTranslation(ctx context.C
 			WHERE t.series_metadata_id = sm.id 
 			AND (t.language = ? OR t.language LIKE ? || '%')
 		)
+		OR EXISTS (
+			SELECT 1 FROM series_metadata_translations t
+			WHERE t.series_metadata_id = sm.id 
+			AND (t.language = ? OR t.language LIKE ? || '%')
+			AND (t.poster_path IS NULL OR t.poster_path = '')
+		)
 		ORDER BY sm.id
 	`
 
-	rows, err := r.db.QueryContext(ctx, query, exact, base)
+	rows, err := r.db.QueryContext(ctx, query, exact, base, exact, base)
 	if err != nil {
 		return nil, fmt.Errorf("query series without translation: %w", err)
 	}

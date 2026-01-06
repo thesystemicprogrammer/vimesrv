@@ -143,6 +143,94 @@ func (d *HTTPImageDownloader) getEpisodePath(seriesID, seasonNumber, episodeNumb
 	return filepath.Join(d.basePath, ports.ImageTypeEpisodeStill, filename)
 }
 
+// GetLocalPathWithLanguage returns the local path with language suffix
+func (d *HTTPImageDownloader) GetLocalPathWithLanguage(imageType string, id int, language string) string {
+	ext := ".jpg"
+	return filepath.Join(d.basePath, imageType, fmt.Sprintf("%d_%s%s", id, language, ext))
+}
+
+// ImageExistsWithLanguage checks if a language-specific image has already been downloaded
+func (d *HTTPImageDownloader) ImageExistsWithLanguage(imageType string, id int, language string) bool {
+	path := d.GetLocalPathWithLanguage(imageType, id, language)
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+// DownloadImageWithLanguage downloads a language-specific image from TMDB
+func (d *HTTPImageDownloader) DownloadImageWithLanguage(ctx context.Context, tmdbPath string, imageType string, id int, language string) (string, error) {
+	if tmdbPath == "" {
+		return "", nil
+	}
+
+	size := d.getSizeForType(imageType)
+	imageURL := d.tmdbClient.GetImageURL(tmdbPath, size)
+	if imageURL == "" {
+		return "", nil
+	}
+
+	localPath := d.GetLocalPathWithLanguage(imageType, id, language)
+
+	if err := d.downloadToPath(ctx, imageURL, localPath); err != nil {
+		return "", fmt.Errorf("download image: %w", err)
+	}
+
+	return localPath, nil
+}
+
+// getSeasonPathWithLanguage returns the local path for a language-specific season image
+func (d *HTTPImageDownloader) getSeasonPathWithLanguage(seriesID, seasonNumber int, language string) string {
+	ext := ".jpg"
+	filename := fmt.Sprintf("%d_s%02d_%s%s", seriesID, seasonNumber, language, ext)
+	return filepath.Join(d.basePath, ports.ImageTypeSeasonPoster, filename)
+}
+
+// DownloadSeasonImageWithLanguage downloads a language-specific season poster
+func (d *HTTPImageDownloader) DownloadSeasonImageWithLanguage(ctx context.Context, tmdbPath string, seriesID int, seasonNumber int, language string) (string, error) {
+	if tmdbPath == "" {
+		return "", nil
+	}
+
+	imageURL := d.tmdbClient.GetImageURL(tmdbPath, d.posterSize)
+	if imageURL == "" {
+		return "", nil
+	}
+
+	localPath := d.getSeasonPathWithLanguage(seriesID, seasonNumber, language)
+
+	if err := d.downloadToPath(ctx, imageURL, localPath); err != nil {
+		return "", fmt.Errorf("download season image: %w", err)
+	}
+
+	return localPath, nil
+}
+
+// getEpisodePathWithLanguage returns the local path for a language-specific episode image
+func (d *HTTPImageDownloader) getEpisodePathWithLanguage(seriesID, seasonNumber, episodeNumber int, language string) string {
+	ext := ".jpg"
+	filename := fmt.Sprintf("%d_s%02de%02d_%s%s", seriesID, seasonNumber, episodeNumber, language, ext)
+	return filepath.Join(d.basePath, ports.ImageTypeEpisodeStill, filename)
+}
+
+// DownloadEpisodeImageWithLanguage downloads a language-specific episode still image
+func (d *HTTPImageDownloader) DownloadEpisodeImageWithLanguage(ctx context.Context, tmdbPath string, seriesID int, seasonNumber int, episodeNumber int, language string) (string, error) {
+	if tmdbPath == "" {
+		return "", nil
+	}
+
+	imageURL := d.tmdbClient.GetImageURL(tmdbPath, d.backdropSize)
+	if imageURL == "" {
+		return "", nil
+	}
+
+	localPath := d.getEpisodePathWithLanguage(seriesID, seasonNumber, episodeNumber, language)
+
+	if err := d.downloadToPath(ctx, imageURL, localPath); err != nil {
+		return "", fmt.Errorf("download episode image: %w", err)
+	}
+
+	return localPath, nil
+}
+
 // downloadToPath downloads a URL to a local file path
 func (d *HTTPImageDownloader) downloadToPath(ctx context.Context, imageURL, localPath string) error {
 	// Ensure directory exists
