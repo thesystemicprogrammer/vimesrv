@@ -1,3 +1,5 @@
+//go:build ignore
+
 // Standalone script to regenerate all segments.json files with correct sorting
 //
 // This script fixes corrupted segments.json files that were generated with

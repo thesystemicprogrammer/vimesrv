@@ -32,15 +32,16 @@ Default credentials: `admin` / `admin123`
 
 ## Documentation
 
-| Guide                                 | Description                              |
-| ------------------------------------- | ---------------------------------------- |
-| [Building](doc/building.md)           | Prerequisites and build commands         |
-| [Configuration](doc/configuration.md) | YAML config and environment variables    |
-| [Architecture](doc/architecture.md)   | Clean architecture and project structure |
-| [Features](doc/features.md)           | Library scan, transcoding, metadata, PWA |
-| [Database Rebuild](doc/rebuild.md)    | Backup and restore for upgrades          |
-| [Development](doc/development.md)     | Testing, linting, and contributing       |
-| [Deployment](doc/deployment.md)       | Production setup and security            |
+| Guide                                             | Description                              |
+| ------------------------------------------------- | ---------------------------------------- |
+| [Building](doc/building.md)                       | Prerequisites and build commands         |
+| [Configuration](doc/configuration.md)             | YAML config and environment variables    |
+| [Architecture](doc/architecture.md)               | Clean architecture and project structure |
+| [Features](doc/features.md)                       | Library scan, transcoding, metadata, PWA |
+| [Database Rebuild](doc/rebuild.md)                | Backup and restore for upgrades          |
+| [Validate Transcodes](doc/validate-transcodes.md) | Transcode validation and repair tool     |
+| [Development](doc/development.md)                 | Testing, linting, and contributing       |
+| [Deployment](doc/deployment.md)                   | Production setup and security            |
 
 ## API
 
