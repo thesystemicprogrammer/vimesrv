@@ -12,13 +12,15 @@ type TranscodeOptions struct {
 	OutputPath string // Path to output directory (for video/audio) or file (for subtitles)
 
 	// Video encoding options (for video tracks)
-	Width        int    // Target video width in pixels
-	Height       int    // Target video height in pixels
-	VideoCodec   string // Video codec (e.g., "libx264")
-	CRF          int    // Constant Rate Factor (quality-based encoding, 18-28 typical)
-	MaxBitrate   int    // Maximum bitrate in kbps
-	VideoBitrate int    // Target video bitrate in kbps (legacy, use CRF instead)
-	Preset       string // Encoding preset (e.g., "medium", "fast")
+	Width           int      // Target video width in pixels
+	Height          int      // Target video height in pixels
+	VideoCodec      string   // Video codec (e.g., "libx264", "h264_vaapi", "h264_qsv")
+	CRF             int      // Constant Rate Factor (quality-based encoding, 18-28 typical)
+	MaxBitrate      int      // Maximum bitrate in kbps
+	VideoBitrate    int      // Target video bitrate in kbps (legacy, use CRF instead)
+	Preset          string   // Encoding preset (e.g., "medium", "fast")
+	FFmpegInputArgs []string // Additional FFmpeg arguments to add before -i (e.g., ["-hwaccel", "cuda"])
+	ScaleFilter     string   // Scale filter to use: "auto", "software", "vaapi", "qsv"
 
 	// Audio encoding options (for audio tracks)
 	AudioCodec    string // Audio codec (e.g., "aac")

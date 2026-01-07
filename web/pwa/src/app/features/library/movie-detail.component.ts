@@ -31,7 +31,7 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
       </div>
     } @else if (movie()) {
       <!-- Backdrop hero section -->
-      <div class="relative min-h-[50vh] md:min-h-[60vh]">
+      <div class="relative min-h-[50vh] md:min-h-[70vh]">
         <!-- Backdrop image -->
         @if (backdropUrl()) {
           <div
@@ -59,7 +59,7 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
         <div class="absolute bottom-0 left-0 right-0 p-4 md:p-8">
           <div class="container mx-auto flex gap-6 items-end">
             <!-- Poster -->
-            <div class="hidden md:block flex-shrink-0 w-56 lg:w-64 xl:w-72">
+            <div class="hidden md:block flex-shrink-0 w-40 lg:w-56 xl:w-64 max-w-[20%]">
               <div class="aspect-[2/3] rounded-lg overflow-hidden shadow-2xl bg-slate-800">
                 @if (posterUrl()) {
                   <img

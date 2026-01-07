@@ -1,0 +1,51 @@
+.debug-panel {
+  position: absolute;
+  top: 3rem;
+  right: 1rem;
+  z-index: 30;
+  background-color: rgba(0, 0, 0, 0.85);
+  color: white;
+  font-size: 0.75rem;
+  font-family: monospace;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  min-width: 12rem;
+  backdrop-filter: blur(4px);
+}
+
+.debug-header {
+  font-weight: bold;
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.status-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+}
+
+.status-direct {
+  background-color: #22c55e; /* green-500 */
+}
+
+.status-remux {
+  background-color: #eab308; /* yellow-500 */
+}
+
+.status-adaptive {
+  background-color: #3b82f6; /* blue-500 */
+}
+
+.debug-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  color: #d4d4d8; /* zinc-300 */
+}
+
+.value {
+  color: white;
+}

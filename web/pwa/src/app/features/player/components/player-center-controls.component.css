@@ -1,0 +1,59 @@
+.center-controls-container {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2rem;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.center-controls-container.hidden {
+  opacity: 0;
+}
+
+.control-button {
+  pointer-events: auto;
+  border-radius: 50%;
+  background-color: rgba(0, 0, 0, 0.5);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.control-button:hover {
+  background-color: rgba(0, 0, 0, 0.7);
+}
+
+.control-button:active {
+  transform: scale(0.95);
+}
+
+.control-button-small {
+  width: 3.5rem;
+  height: 3.5rem;
+}
+
+.control-button-small .icon {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+.control-button-large {
+  width: 5rem;
+  height: 5rem;
+}
+
+.control-button-large .icon {
+  width: 2.5rem;
+  height: 2.5rem;
+}
+
+.icon {
+  flex-shrink: 0;
+}

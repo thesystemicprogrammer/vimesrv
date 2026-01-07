@@ -324,18 +324,32 @@ func (uc *ProcessTranscodeUseCase) transcodeVideo(ctx context.Context, jobID int
 		}
 	}
 
+	// Determine video encoder - use config or default to libx264
+	videoEncoder := uc.config.Transcoding.VideoEncoder
+	if videoEncoder == "" {
+		videoEncoder = "libx264"
+	}
+
+	// Determine preset - use config or default to medium
+	preset := uc.config.Transcoding.EncoderPreset
+	if preset == "" {
+		preset = "medium"
+	}
+
 	// Build transcode options
 	opts := ports.TranscodeOptions{
-		InputPath:   media.FilePath,
-		OutputPath:  outputPath,
-		Width:       width,
-		Height:      height,
-		VideoCodec:  "libx264",
-		CRF:         crf,
-		MaxBitrate:  maxBitrate,
-		Preset:      "medium",
-		SegmentTime: uc.config.Transcoding.SegmentDuration,
-		TrackType:   "video",
+		InputPath:       media.FilePath,
+		OutputPath:      outputPath,
+		Width:           width,
+		Height:          height,
+		VideoCodec:      videoEncoder,
+		CRF:             crf,
+		MaxBitrate:      maxBitrate,
+		Preset:          preset,
+		FFmpegInputArgs: uc.config.Transcoding.FFmpegInputArgs,
+		ScaleFilter:     uc.config.Transcoding.ScaleFilter,
+		SegmentTime:     uc.config.Transcoding.SegmentDuration,
+		TrackType:       "video",
 	}
 
 	// Execute transcoding with progress callback

@@ -1,10 +1,12 @@
 import { Injectable } from '@angular/core';
-import { MediaDetail, SubtitleStream } from './api.service';
+import { MediaDetail, SubtitleStream, AudioStream } from './api.service';
 
 export interface PlaybackCapability {
   canDirectPlay: boolean;
   canDirectStream: boolean;
   reason: string;
+  // For direct stream: which audio track to use (index in audio_streams array)
+  selectedAudioTrackIndex?: number;
 }
 
 // Codec string mappings for MediaCapabilities API
@@ -30,6 +32,9 @@ const AUDIO_CODEC_STRINGS: Record<string, string> = {
   // Note: DTS and TrueHD are not supported by browsers
 };
 
+// Browser-compatible audio codecs
+const BROWSER_COMPATIBLE_AUDIO = ['aac', 'mp3', 'opus', 'vorbis', 'flac'];
+
 // Image-based subtitle formats (cannot be rendered by browser)
 const IMAGE_BASED_SUBTITLE_FORMATS = ['pgs', 'hdmv_pgs_subtitle', 'dvdsub', 'vobsub', 'dvd_subtitle'];
 
@@ -42,14 +47,28 @@ export class PlaybackCapabilityService {
    * Check if the browser can decode the media for direct play
    */
   async checkCodecSupport(media: MediaDetail): Promise<PlaybackCapability> {
+    console.log('Checking codec support for:', {
+      format: media.format,
+      video_codec: media.video_codec,
+      audio_codecs: media.audio_codecs,
+      audio_streams: media.audio_streams,
+      width: media.width,
+      height: media.height,
+      bitrate: media.bitrate,
+      direct_play_supported: media.direct_play_supported,
+      direct_stream_supported: media.direct_stream_supported
+    });
+
     // Check 1: Container format
     if (!this.isDirectPlayableContainer(media.format) &&
         !this.isRemuxableContainer(media.format)) {
-      return {
+      const result: PlaybackCapability = {
         canDirectPlay: false,
         canDirectStream: false,
         reason: `Container format "${media.format}" not supported for direct play`
       };
+      console.log('Capability check result:', result);
+      return result;
     }
 
     // Check 2: Video codec support
@@ -60,60 +79,150 @@ export class PlaybackCapabilityService {
       media.bitrate
     );
     if (!videoSupported) {
-      return {
+      const result: PlaybackCapability = {
         canDirectPlay: false,
         canDirectStream: false,
         reason: `Video codec "${media.video_codec}" not supported by browser`
       };
+      console.log('Capability check result:', result);
+      return result;
     }
 
-    // Check 3: Audio codec support (at least one must be supported)
-    const audioSupported = await this.canDecodeAnyAudio(media.audio_codecs || []);
-    if (!audioSupported) {
-      return {
+    // Check 3: Audio codec support
+    // Find the first browser-compatible audio track
+    const audioAnalysis = await this.findCompatibleAudioTrack(media.audio_streams || []);
+    console.log('Audio analysis:', audioAnalysis);
+
+    const canDirectPlay = this.isDirectPlayableContainer(media.format);
+    const canDirectStream = this.isRemuxableContainer(media.format);
+
+    // For both direct play and direct stream, we need at least one browser-compatible audio track
+    if (audioAnalysis.bestCompatibleIndex === -1 && (media.audio_streams?.length ?? 0) > 0) {
+      const result: PlaybackCapability = {
         canDirectPlay: false,
         canDirectStream: false,
-        reason: `No supported audio codec found (available: ${(media.audio_codecs || []).join(', ')})`
+        reason: `No browser-compatible audio codec found (available: ${(media.audio_codecs || []).join(', ')})`
       };
+      console.log('Capability check result:', result);
+      return result;
     }
 
     // Check 4: Subtitle format (image-based subs require transcoding)
     if (this.hasImageBasedSubtitles(media.subtitle_streams)) {
-      return {
+      const result: PlaybackCapability = {
         canDirectPlay: false,
         canDirectStream: false,
         reason: 'Media contains image-based subtitles (PGS/VOBSUB) which require transcoding'
       };
+      console.log('Capability check result:', result);
+      return result;
     }
 
-    // All checks passed
-    const canDirectPlay = this.isDirectPlayableContainer(media.format);
-    const canDirectStream = this.isRemuxableContainer(media.format);
+    // Determine selected audio track for direct stream
+    const selectedAudioTrackIndex = audioAnalysis.bestCompatibleIndex !== -1 ? audioAnalysis.bestCompatibleIndex : 0;
 
-    return {
+    const result: PlaybackCapability = {
       canDirectPlay,
       canDirectStream,
-      reason: canDirectPlay ? 'Direct play supported' : 'Remux required for container'
+      reason: canDirectPlay
+        ? 'Direct play supported'
+        : 'Remux required for container',
+      selectedAudioTrackIndex
+    };
+    console.log('Capability check result:', result);
+    return result;
+  }
+
+  /**
+   * Find the first browser-compatible audio track.
+   * Returns the index in the audio_streams array, or -1 if none found.
+   */
+  private async findCompatibleAudioTrack(audioStreams: AudioStream[]): Promise<{
+    bestCompatibleIndex: number;
+    compatibleIndices: number[];
+  }> {
+    if (!audioStreams || audioStreams.length === 0) {
+      return { bestCompatibleIndex: -1, compatibleIndices: [] };
+    }
+
+    const compatibleIndices: number[] = [];
+
+    for (let i = 0; i < audioStreams.length; i++) {
+      const stream = audioStreams[i];
+      
+      if (stream.codec && this.isBrowserCompatibleAudio(stream.codec)) {
+        // Verify browser can actually decode it
+        const isSupported = await this.canDecodeAudioCodec(stream.codec);
+        if (isSupported) {
+          compatibleIndices.push(i);
+        }
+      }
+    }
+
+    return {
+      bestCompatibleIndex: compatibleIndices.length > 0 ? compatibleIndices[0] : -1,
+      compatibleIndices
     };
   }
 
   /**
+   * Check if an audio codec is known to be browser-compatible
+   */
+  private isBrowserCompatibleAudio(codec: string): boolean {
+    return BROWSER_COMPATIBLE_AUDIO.includes(codec.toLowerCase());
+  }
+
+  /**
+   * Test if a specific audio codec can be decoded by the browser
+   */
+  private async canDecodeAudioCodec(codec: string): Promise<boolean> {
+    const codecString = AUDIO_CODEC_STRINGS[codec.toLowerCase()];
+    if (!codecString) {
+      return false;
+    }
+
+    if ('mediaCapabilities' in navigator) {
+      try {
+        const config: MediaDecodingConfiguration = {
+          type: 'file',
+          audio: {
+            contentType: `audio/mp4; codecs="${codecString}"`,
+            channels: '2',
+            bitrate: 128000,
+            samplerate: 48000
+          }
+        };
+        const result = await navigator.mediaCapabilities.decodingInfo(config);
+        return result.supported;
+      } catch {
+        // Fall through to canPlayType
+      }
+    }
+
+    const audio = document.createElement('audio');
+    const canPlay = audio.canPlayType(`audio/mp4; codecs="${codecString}"`);
+    return canPlay === 'probably' || canPlay === 'maybe';
+  }
+
+  /**
    * Check if container supports direct play (no remux needed)
+   * Note: ffprobe may return comma-separated formats like "matroska,webm"
    */
   private isDirectPlayableContainer(format: string): boolean {
     if (!format) return false;
     const normalized = format.toLowerCase();
-    return normalized === 'mp4' || normalized === 'mov' || normalized === 'm4v';
+    return normalized.includes('mp4') || normalized.includes('mov') || normalized.includes('m4v');
   }
 
   /**
    * Check if container can be remuxed for direct stream
+   * Note: ffprobe may return comma-separated formats like "matroska,webm"
    */
   private isRemuxableContainer(format: string): boolean {
     if (!format) return false;
     const normalized = format.toLowerCase();
-    return normalized === 'mkv' || normalized === 'matroska' ||
-           normalized === 'avi' || normalized === 'webm';
+    return normalized.includes('mkv') || normalized.includes('matroska') ||
+           normalized.includes('avi') || normalized.includes('webm');
   }
 
   /**
@@ -148,7 +257,10 @@ export class PlaybackCapabilityService {
         };
 
         const result = await navigator.mediaCapabilities.decodingInfo(config);
-        return result.supported && result.smooth;
+        console.log(`MediaCapabilities video check: codec=${codec}, supported=${result.supported}, smooth=${result.smooth}`);
+        // Only require supported, not smooth - the smooth check is too conservative
+        // and may reject playable content on capable hardware
+        return result.supported;
       } catch (err) {
         console.warn('MediaCapabilities check failed:', err);
       }
@@ -158,54 +270,6 @@ export class PlaybackCapabilityService {
     const video = document.createElement('video');
     const canPlay = video.canPlayType(`video/mp4; codecs="${codecString}"`);
     return canPlay === 'probably' || canPlay === 'maybe';
-  }
-
-  /**
-   * Check if at least one audio codec is supported
-   */
-  private async canDecodeAnyAudio(codecs: string[]): Promise<boolean> {
-    if (!codecs || codecs.length === 0) {
-      // If no audio codecs specified, assume it's fine
-      return true;
-    }
-
-    for (const codec of codecs) {
-      const codecString = AUDIO_CODEC_STRINGS[codec.toLowerCase()];
-      if (!codecString) {
-        continue; // Unknown codec, skip
-      }
-
-      // Use MediaCapabilities API if available
-      if ('mediaCapabilities' in navigator) {
-        try {
-          const config: MediaDecodingConfiguration = {
-            type: 'file',
-            audio: {
-              contentType: `audio/mp4; codecs="${codecString}"`,
-              channels: '2',
-              bitrate: 128000,
-              samplerate: 48000
-            }
-          };
-
-          const result = await navigator.mediaCapabilities.decodingInfo(config);
-          if (result.supported) {
-            return true;
-          }
-        } catch (err) {
-          console.warn('MediaCapabilities audio check failed:', err);
-        }
-      }
-
-      // Fallback to canPlayType
-      const audio = document.createElement('audio');
-      const canPlay = audio.canPlayType(`audio/mp4; codecs="${codecString}"`);
-      if (canPlay === 'probably' || canPlay === 'maybe') {
-        return true;
-      }
-    }
-
-    return false;
   }
 
   /**

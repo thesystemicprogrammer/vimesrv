@@ -261,13 +261,96 @@ func (t *FFmpegTranscoder) validateSubtitleOptions(opts Options) error {
 	return nil
 }
 
+// isHardwareEncoder returns true if the encoder is a hardware-accelerated encoder
+func isHardwareEncoder(encoder string) bool {
+	return strings.HasSuffix(encoder, "_vaapi") ||
+		strings.HasSuffix(encoder, "_qsv") ||
+		strings.HasSuffix(encoder, "_nvenc") ||
+		strings.HasSuffix(encoder, "_amf") ||
+		strings.HasSuffix(encoder, "_videotoolbox")
+}
+
+// getEncoderType returns the hardware acceleration type from the encoder name
+// Returns: "vaapi", "qsv", "nvenc", "amf", "videotoolbox", or "software"
+func getEncoderType(encoder string) string {
+	switch {
+	case strings.HasSuffix(encoder, "_vaapi"):
+		return "vaapi"
+	case strings.HasSuffix(encoder, "_qsv"):
+		return "qsv"
+	case strings.HasSuffix(encoder, "_nvenc"):
+		return "nvenc"
+	case strings.HasSuffix(encoder, "_amf"):
+		return "amf"
+	case strings.HasSuffix(encoder, "_videotoolbox"):
+		return "videotoolbox"
+	default:
+		return "software"
+	}
+}
+
+// getQualityArgs returns the appropriate quality argument for the encoder
+// Different encoders use different quality parameters:
+// - libx264/libx265: -crf (Constant Rate Factor)
+// - h264_vaapi: -qp (Quantization Parameter)
+// - h264_qsv: -global_quality (Intel QSV quality)
+// - h264_nvenc: -cq (Constant Quality)
+func getQualityArgs(encoder string, crf int) []string {
+	encoderType := getEncoderType(encoder)
+
+	switch encoderType {
+	case "vaapi":
+		// VAAPI uses -qp for constant quality mode
+		return []string{"-qp", fmt.Sprintf("%d", crf)}
+	case "qsv":
+		// Intel QSV uses -global_quality with ICQ (Intelligent Constant Quality) mode
+		return []string{"-global_quality", fmt.Sprintf("%d", crf)}
+	case "nvenc":
+		// NVENC uses -cq for constant quality mode
+		return []string{"-cq", fmt.Sprintf("%d", crf)}
+	default:
+		// Software encoders (libx264, libx265) use -crf
+		return []string{"-crf", fmt.Sprintf("%d", crf)}
+	}
+}
+
+// getScaleFilter returns the appropriate scale filter for the given encoder and config
+// scaleFilter can be: "auto", "software", "vaapi", "qsv"
+// When "auto", the filter is chosen based on the encoder type
+func getScaleFilter(encoder, scaleFilter string, width, height int) string {
+	// Determine which scale filter to use
+	filterType := scaleFilter
+	if filterType == "" || filterType == "auto" {
+		filterType = getEncoderType(encoder)
+	}
+
+	switch filterType {
+	case "vaapi":
+		// VAAPI scale filter - format option ensures correct pixel format
+		return fmt.Sprintf("scale_vaapi=w=%d:h=%d", width, height)
+	case "qsv":
+		// QSV scale filter
+		return fmt.Sprintf("scale_qsv=w=%d:h=%d", width, height)
+	default:
+		// Software scale filter (default)
+		return fmt.Sprintf("scale=%d:%d", width, height)
+	}
+}
+
 // buildVideoArgs builds FFmpeg arguments for video-only transcoding
 func (t *FFmpegTranscoder) buildVideoArgs(opts Options) []string {
-	args := []string{
+	args := []string{}
+
+	// Add custom input arguments before -i (e.g., hardware acceleration)
+	if len(opts.FFmpegInputArgs) > 0 {
+		args = append(args, opts.FFmpegInputArgs...)
+	}
+
+	args = append(args,
 		"-i", opts.InputPath,
 		"-y",                  // Overwrite output
 		"-progress", "pipe:2", // Progress to stderr
-	}
+	)
 
 	// Map only video stream
 	args = append(args, "-map", "0:v:0")
@@ -285,23 +368,45 @@ func (t *FFmpegTranscoder) buildVideoArgs(opts Options) []string {
 		videoCodec = "libx264"
 	}
 
-	preset := opts.Preset
-	if preset == "" {
-		preset = "medium"
+	isHWEncoder := isHardwareEncoder(videoCodec)
+
+	args = append(args, "-c:v", videoCodec)
+
+	// Add encoder-specific options (profile, level, preset, pix_fmt)
+	// These are only reliably supported by software encoders
+	if !isHWEncoder {
+		args = append(args,
+			"-profile:v", "main",
+			"-level", "4.0",
+			"-pix_fmt", "yuv420p",
+		)
+
+		// Preset is only supported by software encoders and NVENC
+		preset := opts.Preset
+		if preset == "" {
+			preset = "medium"
+		}
+		args = append(args, "-preset", preset)
+	} else {
+		// For NVENC, preset is supported but uses different values
+		encoderType := getEncoderType(videoCodec)
+		if encoderType == "nvenc" {
+			preset := opts.Preset
+			if preset == "" {
+				preset = "p4" // NVENC default balanced preset
+			}
+			args = append(args, "-preset", preset)
+		}
+		// VAAPI and QSV don't support -preset
 	}
 
-	args = append(args,
-		"-c:v", videoCodec,
-		"-profile:v", "main",
-		"-level", "4.0",
-		"-preset", preset,
-		"-pix_fmt", "yuv420p",
-	)
-
-	// CRF mode (quality-based) or bitrate mode
+	// CRF/quality mode (quality-based) or bitrate mode
 	if opts.CRF > 0 {
+		// Add encoder-appropriate quality parameter
+		args = append(args, getQualityArgs(videoCodec, opts.CRF)...)
+
+		// Add rate control constraints
 		args = append(args,
-			"-crf", fmt.Sprintf("%d", opts.CRF),
 			"-maxrate", fmt.Sprintf("%dk", opts.MaxBitrate),
 			"-bufsize", fmt.Sprintf("%dk", opts.MaxBitrate*bufSizeMultiplier),
 		)
@@ -313,10 +418,13 @@ func (t *FFmpegTranscoder) buildVideoArgs(opts Options) []string {
 		)
 	}
 
-	// Scaling (only if dimensions are specified) and GOP settings
+	// Scaling (only if dimensions are specified)
 	if opts.Width > 0 && opts.Height > 0 {
-		args = append(args, "-vf", fmt.Sprintf("scale=%d:%d", opts.Width, opts.Height))
+		scaleFilter := getScaleFilter(videoCodec, opts.ScaleFilter, opts.Width, opts.Height)
+		args = append(args, "-vf", scaleFilter)
 	}
+
+	// GOP settings
 	args = append(args,
 		"-g", fmt.Sprintf("%d", gopSize),
 		"-keyint_min", fmt.Sprintf("%d", gopSize),

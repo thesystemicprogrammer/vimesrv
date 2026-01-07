@@ -91,6 +91,9 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("transcoding.segment_duration", 4)
 	v.SetDefault("transcoding.progress_log_interval_seconds", 60)
 	v.SetDefault("transcoding.segment_pattern", "chunk-%05d.m4s")
+	v.SetDefault("transcoding.video_encoder", "libx264")
+	v.SetDefault("transcoding.scale_filter", "auto")
+	v.SetDefault("transcoding.encoder_preset", "medium")
 
 	// Quality profiles defaults
 	v.SetDefault("transcoding.quality_profiles", []map[string]any{

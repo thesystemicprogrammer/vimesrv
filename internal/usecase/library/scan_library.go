@@ -258,11 +258,11 @@ func (uc *ScanLibraryUseCase) processFileWithProgress(
 	// Target file path
 	targetPath := filepath.Join(targetDir, originalFilename)
 
-	// Copy file to library with progress callback
+	// Try to move file to library (instant if same filesystem, copy if cross-device)
 	logger.Info().
 		Str("src", filePath).
 		Str("dst", targetPath).
-		Msg("Copying file to library")
+		Msg("Moving file to library")
 
 	// Create progress callback for large file copy
 	var copyCallback ports.CopyProgressCallback
@@ -275,11 +275,31 @@ func (uc *ScanLibraryUseCase) processFileWithProgress(
 		}
 	}
 
-	if err := uc.fileSystemService.CopyFileWithProgress(filePath, targetPath, copyCallback); err != nil {
-		return fmt.Errorf("failed to copy file: %w", err)
+	// Try instant rename first (same filesystem optimization)
+	renameErr := uc.fileSystemService.Rename(filePath, targetPath)
+	if renameErr == nil {
+		// Success! File moved instantly
+		logger.Debug().
+			Str("src", filePath).
+			Str("dst", targetPath).
+			Msg("File moved instantly via rename (same filesystem)")
+
+		// Report 100% progress if callback exists
+		if copyCallback != nil {
+			copyCallback(file.size, file.size, 100.0)
+		}
+	} else {
+		// Rename failed (likely cross-filesystem), fall back to copy
+		logger.Debug().
+			Err(renameErr).
+			Msg("Rename failed, falling back to copy operation")
+
+		if err := uc.fileSystemService.CopyFileWithProgress(filePath, targetPath, copyCallback); err != nil {
+			return fmt.Errorf("failed to copy file: %w", err)
+		}
 	}
 
-	// Update processed size after successful copy
+	// Update processed size after successful move/copy
 	*processedSize += file.size
 
 	// Create media file record
@@ -345,10 +365,12 @@ func (uc *ScanLibraryUseCase) processFileWithProgress(
 		}
 	}
 
-	// Delete from staging
-	if err := uc.fileSystemService.DeleteFile(filePath); err != nil {
-		logger.Warn().Err(err).Str("file", filePath).Msg("Failed to delete file from staging")
-		// Don't return error, file was imported successfully
+	// Delete from staging (no-op if already moved via rename)
+	if uc.fileSystemService.FileExists(filePath) {
+		if err := uc.fileSystemService.DeleteFile(filePath); err != nil {
+			logger.Warn().Err(err).Str("file", filePath).Msg("Failed to delete file from staging")
+			// Don't return error, file was imported successfully
+		}
 	}
 
 	logger.Info().

@@ -308,16 +308,35 @@ func (w *Worker) buildTranscodeOptions(job *client.WorkerJob) transcoding.Option
 		SourceStreamIndex: job.TrackIndex,
 		SegmentTime:       job.TranscodeOptions.SegmentTime,
 		TrackType:         job.TrackType,
+		FFmpegInputArgs:   w.config.Transcoding.FFmpegInputArgs,
+		ScaleFilter:       w.config.Transcoding.ScaleFilter,
 	}
 
 	// Video options
 	if job.TrackType == "video" {
 		opts.Width = job.TranscodeOptions.Width
 		opts.Height = job.TranscodeOptions.Height
-		opts.VideoCodec = job.TranscodeOptions.VideoCodec
+
+		// Use worker's configured encoder, falling back to job's codec, then libx264
+		opts.VideoCodec = w.config.Transcoding.VideoEncoder
+		if opts.VideoCodec == "" {
+			opts.VideoCodec = job.TranscodeOptions.VideoCodec
+		}
+		if opts.VideoCodec == "" {
+			opts.VideoCodec = "libx264"
+		}
+
 		opts.CRF = job.TranscodeOptions.CRF
 		opts.MaxBitrate = job.TranscodeOptions.MaxBitrate
-		opts.Preset = job.TranscodeOptions.Preset
+
+		// Use worker's configured preset, falling back to job's preset, then medium
+		opts.Preset = w.config.Transcoding.EncoderPreset
+		if opts.Preset == "" {
+			opts.Preset = job.TranscodeOptions.Preset
+		}
+		if opts.Preset == "" {
+			opts.Preset = "medium"
+		}
 	}
 
 	// Audio options

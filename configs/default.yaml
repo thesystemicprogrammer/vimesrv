@@ -48,6 +48,35 @@ transcoding:
   segment_duration: 4
   progress_log_interval_seconds: 60 # Log transcode progress every 60 seconds
 
+  # Video encoder to use for transcoding
+  # Software encoders: "libx264" (default), "libx265"
+  # Hardware encoders: "h264_vaapi", "h264_qsv", "h264_nvenc", "h264_amf", "h264_videotoolbox"
+  # Note: Hardware encoders require appropriate ffmpeg_input_args for HW acceleration setup
+  video_encoder: "libx264"
+
+  # Scale filter mode: "auto", "software", "vaapi", "qsv"
+  # "auto" (default): Automatically select based on video_encoder
+  #   - h264_vaapi -> scale_vaapi
+  #   - h264_qsv -> scale_qsv
+  #   - others -> software scale
+  # "software": Always use CPU-based scaling (scale=W:H)
+  # "vaapi": Use VAAPI hardware scaling (scale_vaapi=w=W:h=H)
+  # "qsv": Use Intel QSV hardware scaling (scale_qsv=w=W:h=H)
+  scale_filter: "auto"
+
+  # Encoder preset (varies by encoder)
+  # For libx264/libx265: ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow
+  # For h264_nvenc: p1-p7 (p1=fastest, p7=slowest) or legacy: slow, medium, fast
+  # For h264_vaapi/h264_qsv: Not used (ignored)
+  encoder_preset: "medium"
+
+  # Additional FFmpeg arguments to add before -i input
+  # Useful for hardware acceleration, e.g.:
+  #   ffmpeg_input_args: ["-hwaccel", "cuda"]
+  #   ffmpeg_input_args: ["-hwaccel", "qsv", "-qsv_device", "/dev/dri/renderD128"]
+  #   ffmpeg_input_args: ["-hwaccel", "vaapi", "-hwaccel_device", "/dev/dri/renderD128", "-hwaccel_output_format", "vaapi"]
+  ffmpeg_input_args: []
+
   # Quality presets using CRF-based encoding
   # Set enabled: true to create transcodes for that quality
   # CRF (Constant Rate Factor): Lower = better quality but larger files

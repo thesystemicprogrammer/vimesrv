@@ -11,6 +11,8 @@ export interface PlaybackDecision {
   reason: string;
   fallbackAvailable: boolean;
   bandwidthMbps?: number;
+  // For direct-stream mode: which audio track index (in audio_streams array) to use
+  selectedAudioTrackIndex?: number;
 }
 
 @Injectable({
@@ -101,9 +103,10 @@ export class PlaybackDecisionService {
       return {
         mode: 'direct-stream',
         url: media.direct_stream_url,
-        reason: 'Direct stream: remuxing container, codec supported',
+        reason: 'Direct stream: remuxing container',
         fallbackAvailable,
-        bandwidthMbps
+        bandwidthMbps,
+        selectedAudioTrackIndex: capability.selectedAudioTrackIndex
       };
     }
 

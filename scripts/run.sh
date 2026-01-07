@@ -29,7 +29,7 @@ FIXTURES_DIR="$PROJECT_ROOT/test/fixtures"
 
 # Parse arguments
 CLEAN_MODE=false
-if [[ "${1:-}" == "--clean" ]]; then
+if [[ "${1:-}" == "--cleanXXX" ]]; then
     CLEAN_MODE=true
 fi
 

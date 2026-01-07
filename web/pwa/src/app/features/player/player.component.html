@@ -1,0 +1,103 @@
+<div class="player-wrapper">
+  <!-- Header -->
+  <header class="player-header">
+    <a routerLink="/" class="back-link">
+      <svg xmlns="http://www.w3.org/2000/svg" class="back-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+      </svg>
+    </a>
+    <h1 class="player-title">{{ media()?.title || 'Loading...' }}</h1>
+  </header>
+
+  <!-- Video Container -->
+  <div 
+    class="video-container"
+    #playerContainer
+    (mousemove)="onMouseMove()"
+    (click)="onContainerClick($event)">
+    
+    <!-- Loading Spinner -->
+    @if (loading()) {
+      <div class="loading-overlay">
+        <div class="loading-spinner"></div>
+      </div>
+    }
+    
+    <!-- Error Display -->
+    @if (error()) {
+      <div class="error-overlay">
+        <div class="error-content">
+          <svg xmlns="http://www.w3.org/2000/svg" class="error-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <p class="error-message">{{ error() }}</p>
+          <a routerLink="/" class="error-back-link">Back to Library</a>
+        </div>
+      </div>
+    }
+
+    <!-- Notification Toast -->
+    @if (notificationMessage()) {
+      <div class="notification-toast">
+        <svg xmlns="http://www.w3.org/2000/svg" class="notification-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <span class="notification-text">{{ notificationMessage() }}</span>
+      </div>
+    }
+
+    <!-- Debug Panel -->
+    <app-player-debug-panel
+      [visible]="showDebugPanel()"
+      [stats]="playbackEngine.debugStats()"
+    />
+
+    <!-- Video Element -->
+    <video
+      #videoElement
+      class="video-element"
+      [class.video-hidden]="loading() || error()"
+      (dblclick)="toggleFullscreen()">
+    </video>
+
+    <!-- Center Controls -->
+    @if (media() && !error() && !loading()) {
+      <app-player-center-controls
+        [isPlaying]="playbackEngine.isPlaying()"
+        [visible]="showControls()"
+        [skipDuration]="30"
+        (playPauseClicked)="onPlayPause()"
+        (skipRequested)="onSkip($event)"
+      />
+    }
+
+    <!-- Bottom Controls -->
+    @if (media()) {
+      <app-player-bottom-controls
+        [currentTime]="playbackEngine.currentTime()"
+        [duration]="playbackEngine.duration()"
+        [progress]="playbackEngine.progress()"
+        [volume]="playbackEngine.volume()"
+        [isMuted]="playbackEngine.isMuted()"
+        [isPlaying]="playbackEngine.isPlaying()"
+        [isFullscreen]="isFullscreen()"
+        [visible]="showControls()"
+        [audioTracks]="playbackEngine.audioTracks()"
+        [currentAudioIndex]="playbackEngine.currentAudioIndex()"
+        [subtitleTracks]="playbackEngine.subtitleTracks()"
+        [currentSubtitleIndex]="playbackEngine.currentSubtitleIndex()"
+        [qualityLevels]="playbackEngine.qualityLevels()"
+        [currentQualityIndex]="playbackEngine.currentQualityIndex()"
+        [playbackModeLabel]="playbackEngine.playbackModeLabel()"
+        (seekRequested)="onSeekPercent($event)"
+        (volumeChanged)="playbackEngine.setVolume($event)"
+        (muteToggled)="playbackEngine.toggleMute()"
+        (playPauseToggled)="playbackEngine.togglePlay()"
+        (fullscreenToggled)="toggleFullscreen()"
+        (audioTrackChanged)="playbackEngine.setAudioTrack($event)"
+        (subtitleTrackChanged)="playbackEngine.setSubtitleTrack($event)"
+        (qualityChanged)="playbackEngine.setQuality($event)"
+      />
+    }
+  </div>
+</div>

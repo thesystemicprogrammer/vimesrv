@@ -94,6 +94,7 @@ func toTranscodingOptions(opts ports.TranscodeOptions) transcoding.Options {
 		MaxBitrate:        opts.MaxBitrate,
 		VideoBitrate:      opts.VideoBitrate,
 		Preset:            opts.Preset,
+		FFmpegInputArgs:   opts.FFmpegInputArgs,
 		AudioCodec:        opts.AudioCodec,
 		AudioBitrate:      opts.AudioBitrate,
 		AudioChannels:     opts.AudioChannels,

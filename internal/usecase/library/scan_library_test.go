@@ -424,7 +424,15 @@ func TestScanLibraryUseCase_Execute_SuccessfulImport(t *testing.T) {
 		return filepath.Dir(path) == cfg.MediaPath && len(filepath.Base(path)) == 36
 	})).Return(nil)
 
-	// Expect CopyFileWithProgress with UUID-based path
+	// Expect Rename attempt first (will fail, triggering copy fallback)
+	mockFS.On("Rename", filePath, mock.MatchedBy(func(path string) bool {
+		// Path should be /library/media/{uuid}/video.mp4
+		return filepath.Base(path) == "video.mp4" &&
+			filepath.Dir(filepath.Dir(path)) == cfg.MediaPath &&
+			len(filepath.Base(filepath.Dir(path))) == 36
+	})).Return(errors.New("cross-device link"))
+
+	// Expect CopyFileWithProgress with UUID-based path (fallback after rename fails)
 	mockFS.On("CopyFileWithProgress", filePath, mock.MatchedBy(func(path string) bool {
 		// Path should be /library/media/{uuid}/video.mp4
 		return filepath.Base(path) == "video.mp4" &&
@@ -439,6 +447,7 @@ func TestScanLibraryUseCase_Execute_SuccessfulImport(t *testing.T) {
 			m.FileSize == 1024000 &&
 			len(m.ID) == 36 // UUID length
 	})).Return(nil)
+	mockFS.On("FileExists", filePath).Return(true)
 	mockFS.On("DeleteFile", filePath).Return(nil)
 	mockFS.On("RemoveEmptyDirs", cfg.StagingPath).Return(nil)
 
@@ -490,8 +499,17 @@ func TestScanLibraryUseCase_Execute_DatabaseError_Rollback(t *testing.T) {
 		return filepath.Dir(path) == cfg.MediaPath && len(filepath.Base(path)) == 36
 	})).Return(nil)
 
-	// Expect CopyFileWithProgress with UUID-based path
+	// Expect Rename attempt first (will fail, triggering copy fallback)
+	mockFS.On("Rename", filePath, mock.MatchedBy(func(path string) bool {
+		// Path should be /library/media/{uuid}/video.mp4
+		return filepath.Base(path) == "video.mp4" &&
+			filepath.Dir(filepath.Dir(path)) == cfg.MediaPath &&
+			len(filepath.Base(filepath.Dir(path))) == 36
+	})).Return(errors.New("cross-device link"))
+
+	// Expect CopyFileWithProgress with UUID-based path (fallback after rename fails)
 	mockFS.On("CopyFileWithProgress", filePath, mock.MatchedBy(func(path string) bool {
+		// Path should be /library/media/{uuid}/video.mp4
 		return filepath.Base(path) == "video.mp4" &&
 			filepath.Dir(filepath.Dir(path)) == cfg.MediaPath &&
 			len(filepath.Base(filepath.Dir(path))) == 36

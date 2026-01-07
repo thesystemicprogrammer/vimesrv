@@ -53,6 +53,7 @@ export interface AudioStream {
   language: string;
   title: string;
   channels: number;
+  codec: string;  // e.g., "aac", "ac3", "dts", "eac3"
 }
 
 export interface SubtitleStream {

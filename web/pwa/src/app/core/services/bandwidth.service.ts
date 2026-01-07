@@ -25,6 +25,7 @@ export class BandwidthService {
    * @returns Measurement result with bits per second
    */
   async measure(bytes: number = 2_000_000): Promise<BandwidthMeasurement> {
+    console.log('Starting bandwidth measurement...');
     const startTime = performance.now();
 
     try {
@@ -42,6 +43,12 @@ export class BandwidthService {
         bytesTransferred,
         durationMs
       };
+
+      console.log('Bandwidth measurement complete:', {
+        mbps: (bitsPerSecond / 1_000_000).toFixed(2),
+        bytesTransferred,
+        durationMs: durationMs.toFixed(0)
+      });
 
       // Cache the measurement
       this.saveMeasurement(measurement);

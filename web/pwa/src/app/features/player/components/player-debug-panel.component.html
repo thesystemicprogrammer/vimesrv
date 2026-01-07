@@ -1,0 +1,25 @@
+@if (visible && stats) {
+  <div class="debug-panel">
+    <div class="debug-header">
+      Playback Debug
+      <span class="status-dot"
+            [class.status-direct]="stats.playbackMode === 'Direct Play'"
+            [class.status-remux]="stats.playbackMode === 'Direct Stream'"
+            [class.status-adaptive]="stats.playbackMode === 'Adaptive'">
+      </span>
+    </div>
+    <div class="debug-content">
+      <div>Mode: <span class="value">{{ stats.playbackMode }}</span></div>
+      <div>Bandwidth: <span class="value">{{ stats.bandwidthMbps !== null ? (stats.bandwidthMbps | number:'1.1-1') + ' Mbps' : '?' }}</span></div>
+      <div>Buffer: <span class="value">{{ stats.bufferAhead | number:'1.1-1' }}s</span></div>
+      <div>Stalls: <span class="value">{{ stats.stallCount }}</span></div>
+      <div>Media: <span class="value">{{ stats.mediaBitrateMbps | number:'1.1-1' }} Mbps</span></div>
+      @if (stats.currentQuality) {
+        <div>Quality: <span class="value">{{ stats.currentQuality }}</span></div>
+      }
+      @if (stats.abrEnabled !== null) {
+        <div>ABR: <span class="value">{{ stats.abrEnabled ? 'enabled' : 'disabled' }}</span></div>
+      }
+    </div>
+  </div>
+}

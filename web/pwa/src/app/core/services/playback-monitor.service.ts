@@ -16,11 +16,18 @@ export interface FallbackEvent {
   currentTime: number;
 }
 
+export type MonitoringMode = 'direct' | 'direct-stream';
+
 // Thresholds for triggering fallback
 const STALL_COUNT_THRESHOLD = 2;           // Fallback after 2 stalls
 const LOW_BUFFER_THRESHOLD = 3;            // Buffer below 3 seconds is "low"
 const LOW_BUFFER_DURATION_MS = 5000;       // Low buffer for 5+ seconds triggers fallback
 const MONITORING_INTERVAL_MS = 1000;       // Check every second
+
+// Direct-stream specific settings
+// Fragmented MP4 streams need more time to build initial buffer
+const DIRECT_STREAM_GRACE_PERIOD_MS = 10000;  // 10 second grace period for direct-stream
+const DIRECT_STREAM_STALL_THRESHOLD = 4;      // Higher stall threshold for direct-stream
 
 @Injectable({
   providedIn: 'root'
@@ -29,6 +36,8 @@ export class PlaybackMonitorService {
   private videoElement: HTMLVideoElement | null = null;
   private monitoringInterval: any = null;
   private isMonitoring = false;
+  private mode: MonitoringMode = 'direct';
+  private monitoringStartTime = 0;
 
   // State tracking
   private stallCount = 0;
@@ -48,14 +57,18 @@ export class PlaybackMonitorService {
 
   /**
    * Start monitoring a video element for playback issues
+   * @param video The video element to monitor
+   * @param mode The playback mode - affects thresholds and grace period
    */
-  startMonitoring(video: HTMLVideoElement): void {
+  startMonitoring(video: HTMLVideoElement, mode: MonitoringMode = 'direct'): void {
     if (this.isMonitoring) {
       this.stopMonitoring();
     }
 
     this.videoElement = video;
     this.isMonitoring = true;
+    this.mode = mode;
+    this.monitoringStartTime = Date.now();
     this.resetState();
 
     // Listen for stall events
@@ -66,7 +79,7 @@ export class PlaybackMonitorService {
     // Start periodic health checks
     this.monitoringInterval = setInterval(() => this.checkHealth(), MONITORING_INTERVAL_MS);
 
-    console.log('Playback monitoring started');
+    console.log(`Playback monitoring started (mode: ${mode})`);
   }
 
   /**
@@ -107,7 +120,8 @@ export class PlaybackMonitorService {
     }
 
     const bufferAhead = this.getBufferAhead();
-    const isHealthy = this.stallCount < STALL_COUNT_THRESHOLD && bufferAhead >= LOW_BUFFER_THRESHOLD;
+    const stallThreshold = this.getStallThreshold();
+    const isHealthy = this.stallCount < stallThreshold && bufferAhead >= LOW_BUFFER_THRESHOLD;
 
     return {
       bufferAhead,
@@ -128,16 +142,37 @@ export class PlaybackMonitorService {
     this.wasWaiting = false;
   }
 
+  /**
+   * Check if we're still in the grace period for direct-stream mode
+   */
+  private isInGracePeriod(): boolean {
+    if (this.mode !== 'direct-stream') {
+      return false;
+    }
+    return Date.now() - this.monitoringStartTime < DIRECT_STREAM_GRACE_PERIOD_MS;
+  }
+
+  /**
+   * Get the stall threshold based on mode
+   */
+  private getStallThreshold(): number {
+    return this.mode === 'direct-stream' ? DIRECT_STREAM_STALL_THRESHOLD : STALL_COUNT_THRESHOLD;
+  }
+
   // Event handlers (arrow functions to preserve 'this')
   private onWaiting = (): void => {
     if (!this.wasWaiting) {
       this.wasWaiting = true;
       this.stallCount++;
       this.lastStallTime = Date.now();
-      console.log(`Playback stall detected (count: ${this.stallCount})`);
+      
+      const inGrace = this.isInGracePeriod();
+      console.log(`Playback stall detected (count: ${this.stallCount}, grace period: ${inGrace})`);
 
-      // Check if we should trigger fallback
-      this.checkFallbackThresholds();
+      // Don't trigger fallback during grace period
+      if (!inGrace) {
+        this.checkFallbackThresholds();
+      }
     }
   };
 
@@ -155,6 +190,14 @@ export class PlaybackMonitorService {
 
     const bufferAhead = this.getBufferAhead();
     const now = Date.now();
+
+    // Skip low buffer checks during grace period
+    if (this.isInGracePeriod()) {
+      // Just emit health update, don't check thresholds
+      const health = this.getHealth();
+      this.healthUpdateSubject.next(health);
+      return;
+    }
 
     // Track how long we've been in low buffer state
     if (bufferAhead < LOW_BUFFER_THRESHOLD && !this.videoElement.paused) {
@@ -175,7 +218,8 @@ export class PlaybackMonitorService {
   }
 
   private checkFallbackThresholds(): void {
-    if (this.stallCount >= STALL_COUNT_THRESHOLD) {
+    const stallThreshold = this.getStallThreshold();
+    if (this.stallCount >= stallThreshold) {
       this.triggerFallback(`Too many stalls (${this.stallCount})`);
     }
   }
@@ -218,7 +262,8 @@ export class PlaybackMonitorService {
   }
 
   private getUnhealthyReason(bufferAhead: number): string {
-    if (this.stallCount >= STALL_COUNT_THRESHOLD) {
+    const stallThreshold = this.getStallThreshold();
+    if (this.stallCount >= stallThreshold) {
       return `${this.stallCount} playback stalls detected`;
     }
     if (bufferAhead < LOW_BUFFER_THRESHOLD) {

@@ -1,0 +1,170 @@
+.bottom-controls {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0.6) 60%, transparent);
+  padding: 4rem 1rem 1rem 1rem;
+  transition: opacity 0.3s ease;
+}
+
+.bottom-controls.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Progress Bar */
+.progress-bar-container {
+  width: 100%;
+  height: 0.25rem;
+  background-color: #52525b; /* zinc-600 */
+  border-radius: 9999px;
+  margin-bottom: 1rem;
+  cursor: pointer;
+}
+
+.progress-bar-container:hover .progress-bar-handle {
+  opacity: 1;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background-color: #3b82f6; /* blue-500 */
+  border-radius: 9999px;
+  position: relative;
+}
+
+.progress-bar-handle {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0.75rem;
+  height: 0.75rem;
+  background-color: white;
+  border-radius: 50%;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+/* Controls Row */
+.controls-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.control-btn {
+  color: white;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s ease;
+}
+
+.control-btn:hover {
+  color: #60a5fa; /* blue-400 */
+}
+
+.icon-lg {
+  width: 2rem;
+  height: 2rem;
+}
+
+.icon-md {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+/* Volume Control */
+.volume-control {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.volume-slider {
+  width: 5rem;
+  height: 0.25rem;
+  background-color: #52525b;
+  border-radius: 0.5rem;
+  appearance: none;
+  cursor: pointer;
+}
+
+.volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  background: white;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.volume-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  background: white;
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+}
+
+/* Time Display */
+.time-display {
+  color: white;
+  font-size: 0.875rem;
+}
+
+/* Mode Badge */
+.mode-badge {
+  font-size: 0.75rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.25rem;
+}
+
+.mode-adaptive {
+  background-color: #3f3f46; /* zinc-700 */
+  color: #d4d4d8; /* zinc-300 */
+}
+
+.mode-direct {
+  background-color: #15803d; /* green-700 */
+  color: #dcfce7; /* green-100 */
+}
+
+/* Spacer */
+.spacer {
+  flex: 1;
+}
+
+/* Track Selectors */
+.track-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.track-label {
+  color: #a1a1aa; /* zinc-400 */
+  font-size: 0.875rem;
+}
+
+.track-select {
+  background-color: #27272a; /* zinc-800 */
+  color: white;
+  font-size: 0.875rem;
+  border-radius: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid #3f3f46; /* zinc-700 */
+  cursor: pointer;
+}
+
+.track-select:focus {
+  border-color: #3b82f6; /* blue-500 */
+  outline: none;
+}

@@ -279,7 +279,7 @@ func (h *DASHHandler) buildVideoAdaptationSet(mediaID string, mediaFile *domain.
 		sb.WriteString("\n")
 		sb.WriteString(fmt.Sprintf(`        <BaseURL>/stream/dash/content/%s/%s/video/</BaseURL>`, mediaID, quality))
 		sb.WriteString("\n")
-		sb.WriteString(`        <SegmentTemplate timescale="1000" initialization="init.mp4" media="chunk-$Number%03d$.m4s" startNumber="0">`)
+		sb.WriteString(`        <SegmentTemplate timescale="1000" initialization="init.mp4" media="chunk-$Number%05d$.m4s" startNumber="0">`)
 		sb.WriteString("\n")
 		sb.WriteString(generateSegmentTimeline(segmentInfo.Segments))
 		sb.WriteString("        </SegmentTemplate>")
@@ -340,13 +340,13 @@ func (h *DASHHandler) buildAudioAdaptationSets(mediaID string, audioStreams []*d
 
 		segmentInfo, err := h.loadSegmentInfo(transcode.OutputPath)
 		if err == nil && len(segmentInfo.Segments) > 0 {
-			sb.WriteString(`        <SegmentTemplate timescale="1000" initialization="init.mp4" media="chunk-$Number%03d$.m4s" startNumber="0">`)
+			sb.WriteString(`        <SegmentTemplate timescale="1000" initialization="init.mp4" media="chunk-$Number%05d$.m4s" startNumber="0">`)
 			sb.WriteString("\n")
 			sb.WriteString(generateSegmentTimeline(segmentInfo.Segments))
 			sb.WriteString("        </SegmentTemplate>")
 		} else {
 			logger.Warn().Err(err).Int("stream_idx", streamIdx).Msg("audio segment timing data not available, using fixed duration")
-			sb.WriteString(`        <SegmentTemplate timescale="1000" duration="4000" initialization="init.mp4" media="chunk-$Number%03d$.m4s" startNumber="0"/>`)
+			sb.WriteString(`        <SegmentTemplate timescale="1000" duration="4000" initialization="init.mp4" media="chunk-$Number%05d$.m4s" startNumber="0"/>`)
 		}
 
 		sb.WriteString("\n")

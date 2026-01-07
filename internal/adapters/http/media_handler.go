@@ -117,6 +117,7 @@ type AudioStreamDTO struct {
 	Language string `json:"language"`
 	Title    string `json:"title"`
 	Channels int    `json:"channels"`
+	Codec    string `json:"codec"`
 }
 
 // SubtitleDTO represents a subtitle stream in the API response
@@ -208,6 +209,7 @@ func (h *MediaHandler) buildMediaDetailResponse(result *media.GetMediaOutput) Me
 			Language: as.Language,
 			Title:    title,
 			Channels: as.Channels,
+			Codec:    as.Codec,
 		}
 	}
 
@@ -242,9 +244,10 @@ func (h *MediaHandler) buildMediaDetailResponse(result *media.GetMediaOutput) Me
 	}
 
 	// Determine direct play support based on container format
+	// Note: ffprobe may return comma-separated formats like "matroska,webm", so we use contains
 	format := strings.ToLower(m.Format)
-	directPlaySupported := format == "mp4" || format == "mov" || format == "m4v"
-	directStreamSupported := format == "mkv" || format == "matroska" || format == "avi" || format == "webm"
+	directPlaySupported := strings.Contains(format, "mp4") || strings.Contains(format, "mov") || strings.Contains(format, "m4v")
+	directStreamSupported := strings.Contains(format, "mkv") || strings.Contains(format, "matroska") || strings.Contains(format, "avi") || strings.Contains(format, "webm")
 
 	response := MediaDetailResponse{
 		ID:                 m.ID,

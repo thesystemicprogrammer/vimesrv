@@ -72,6 +72,18 @@ type TranscodingConfig struct {
 
 	// TimeoutSeconds is the maximum time for a single transcode job
 	TimeoutSeconds int `mapstructure:"timeout_seconds"`
+
+	// FFmpegInputArgs are additional FFmpeg arguments to add before -i (e.g., ["-hwaccel", "cuda"])
+	FFmpegInputArgs []string `mapstructure:"ffmpeg_input_args"`
+
+	// VideoEncoder is the video encoder to use: "libx264", "h264_vaapi", "h264_qsv", etc.
+	VideoEncoder string `mapstructure:"video_encoder"`
+
+	// ScaleFilter is the scale filter to use: "auto", "software", "vaapi", "qsv"
+	ScaleFilter string `mapstructure:"scale_filter"`
+
+	// EncoderPreset is the encoder preset (varies by encoder)
+	EncoderPreset string `mapstructure:"encoder_preset"`
 }
 
 // LoggingConfig contains logging settings
@@ -152,6 +164,9 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("transcoding.ffmpeg_path", "ffmpeg")
 	v.SetDefault("transcoding.ffprobe_path", "ffprobe")
 	v.SetDefault("transcoding.timeout_seconds", 7200)
+	v.SetDefault("transcoding.video_encoder", "libx264")
+	v.SetDefault("transcoding.scale_filter", "auto")
+	v.SetDefault("transcoding.encoder_preset", "medium")
 
 	// Logging defaults
 	v.SetDefault("logging.level", "info")

@@ -71,6 +71,10 @@ type LibraryScanConfig struct {
 type TranscodingConfig struct {
 	SegmentDuration         int              `mapstructure:"segment_duration"`
 	ProgressLogIntervalSecs int              `mapstructure:"progress_log_interval_seconds"`
+	FFmpegInputArgs         []string         `mapstructure:"ffmpeg_input_args"` // Additional FFmpeg args before -i (e.g., ["-hwaccel", "cuda"])
+	VideoEncoder            string           `mapstructure:"video_encoder"`     // Video encoder: "libx264", "h264_vaapi", "h264_qsv", etc.
+	ScaleFilter             string           `mapstructure:"scale_filter"`      // Scale filter: "auto", "software", "vaapi", "qsv"
+	EncoderPreset           string           `mapstructure:"encoder_preset"`    // Encoder preset (varies by encoder)
 	QualityProfiles         []QualityProfile `mapstructure:"quality_profiles"`
 }
 
