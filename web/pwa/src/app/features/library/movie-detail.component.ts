@@ -5,13 +5,14 @@ import { Subscription, skip } from 'rxjs';
 import { ApiService, MovieDetail, CreditPerson, SimilarMovieItem, CollectionMovieItem, MovieCollectionInfo, UnmatchedMediaSummary } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { MetadataMatchModalComponent } from './metadata-match-modal.component';
+import { FavoriteButtonComponent } from '../../shared/components/favorite-button.component';
 
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
 
 @Component({
   selector: 'app-movie-detail',
   standalone: true,
-  imports: [RouterLink, MetadataMatchModalComponent],
+  imports: [RouterLink, MetadataMatchModalComponent, FavoriteButtonComponent],
   template: `
     @if (loading()) {
       <div class="flex justify-center items-center h-screen">
@@ -31,7 +32,7 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
       </div>
     } @else if (movie()) {
       <!-- Backdrop hero section -->
-      <div class="relative min-h-[50vh] md:min-h-[70vh]">
+      <div class="relative min-h-[50vh] md:min-h-[60vh] lg:min-h-[55vh] xl:min-h-[50vh] 2xl:min-h-[45vh] max-h-[700px]">
         <!-- Backdrop image -->
         @if (backdropUrl()) {
           <div
@@ -149,6 +150,16 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
                     </svg>
                     <span>Transcoding in progress...</span>
                   </div>
+                }
+
+                <!-- Favorite button -->
+                @if (movie()!.movie_metadata_id) {
+                  <app-favorite-button
+                    mediaType="movie"
+                    [metadataId]="movie()!.movie_metadata_id || 0"
+                    [showLabel]="true"
+                    buttonClass="px-4 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition"
+                  />
                 }
 
                 <!-- Change Metadata button -->

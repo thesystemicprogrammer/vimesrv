@@ -193,6 +193,12 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("worker.heartbeat_timeout_seconds", 60)
 	v.SetDefault("worker.fallback_to_local", false)
 	v.SetDefault("worker.fallback_after_minutes", 30)
+
+	// Recommendations defaults
+	v.SetDefault("recommendations.enabled", true)
+	v.SetDefault("recommendations.cron_spec", "0 0 3 * * *") // Daily at 3 AM
+	v.SetDefault("recommendations.run_at_startup", false)
+	v.SetDefault("recommendations.priority", 10)
 }
 
 // bindEnvVars binds environment variables to viper keys

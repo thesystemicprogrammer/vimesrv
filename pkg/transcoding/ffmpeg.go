@@ -270,6 +270,71 @@ func isHardwareEncoder(encoder string) bool {
 		strings.HasSuffix(encoder, "_videotoolbox")
 }
 
+// IsHardwareEncoder is the exported version of isHardwareEncoder
+func IsHardwareEncoder(encoder string) bool {
+	return isHardwareEncoder(encoder)
+}
+
+// isVaapiDecodeError checks if the error indicates VAAPI cannot decode the input codec
+// These errors occur when trying to use full VAAPI (HW decode + HW encode) with
+// input codecs that VAAPI doesn't support (e.g., MPEG-4 ASP, older formats)
+func isVaapiDecodeError(stderr string) bool {
+	patterns := []string{
+		"No support for codec",
+		"hwaccel initialisation returned error",
+		"Failed setup for format vaapi",
+		"Impossible to convert between the formats",
+		"hwaccel type vaapi not usable",
+		"Failed to initialise VAAPI",
+	}
+	for _, p := range patterns {
+		if strings.Contains(stderr, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// isHardwareUnavailableError checks if the error indicates hardware acceleration
+// is completely unavailable on the system (no GPU, driver issues, etc.)
+func isHardwareUnavailableError(stderr string) bool {
+	patterns := []string{
+		"Cannot open the hw device",
+		"No VA display",
+		"vaapi_device",
+		"Failed to create a VAAPI device",
+		"DRM device open failed",
+		"No such file or directory",
+		"error initializing vaapi",
+	}
+	for _, p := range patterns {
+		if strings.Contains(stderr, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// IsRetryableHardwareError checks if an error can be resolved by falling back
+// to a different hardware acceleration mode.
+// Returns:
+//   - retryable: true if fallback should be attempted
+//   - reason: "vaapi_decode" if VAAPI can't decode input, "hw_unavailable" if no HW available
+func IsRetryableHardwareError(err error) (retryable bool, reason string) {
+	if err == nil {
+		return false, ""
+	}
+	errStr := err.Error()
+
+	if isVaapiDecodeError(errStr) {
+		return true, "vaapi_decode"
+	}
+	if isHardwareUnavailableError(errStr) {
+		return true, "hw_unavailable"
+	}
+	return false, ""
+}
+
 // getEncoderType returns the hardware acceleration type from the encoder name
 // Returns: "vaapi", "qsv", "nvenc", "amf", "videotoolbox", or "software"
 func getEncoderType(encoder string) string {
@@ -317,19 +382,30 @@ func getQualityArgs(encoder string, crf int) []string {
 // getScaleFilter returns the appropriate scale filter for the given encoder and config
 // scaleFilter can be: "auto", "software", "vaapi", "qsv"
 // When "auto", the filter is chosen based on the encoder type
-func getScaleFilter(encoder, scaleFilter string, width, height int) string {
+// hwMode controls whether frames need to be uploaded to GPU (hybrid mode)
+func getScaleFilter(encoder, scaleFilter string, width, height int, hwMode string) string {
 	// Determine which scale filter to use
 	filterType := scaleFilter
 	if filterType == "" || filterType == "auto" {
 		filterType = getEncoderType(encoder)
 	}
 
+	// In hybrid mode, frames come from software decoder and need to be uploaded to GPU
+	needsUpload := hwMode == HWAccelHybrid
+
 	switch filterType {
 	case "vaapi":
-		// VAAPI scale filter - format option ensures correct pixel format
+		if needsUpload {
+			// Software decode -> convert to NV12 -> upload to VAAPI -> scale on GPU
+			return fmt.Sprintf("format=nv12,hwupload,scale_vaapi=w=%d:h=%d", width, height)
+		}
+		// Full VAAPI: frames already on GPU surface
 		return fmt.Sprintf("scale_vaapi=w=%d:h=%d", width, height)
 	case "qsv":
-		// QSV scale filter
+		if needsUpload {
+			// Software decode -> upload to QSV -> scale on GPU
+			return fmt.Sprintf("hwupload=extra_hw_frames=64,format=qsv,scale_qsv=w=%d:h=%d", width, height)
+		}
 		return fmt.Sprintf("scale_qsv=w=%d:h=%d", width, height)
 	default:
 		// Software scale filter (default)
@@ -341,9 +417,43 @@ func getScaleFilter(encoder, scaleFilter string, width, height int) string {
 func (t *FFmpegTranscoder) buildVideoArgs(opts Options) []string {
 	args := []string{}
 
-	// Add custom input arguments before -i (e.g., hardware acceleration)
-	if len(opts.FFmpegInputArgs) > 0 {
-		args = append(args, opts.FFmpegInputArgs...)
+	// Determine hardware acceleration mode (default to full if not specified)
+	hwMode := opts.HardwareAccelMode
+	if hwMode == "" {
+		hwMode = HWAccelFull
+	}
+
+	// Video codec settings - may be overridden in software fallback mode
+	videoCodec := opts.VideoCodec
+	if videoCodec == "" {
+		videoCodec = "libx264"
+	}
+
+	// In software fallback mode, override to libx264
+	if hwMode == HWAccelSoftware && isHardwareEncoder(videoCodec) {
+		videoCodec = "libx264"
+	}
+
+	isHWEncoder := isHardwareEncoder(videoCodec)
+	encoderType := getEncoderType(videoCodec)
+
+	// Add input arguments based on hardware acceleration mode
+	switch hwMode {
+	case HWAccelFull:
+		// Full HW acceleration: use provided FFmpegInputArgs (includes -hwaccel, -hwaccel_output_format, etc.)
+		if len(opts.FFmpegInputArgs) > 0 {
+			args = append(args, opts.FFmpegInputArgs...)
+		}
+	case HWAccelHybrid:
+		// Hybrid mode: software decode + hardware encode
+		// Initialize VAAPI device for the encoder/filters, but don't use hardware decoding
+		if encoderType == "vaapi" && opts.VaapiDevice != "" {
+			args = append(args, "-vaapi_device", opts.VaapiDevice)
+		}
+		// For QSV hybrid mode, device initialization is handled via filters
+		// Don't add -hwaccel args - let FFmpeg use software decoder
+	case HWAccelSoftware:
+		// Pure software mode: no hardware acceleration args
 	}
 
 	args = append(args,
@@ -361,14 +471,6 @@ func (t *FFmpegTranscoder) buildVideoArgs(opts Options) []string {
 		segmentTime = 4
 	}
 	gopSize := segmentTime * defaultFPS
-
-	// Video codec settings
-	videoCodec := opts.VideoCodec
-	if videoCodec == "" {
-		videoCodec = "libx264"
-	}
-
-	isHWEncoder := isHardwareEncoder(videoCodec)
 
 	args = append(args, "-c:v", videoCodec)
 
@@ -389,7 +491,6 @@ func (t *FFmpegTranscoder) buildVideoArgs(opts Options) []string {
 		args = append(args, "-preset", preset)
 	} else {
 		// For NVENC, preset is supported but uses different values
-		encoderType := getEncoderType(videoCodec)
 		if encoderType == "nvenc" {
 			preset := opts.Preset
 			if preset == "" {
@@ -420,8 +521,16 @@ func (t *FFmpegTranscoder) buildVideoArgs(opts Options) []string {
 
 	// Scaling (only if dimensions are specified)
 	if opts.Width > 0 && opts.Height > 0 {
-		scaleFilter := getScaleFilter(videoCodec, opts.ScaleFilter, opts.Width, opts.Height)
+		scaleFilter := getScaleFilter(videoCodec, opts.ScaleFilter, opts.Width, opts.Height, hwMode)
 		args = append(args, "-vf", scaleFilter)
+	} else if hwMode == HWAccelHybrid && isHWEncoder {
+		// In hybrid mode without scaling, we still need to upload frames to GPU for the encoder
+		switch encoderType {
+		case "vaapi":
+			args = append(args, "-vf", "format=nv12,hwupload")
+		case "qsv":
+			args = append(args, "-vf", "hwupload=extra_hw_frames=64,format=qsv")
+		}
 	}
 
 	// GOP settings

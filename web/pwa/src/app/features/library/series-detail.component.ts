@@ -13,13 +13,14 @@ import {
 } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { MetadataMatchModalComponent } from './metadata-match-modal.component';
+import { FavoriteButtonComponent } from '../../shared/components/favorite-button.component';
 
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
 
 @Component({
   selector: 'app-series-detail',
   standalone: true,
-  imports: [RouterLink, MetadataMatchModalComponent],
+  imports: [RouterLink, MetadataMatchModalComponent, FavoriteButtonComponent],
   template: `
     @if (loading()) {
       <div class="flex justify-center items-center h-screen">
@@ -39,7 +40,7 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
       </div>
     } @else if (series()) {
       <!-- Backdrop hero section -->
-      <div class="relative min-h-[40vh] md:min-h-[60vh]">
+      <div class="relative min-h-[40vh] md:min-h-[50vh] lg:min-h-[45vh] xl:min-h-[40vh] 2xl:min-h-[40vh] max-h-[600px]">
         <!-- Backdrop image -->
         @if (backdropUrl()) {
           <div
@@ -113,12 +114,24 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
 
               <!-- Genres -->
               @if (series()!.genres) {
-                <div class="flex flex-wrap gap-2">
+                <div class="flex flex-wrap gap-2 mb-4">
                   @for (genre of parseGenres(series()!.genres); track genre) {
                     <span class="px-3 py-1 bg-slate-700/80 text-slate-300 rounded-full text-sm">
                       {{ genre }}
                     </span>
                   }
+                </div>
+              }
+
+              <!-- Favorite button -->
+              @if (series()!.series_metadata_id) {
+                <div class="mt-3">
+                  <app-favorite-button
+                    mediaType="series"
+                    [metadataId]="series()!.series_metadata_id"
+                    [showLabel]="true"
+                    buttonClass="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition"
+                  />
                 </div>
               }
             </div>

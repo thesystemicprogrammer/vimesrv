@@ -95,6 +95,31 @@ func registerHTTPHandlers(useCases *UseCases, adapters *Adapters, httpServer *se
 		jobHandler := http.NewJobHandler(useCases.ListJobsUseCase, adapters.ProgressCache)
 		jobHandler.RegisterRoutes(apiGroup)
 
+		// Watch Progress API
+		watchProgressHandler := http.NewWatchProgressHandler(
+			useCases.RecordWatchProgressUseCase,
+			useCases.GetWatchProgressUseCase,
+			useCases.GetContinueWatchingUseCase,
+			useCases.RemoveFromContinueWatchingUseCase,
+		)
+		watchProgressHandler.RegisterRoutes(apiGroup)
+
+		// Favorite API
+		favoriteHandler := http.NewFavoriteHandler(
+			useCases.ToggleFavoriteUseCase,
+			useCases.GetUserFavoritesUseCase,
+		)
+		favoriteHandler.RegisterRoutes(apiGroup)
+
+		// Recommendation API
+		recommendationHandler := http.NewRecommendationHandler(
+			useCases.BuildRecommendationModelUseCase,
+			useCases.GetPersonalizedRecommendationsUseCase,
+			adapters.RecommendationRepository,
+		)
+		recommendationHandler.RegisterRoutes(apiGroup)
+		recommendationHandler.RegisterAdminRoutes(apiGroup)
+
 		// Transcode Admin API (admin/manager only)
 		transcodeAdminHandler := http.NewTranscodeAdminHandler(
 			useCases.GetTranscodingDetailsUseCase,

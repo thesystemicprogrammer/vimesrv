@@ -45,6 +45,11 @@ type Adapters struct {
 	SearchRepository             ports.SearchRepository
 	UserRepository               ports.UserRepository
 	RebuildRepository            ports.RebuildRepository
+	WatchProgressRepository      ports.WatchProgressRepository
+	FavoriteRepository           ports.FavoriteRepository
+	RecommendationRepository     ports.RecommendationRepository
+	FeatureExtractionRepository  ports.FeatureExtractionRepository
+	UserWatchDataRepository      ports.UserWatchDataRepository
 	WebSocketHub                 *websocket.Hub
 	ProgressCache                *websocket.ProgressCache
 	JobNotifier                  ports.JobNotifier
@@ -81,6 +86,11 @@ func initAdapters(cfg *config.Config, db *database.DB) *Adapters {
 		SearchRepository:             repository.NewSearchRepository(db),
 		UserRepository:               repository.NewSQLiteUserRepository(db),
 		RebuildRepository:            repository.NewSQLiteRebuildRepository(db),
+		WatchProgressRepository:      repository.NewWatchProgressRepository(db),
+		FavoriteRepository:           repository.NewFavoriteRepository(db),
+		RecommendationRepository:     repository.NewRecommendationRepository(db),
+		FeatureExtractionRepository:  repository.NewFeatureExtractionRepository(db),
+		UserWatchDataRepository:      repository.NewUserWatchDataRepository(db),
 	}
 
 	// Initialize WebSocket hub if enabled

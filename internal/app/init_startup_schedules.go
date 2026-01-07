@@ -12,6 +12,7 @@ import (
 
 const scheduleNamePeriodicLibraryScan = "periodic_library_scan"
 const scheduleNamePeriodicRebuildExport = "periodic_rebuild_export"
+const scheduleNamePeriodicRecommendations = "periodic_recommendations"
 
 // initStartupSchedules initializes scheduled jobs that should run on application startup
 // This function is called during application initialization and will fail-fast if
@@ -35,6 +36,15 @@ func initStartupSchedules(ctx context.Context, cfg *config.Config, useCases *Use
 		}
 	} else {
 		logger.Info().Msg("periodic rebuild export is disabled in configuration")
+	}
+
+	// Initialize periodic recommendations if enabled
+	if cfg.Recommendations.Enabled {
+		if err := initPeriodicRecommendations(ctx, cfg, useCases, adapters); err != nil {
+			return fmt.Errorf("failed to initialize periodic recommendations: %w", err)
+		}
+	} else {
+		logger.Info().Msg("periodic recommendations is disabled in configuration")
 	}
 
 	logger.Info().Msg("startup schedules initialized successfully")
@@ -115,6 +125,46 @@ func initPeriodicRebuildExport(ctx context.Context, cfg *config.Config, useCases
 	logger.Info().
 		Str("schedule_name", scheduleNamePeriodicRebuildExport).
 		Msg("periodic rebuild export schedule initialized successfully")
+
+	return nil
+}
+
+// initPeriodicRecommendations initializes the periodic recommendation model build schedule
+func initPeriodicRecommendations(ctx context.Context, cfg *config.Config, useCases *UseCases, adapters *Adapters) error {
+	cronSpec := cfg.Recommendations.CronSpec
+	priority := cfg.Recommendations.Priority
+	runAtStartup := cfg.Recommendations.RunAtStartup
+
+	logger.Info().
+		Str("schedule_name", scheduleNamePeriodicRecommendations).
+		Str("cron_spec", cronSpec).
+		Int("priority", priority).
+		Bool("run_at_startup", runAtStartup).
+		Msg("initializing periodic recommendations schedule")
+
+	// Validate cron spec before upserting (fail-fast)
+	if _, err := adapters.CronParser.Parse(cronSpec); err != nil {
+		return fmt.Errorf("invalid cron_spec '%s': %w", cronSpec, err)
+	}
+
+	// Upsert the schedule
+	input := job.UpsertScheduleInput{
+		Name:            scheduleNamePeriodicRecommendations,
+		CronSpec:        cronSpec,
+		JobType:         shared.JobTypeBuildRecommendations,
+		Priority:        priority,
+		Enabled:         true,
+		ForceNextRunNow: runAtStartup,
+		Payload:         nil,
+	}
+
+	if _, err := useCases.UpsertScheduleUseCase.Execute(ctx, input); err != nil {
+		return fmt.Errorf("failed to upsert schedule: %w", err)
+	}
+
+	logger.Info().
+		Str("schedule_name", scheduleNamePeriodicRecommendations).
+		Msg("periodic recommendations schedule initialized successfully")
 
 	return nil
 }

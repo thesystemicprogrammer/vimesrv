@@ -37,13 +37,14 @@ func (r UserRole) IsValid() bool {
 
 // Job types
 const (
-	JobTypeScanLibrary       = "scan_library"
-	JobTypeTranscodeVideo    = "transcode_video"
-	JobTypeTranscodeAudio    = "transcode_audio"
-	JobTypeTranscodeSubtitle = "transcode_subtitle"
-	JobTypeEnrichMetadata    = "enrich_metadata"
-	JobTypeFetchTranslations = "fetch_translations"
-	JobTypePrepareRebuild    = "prepare_rebuild"
+	JobTypeScanLibrary          = "scan_library"
+	JobTypeTranscodeVideo       = "transcode_video"
+	JobTypeTranscodeAudio       = "transcode_audio"
+	JobTypeTranscodeSubtitle    = "transcode_subtitle"
+	JobTypeEnrichMetadata       = "enrich_metadata"
+	JobTypeFetchTranslations    = "fetch_translations"
+	JobTypePrepareRebuild       = "prepare_rebuild"
+	JobTypeBuildRecommendations = "build_recommendations"
 )
 
 // Job priorities (lower value = higher priority)

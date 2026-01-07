@@ -111,7 +111,7 @@ type MediaType = 'movie' | 'tv';
                         <h3 class="text-white font-medium">{{ candidate.title }}</h3>
                         <div class="flex items-center gap-2 mt-1 text-sm text-slate-400">
                           <span class="px-2 py-0.5 bg-slate-600 rounded text-xs uppercase">
-                            {{ candidate.media_type }}
+                            {{ candidate.candidate_type }}
                           </span>
                           @if (candidate.release_date) {
                             <span>{{ formatYear(candidate.release_date) }}</span>
@@ -123,9 +123,9 @@ type MediaType = 'movie' | 'tv';
                       <div class="flex-shrink-0 text-right">
                         <div
                           class="text-lg font-bold"
-                          [class]="getConfidenceClass(candidate.confidence)"
+                          [class]="getConfidenceClass(candidate.confidence_score)"
                         >
-                          {{ candidate.confidence }}%
+                          {{ candidate.confidence_score }}%
                         </div>
                         <div class="text-xs text-slate-500">match</div>
                       </div>
@@ -287,7 +287,6 @@ export class MetadataMatchModalComponent implements OnInit {
 
   open(): void {
     this.isOpen.set(true);
-    this.currentView.set('candidates');
     this.error.set(null);
     this.searchResults.set([]);
     this.hasSearched.set(false);
@@ -324,13 +323,22 @@ export class MetadataMatchModalComponent implements OnInit {
 
     this.api.getCandidates(this.media.media_id).subscribe({
       next: (response) => {
-        this.candidates.set(response.data || []);
+        const candidateList = response.data.candidates || [];
+        this.candidates.set(candidateList);
         this.loading.set(false);
+        
+        // Auto-select tab based on candidates availability
+        if (candidateList.length > 0) {
+          this.currentView.set('candidates');
+        } else {
+          this.currentView.set('search');
+        }
       },
       error: (err) => {
         // 404 means no candidates, which is fine
         if (err.status === 404) {
           this.candidates.set([]);
+          this.currentView.set('search');
         } else {
           this.error.set(err.error?.error?.message || 'Failed to load candidates');
         }

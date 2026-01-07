@@ -203,7 +203,7 @@ func (w *Worker) processJob(ctx context.Context, job *client.WorkerJob, workerNu
 	var err error
 	switch job.TrackType {
 	case "video":
-		err = w.transcoder.TranscodeVideo(ctx, opts, progressCallback)
+		err = w.transcodeVideoWithFallback(ctx, opts, progressCallback, logger)
 	case "audio":
 		err = w.transcoder.TranscodeAudio(ctx, opts, progressCallback)
 	case "subtitle":
@@ -310,6 +310,7 @@ func (w *Worker) buildTranscodeOptions(job *client.WorkerJob) transcoding.Option
 		TrackType:         job.TrackType,
 		FFmpegInputArgs:   w.config.Transcoding.FFmpegInputArgs,
 		ScaleFilter:       w.config.Transcoding.ScaleFilter,
+		VaapiDevice:       w.config.Transcoding.VaapiDevice,
 	}
 
 	// Video options
@@ -346,6 +347,67 @@ func (w *Worker) buildTranscodeOptions(job *client.WorkerJob) transcoding.Option
 	}
 
 	return opts
+}
+
+// transcodeVideoWithFallback attempts video transcoding with automatic fallback through hardware acceleration tiers.
+// Tier 1: Full VAAPI (HW decode + HW encode) - Fastest
+// Tier 2: Hybrid (SW decode + HW encode) - Fast, works with all input codecs
+// Tier 3: Software (SW decode + SW encode) - Universal fallback
+func (w *Worker) transcodeVideoWithFallback(ctx context.Context, opts transcoding.Options, callback transcoding.ProgressCallback, logger zerolog.Logger) error {
+	// Check if using hardware encoder
+	isHWEncoder := transcoding.IsHardwareEncoder(opts.VideoCodec)
+	if !isHWEncoder {
+		// Software encoder - no fallback needed
+		return w.transcoder.TranscodeVideo(ctx, opts, callback)
+	}
+
+	// Tier 1: Try full hardware acceleration (HW decode + HW encode)
+	opts.HardwareAccelMode = transcoding.HWAccelFull
+	err := w.transcoder.TranscodeVideo(ctx, opts, callback)
+	if err == nil {
+		return nil
+	}
+
+	// Check if this is a retryable VAAPI decode error
+	retryable, reason := transcoding.IsRetryableHardwareError(err)
+	if !retryable {
+		// Not a hardware compatibility error - fail immediately
+		return err
+	}
+
+	// Log full error and fallback
+	logger.Warn().
+		Err(err).
+		Str("reason", reason).
+		Str("video_codec", opts.VideoCodec).
+		Msg("Full VAAPI acceleration failed, falling back to hybrid mode (SW decode + HW encode)")
+
+	// Tier 2: Try hybrid mode (SW decode + HW encode)
+	opts.HardwareAccelMode = transcoding.HWAccelHybrid
+	err = w.transcoder.TranscodeVideo(ctx, opts, callback)
+	if err == nil {
+		return nil
+	}
+
+	// Check if hardware encoding itself failed
+	retryable, reason = transcoding.IsRetryableHardwareError(err)
+	if !retryable {
+		// Not a hardware compatibility error - fail immediately
+		return err
+	}
+
+	// Log full error and fallback to software
+	logger.Warn().
+		Err(err).
+		Str("reason", reason).
+		Str("original_codec", opts.VideoCodec).
+		Msg("Hybrid mode failed, falling back to software encoding (libx264)")
+
+	// Tier 3: Pure software fallback
+	opts.HardwareAccelMode = transcoding.HWAccelSoftware
+	// VideoCodec will be overridden to libx264 by buildVideoArgs when in software mode
+
+	return w.transcoder.TranscodeVideo(ctx, opts, callback)
 }
 
 // resolvePath converts a relative path from the server to an absolute local path

@@ -8,18 +8,19 @@ import (
 
 // Config holds all application configuration
 type Config struct {
-	Server      ServerConfig      `mapstructure:"server"`
-	Auth        AuthConfig        `mapstructure:"auth"`
-	Job         JobConfig         `mapstructure:"job"`
-	Media       MediaConfig       `mapstructure:"media"`
-	Transcoding TranscodingConfig `mapstructure:"transcoding"`
-	Database    DatabaseConfig    `mapstructure:"database"`
-	Logging     LoggingConfig     `mapstructure:"logging"`
-	TMDB        TMDBConfig        `mapstructure:"tmdb"`
-	Library     LibraryConfig     `mapstructure:"library"`
-	WebSocket   WebSocketConfig   `mapstructure:"websocket"`
-	Rebuild     RebuildConfig     `mapstructure:"rebuild"`
-	Worker      WorkerConfig      `mapstructure:"worker"`
+	Server          ServerConfig          `mapstructure:"server"`
+	Auth            AuthConfig            `mapstructure:"auth"`
+	Job             JobConfig             `mapstructure:"job"`
+	Media           MediaConfig           `mapstructure:"media"`
+	Transcoding     TranscodingConfig     `mapstructure:"transcoding"`
+	Database        DatabaseConfig        `mapstructure:"database"`
+	Logging         LoggingConfig         `mapstructure:"logging"`
+	TMDB            TMDBConfig            `mapstructure:"tmdb"`
+	Library         LibraryConfig         `mapstructure:"library"`
+	WebSocket       WebSocketConfig       `mapstructure:"websocket"`
+	Rebuild         RebuildConfig         `mapstructure:"rebuild"`
+	Worker          WorkerConfig          `mapstructure:"worker"`
+	Recommendations RecommendationsConfig `mapstructure:"recommendations"`
 }
 
 // AuthConfig holds authentication configuration
@@ -75,6 +76,7 @@ type TranscodingConfig struct {
 	VideoEncoder            string           `mapstructure:"video_encoder"`     // Video encoder: "libx264", "h264_vaapi", "h264_qsv", etc.
 	ScaleFilter             string           `mapstructure:"scale_filter"`      // Scale filter: "auto", "software", "vaapi", "qsv"
 	EncoderPreset           string           `mapstructure:"encoder_preset"`    // Encoder preset (varies by encoder)
+	VaapiDevice             string           `mapstructure:"vaapi_device"`      // VAAPI device path for hybrid mode (e.g., "/dev/dri/renderD128")
 	QualityProfiles         []QualityProfile `mapstructure:"quality_profiles"`
 }
 
@@ -184,6 +186,21 @@ type WorkerConfig struct {
 	// FallbackAfterMinutes is how long to wait before falling back to local processing
 	// (only used if FallbackToLocal is true)
 	FallbackAfterMinutes int `mapstructure:"fallback_after_minutes"`
+}
+
+// RecommendationsConfig holds configuration for the recommendation system
+type RecommendationsConfig struct {
+	// Enabled enables the recommendation system and periodic model builds
+	Enabled bool `mapstructure:"enabled"`
+
+	// CronSpec is the cron expression for scheduled model rebuilds (6-field format: sec min hour day month weekday)
+	CronSpec string `mapstructure:"cron_spec"`
+
+	// RunAtStartup triggers a model build immediately on server start
+	RunAtStartup bool `mapstructure:"run_at_startup"`
+
+	// Priority is the job priority for recommendation builds (higher number = lower priority)
+	Priority int `mapstructure:"priority"`
 }
 
 func (c *Config) Validate() error {

@@ -795,6 +795,146 @@ ALTER TABLE episode_metadata_translations ADD COLUMN still_path TEXT;
 -- SQLite doesn't support DROP COLUMN
 `,
 	},
+	{
+		version: 13,
+		name:    "create_watch_progress_and_favorites_tables",
+		up: `
+-- Watch Progress Table
+-- Tracks user's video playback position and completion status
+CREATE TABLE IF NOT EXISTS watch_progress (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    media_id TEXT REFERENCES media_files(id) ON DELETE CASCADE,
+    episode_metadata_id INTEGER REFERENCES episode_metadata(id) ON DELETE CASCADE,
+    position_seconds INTEGER NOT NULL,
+    duration_seconds INTEGER NOT NULL,
+    progress_percent REAL NOT NULL CHECK(progress_percent >= 0 AND progress_percent <= 100),
+    last_watched_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    completed INTEGER NOT NULL DEFAULT 0,
+    manually_removed INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CHECK (
+        (media_id IS NOT NULL AND episode_metadata_id IS NULL) OR 
+        (media_id IS NOT NULL AND episode_metadata_id IS NOT NULL)
+    )
+);
+
+-- Unique indexes with WHERE clauses to properly handle NULL values
+-- For movies (episode_metadata_id IS NULL): unique on (user_id, media_id)
+CREATE UNIQUE INDEX idx_watch_progress_unique_movie 
+    ON watch_progress(user_id, media_id) 
+    WHERE episode_metadata_id IS NULL;
+
+-- For episodes (episode_metadata_id IS NOT NULL): unique on (user_id, media_id, episode_metadata_id)
+CREATE UNIQUE INDEX idx_watch_progress_unique_episode 
+    ON watch_progress(user_id, media_id, episode_metadata_id) 
+    WHERE episode_metadata_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_watch_progress_continue_watching 
+    ON watch_progress(user_id, last_watched_at DESC) 
+    WHERE completed = 0 AND manually_removed = 0;
+
+CREATE INDEX IF NOT EXISTS idx_watch_progress_history 
+    ON watch_progress(user_id, completed, last_watched_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_watch_progress_user_media 
+    ON watch_progress(user_id, media_id);
+
+-- Favorites Table
+-- Stores user's favorited movies and series
+CREATE TABLE IF NOT EXISTS favorites (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    media_type TEXT NOT NULL CHECK (media_type IN ('movie', 'series')),
+    movie_metadata_id INTEGER REFERENCES movie_metadata(id) ON DELETE CASCADE,
+    series_metadata_id INTEGER REFERENCES series_metadata(id) ON DELETE CASCADE,
+    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CHECK (
+        (media_type = 'movie' AND movie_metadata_id IS NOT NULL AND series_metadata_id IS NULL) OR
+        (media_type = 'series' AND series_metadata_id IS NOT NULL AND movie_metadata_id IS NULL)
+    )
+);
+
+CREATE INDEX IF NOT EXISTS idx_favorites_user ON favorites(user_id, added_at DESC);
+CREATE INDEX IF NOT EXISTS idx_favorites_movie ON favorites(movie_metadata_id) WHERE movie_metadata_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_favorites_series ON favorites(series_metadata_id) WHERE series_metadata_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_favorites_unique_movie ON favorites(user_id, movie_metadata_id) WHERE movie_metadata_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_favorites_unique_series ON favorites(user_id, series_metadata_id) WHERE series_metadata_id IS NOT NULL;
+`,
+		down: `
+DROP INDEX IF EXISTS idx_favorites_unique_series;
+DROP INDEX IF NOT EXISTS idx_favorites_unique_movie;
+DROP INDEX IF EXISTS idx_favorites_series;
+DROP INDEX IF EXISTS idx_favorites_movie;
+DROP INDEX IF EXISTS idx_favorites_user;
+DROP TABLE IF EXISTS favorites;
+
+DROP INDEX IF EXISTS idx_watch_progress_user_media;
+DROP INDEX IF EXISTS idx_watch_progress_history;
+DROP INDEX IF EXISTS idx_watch_progress_continue_watching;
+DROP INDEX IF EXISTS idx_watch_progress_unique_episode;
+DROP INDEX IF EXISTS idx_watch_progress_unique_movie;
+DROP TABLE IF EXISTS watch_progress;
+`,
+	},
+	{
+		version: 14,
+		name:    "create_recommendation_tables",
+		up: `
+-- Movie Recommendations Table
+-- Pre-computed movie recommendations using TF-IDF + cosine similarity
+CREATE TABLE IF NOT EXISTS movie_recommendations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_movie_metadata_id INTEGER NOT NULL REFERENCES movie_metadata(id) ON DELETE CASCADE,
+    recommended_movie_metadata_id INTEGER NOT NULL REFERENCES movie_metadata(id) ON DELETE CASCADE,
+    similarity_score REAL NOT NULL CHECK(similarity_score >= 0 AND similarity_score <= 1),
+    rank_order INTEGER NOT NULL,
+    generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(source_movie_metadata_id, recommended_movie_metadata_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_movie_rec_source ON movie_recommendations(source_movie_metadata_id, rank_order);
+CREATE INDEX IF NOT EXISTS idx_movie_rec_generated ON movie_recommendations(generated_at);
+
+-- Series Recommendations Table
+-- Pre-computed series recommendations using TF-IDF + cosine similarity
+CREATE TABLE IF NOT EXISTS series_recommendations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_series_metadata_id INTEGER NOT NULL REFERENCES series_metadata(id) ON DELETE CASCADE,
+    recommended_series_metadata_id INTEGER NOT NULL REFERENCES series_metadata(id) ON DELETE CASCADE,
+    similarity_score REAL NOT NULL CHECK(similarity_score >= 0 AND similarity_score <= 1),
+    rank_order INTEGER NOT NULL,
+    generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(source_series_metadata_id, recommended_series_metadata_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_series_rec_source ON series_recommendations(source_series_metadata_id, rank_order);
+CREATE INDEX IF NOT EXISTS idx_series_rec_generated ON series_recommendations(generated_at);
+
+-- Recommendation Model Metadata Table
+-- Tracks when recommendation models were last built and their stats
+CREATE TABLE IF NOT EXISTS recommendation_model_metadata (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    model_type TEXT NOT NULL UNIQUE CHECK(model_type IN ('movie', 'series')),
+    total_items INTEGER NOT NULL,
+    feature_count INTEGER,
+    last_built_at TIMESTAMP NOT NULL,
+    build_duration_ms INTEGER
+);
+`,
+		down: `
+DROP TABLE IF EXISTS recommendation_model_metadata;
+
+DROP INDEX IF EXISTS idx_series_rec_generated;
+DROP INDEX IF EXISTS idx_series_rec_source;
+DROP TABLE IF EXISTS series_recommendations;
+
+DROP INDEX IF EXISTS idx_movie_rec_generated;
+DROP INDEX IF EXISTS idx_movie_rec_source;
+DROP TABLE IF EXISTS movie_recommendations;
+`,
+	},
 }
 
 func NewDatabaseMigration(db *sql.DB) *DatabaseMigration {

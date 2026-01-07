@@ -156,9 +156,11 @@ if $DRY_RUN; then
     echo "1. Reset $STUCK_JOBS jobs: running -> queued"
     echo "   - Clear worker_id"
     echo "   - Clear started_at"
+    echo "   - Reset attempts to 0"
     echo "   - Update updated_at"
     echo ""
     echo "2. Reset $STUCK_TRANSCODES transcodes: processing -> pending"
+    echo "   - Reset attempts to 0"
     echo "   - Update updated_at"
     echo ""
     echo -e "${YELLOW}This is a dry-run. No changes were made.${NC}"
@@ -189,6 +191,7 @@ if [[ "$STUCK_JOBS" -gt 0 ]]; then
         SET status = 'queued', 
             worker_id = NULL, 
             started_at = NULL, 
+            attempts = 0,
             updated_at = CURRENT_TIMESTAMP 
         WHERE status = 'running';
     "
@@ -201,6 +204,7 @@ if [[ "$STUCK_TRANSCODES" -gt 0 ]]; then
     sqlite3 "$DB_PATH" "
         UPDATE transcodes 
         SET status = 'pending', 
+            attempts = 0,
             updated_at = CURRENT_TIMESTAMP 
         WHERE status = 'processing';
     "

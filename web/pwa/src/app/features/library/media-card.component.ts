@@ -1,6 +1,8 @@
-import { Component, Input, Output, EventEmitter } from '@angular/core';
+import { Component, Input, Output, EventEmitter, inject } from '@angular/core';
 import { MovieSummary, SeriesSummary, RecentlyAddedItem } from '../../core/services/api.service';
 import { LazyLoadDirective } from '../../shared/directives/lazy-load.directive';
+import { FavoriteButtonComponent } from '../../shared/components/favorite-button.component';
+import { FavoritesService } from '../../core/services/favorites.service';
 
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w342';
 
@@ -9,7 +11,7 @@ export type CardType = 'movie' | 'series' | 'recent';
 @Component({
   selector: 'app-media-card',
   standalone: true,
-  imports: [LazyLoadDirective],
+  imports: [LazyLoadDirective, FavoriteButtonComponent],
   template: `
     <div
       class="relative rounded-lg overflow-hidden shadow-lg hover:ring-2 hover:ring-blue-500 transition cursor-pointer group bg-slate-800"
@@ -50,6 +52,21 @@ export type CardType = 'movie' | 'series' | 'recent';
           </div>
         }
 
+        <!-- Favorite button - always visible when favorited, otherwise show on hover -->
+        @if (getMetadataId() > 0 && getFavoriteMediaType()) {
+          <div class="absolute top-2 right-2 z-10 transition"
+               [class.opacity-100]="isFavorited()"
+               [class.opacity-0]="!isFavorited()"
+               [class.group-hover:opacity-100]="true"
+               (click)="onFavoriteClick($event)">
+            <app-favorite-button
+              [mediaType]="getFavoriteMediaType()!"
+              [metadataId]="getMetadataId()"
+              [iconClass]="'w-6 h-6'"
+            />
+          </div>
+        }
+
         <!-- Series/Season episode count badge -->
         @if ((cardType === 'series' || cardType === 'recent') && episodeCount) {
           <div class="absolute bottom-2 right-2 bg-blue-600/90 px-2 py-1 rounded text-xs text-white font-medium">
@@ -86,6 +103,8 @@ export type CardType = 'movie' | 'series' | 'recent';
   `
 })
 export class MediaCardComponent {
+  private readonly favoritesService = inject(FavoritesService);
+  
   @Input({ required: true }) cardType: CardType = 'movie';
   @Input() movie?: MovieSummary;
   @Input() series?: SeriesSummary;
@@ -180,6 +199,47 @@ export class MediaCardComponent {
     this.cardClick.emit();
   }
 
+  onFavoriteClick(event: Event): void {
+    // Prevent the card click event from firing
+    event.stopPropagation();
+  }
+
+  getMetadataId(): number {
+    if (this.cardType === 'movie' && this.movie) {
+      return this.movie.movie_metadata_id || 0;
+    }
+    if (this.cardType === 'series' && this.series) {
+      return this.series.series_metadata_id || 0;
+    }
+    if (this.cardType === 'recent' && this.recentItem) {
+      // RecentlyAddedItem has both movie_metadata_id and series_metadata_id
+      // depending on the type
+      if (this.recentItem.type === 'movie') {
+        return this.recentItem.movie_metadata_id || 0;
+      } else if (this.recentItem.type === 'season') {
+        return this.recentItem.series_metadata_id || 0;
+      }
+    }
+    return 0;
+  }
+
+  getFavoriteMediaType(): 'movie' | 'series' | null {
+    if (this.cardType === 'movie') {
+      return 'movie';
+    }
+    if (this.cardType === 'series') {
+      return 'series';
+    }
+    if (this.cardType === 'recent' && this.recentItem) {
+      if (this.recentItem.type === 'movie') {
+        return 'movie';
+      } else if (this.recentItem.type === 'season') {
+        return 'series';
+      }
+    }
+    return null;
+  }
+
   formatDuration(seconds: number): string {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
@@ -188,5 +248,14 @@ export class MediaCardComponent {
       return `${hours}h ${minutes}m`;
     }
     return `${minutes}m`;
+  }
+
+  isFavorited(): boolean {
+    const mediaType = this.getFavoriteMediaType();
+    const metadataId = this.getMetadataId();
+    if (mediaType && metadataId > 0) {
+      return this.favoritesService.isFavorited(mediaType, metadataId);
+    }
+    return false;
   }
 }

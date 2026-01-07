@@ -84,6 +84,9 @@ type TranscodingConfig struct {
 
 	// EncoderPreset is the encoder preset (varies by encoder)
 	EncoderPreset string `mapstructure:"encoder_preset"`
+
+	// VaapiDevice is the VAAPI device path for hybrid mode (e.g., "/dev/dri/renderD128")
+	VaapiDevice string `mapstructure:"vaapi_device"`
 }
 
 // LoggingConfig contains logging settings
@@ -167,6 +170,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("transcoding.video_encoder", "libx264")
 	v.SetDefault("transcoding.scale_filter", "auto")
 	v.SetDefault("transcoding.encoder_preset", "medium")
+	v.SetDefault("transcoding.vaapi_device", "/dev/dri/renderD128")
 
 	// Logging defaults
 	v.SetDefault("logging.level", "info")

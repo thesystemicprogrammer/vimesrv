@@ -4,6 +4,7 @@ import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { ApiService, MediaDetail } from '../../core/services/api.service';
 import { PlaybackDecisionService } from '../../core/services/playback-decision.service';
 import { PlaybackEngineService } from './services/playback-engine.service';
+import { WatchProgressService } from '../../core/services/watch-progress.service';
 import { PlayerDebugPanelComponent } from './components/player-debug-panel.component';
 import { PlayerCenterControlsComponent } from './components/player-center-controls.component';
 import { PlayerBottomControlsComponent } from './components/player-bottom-controls.component';
@@ -30,6 +31,7 @@ export class PlayerComponent implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly api = inject(ApiService);
   private readonly playbackDecision = inject(PlaybackDecisionService);
+  private readonly watchProgress = inject(WatchProgressService);
   
   // Inject playback engine (provided at component level)
   readonly playbackEngine = inject(PlaybackEngineService);
@@ -49,6 +51,11 @@ export class PlayerComponent implements OnInit, OnDestroy {
   private controlsTimeout: any = null;
   private notificationTimeout: any = null;
   private debugPanelTimeout: any = null;
+  
+  // Progress tracking
+  private progressInterval: any = null;
+  private currentMediaId: string | null = null;
+  private currentEpisodeId: number | null = null;
 
   @HostListener('document:keydown', ['$event'])
   onKeyDown(event: KeyboardEvent): void {
@@ -123,6 +130,9 @@ export class PlayerComponent implements OnInit, OnDestroy {
     if (this.debugPanelTimeout) {
       clearTimeout(this.debugPanelTimeout);
     }
+    if (this.progressInterval) {
+      clearInterval(this.progressInterval);
+    }
   }
 
   private async loadMedia(mediaId: string): Promise<void> {
@@ -165,12 +175,96 @@ export class PlayerComponent implements OnInit, OnDestroy {
           this.error.set(error);
         }
       });
+
+      // Set up watch progress tracking
+      this.setupWatchProgress(media);
       
     } catch (err) {
       console.error('Failed to load media:', err);
       this.error.set(err instanceof Error ? err.message : 'Failed to load media');
       this.loading.set(false);
     }
+  }
+
+  /**
+   * Set up watch progress tracking for the current media
+   * - Restore previous position
+   * - Start periodic progress saving
+   */
+  private setupWatchProgress(media: MediaDetail): void {
+    // Store media identifier for progress tracking
+    // Use the media_id (media_files.id) for both movies and episodes
+    this.currentMediaId = media.id;
+    this.currentEpisodeId = null; // Not needed - backend looks it up from media_files
+
+    // Restore previous watch position
+    this.watchProgress.getProgress(
+      this.currentMediaId, 
+      undefined
+    ).subscribe({
+      next: (response) => {
+        if (response.data && response.data.position_seconds > 10) {
+          // Only restore if position is > 10 seconds (skip intro resume)
+          const video = this.videoElement.nativeElement;
+          video.currentTime = response.data.position_seconds;
+          console.log('Restored watch position:', response.data.position_seconds);
+        }
+      },
+      error: (err) => {
+        console.log('No previous watch progress found:', err);
+      }
+    });
+
+    // Start periodic progress saving (every 10 seconds)
+    this.startProgressTracking();
+  }
+
+  /**
+   * Start interval to save progress every 10 seconds during playback
+   */
+  private startProgressTracking(): void {
+    if (this.progressInterval) {
+      clearInterval(this.progressInterval);
+    }
+
+    this.progressInterval = setInterval(() => {
+      const video = this.videoElement.nativeElement;
+      
+      // Only save if video is playing and has valid duration
+      if (!video.paused && video.duration > 0 && !isNaN(video.duration)) {
+        this.saveProgress();
+      }
+    }, 10000); // Every 10 seconds
+  }
+
+  /**
+   * Save current playback progress
+   */
+  private saveProgress(): void {
+    const video = this.videoElement.nativeElement;
+    
+    if (!video.duration || isNaN(video.duration)) {
+      return;
+    }
+
+    const position = Math.floor(video.currentTime);
+    const duration = Math.floor(video.duration);
+
+    // Only save if we have valid data
+    if (position <= 0 || duration <= 0) {
+      return;
+    }
+
+    this.watchProgress.recordProgress({
+      media_id: this.currentMediaId || undefined,
+      episode_metadata_id: undefined, // Backend looks this up from media_files
+      position_seconds: position,
+      duration_seconds: duration
+    }).subscribe({
+      error: (err) => {
+        console.error('Failed to save watch progress:', err);
+      }
+    });
   }
 
   // ==================== UI Event Handlers ====================

@@ -4,6 +4,7 @@ import (
 	"github.com/thesystemicprogrammer/vimesrv/internal/adapters/library"
 	"github.com/thesystemicprogrammer/vimesrv/internal/adapters/metadata"
 	rebuildadapter "github.com/thesystemicprogrammer/vimesrv/internal/adapters/rebuild"
+	recommendationadapter "github.com/thesystemicprogrammer/vimesrv/internal/adapters/recommendation"
 	"github.com/thesystemicprogrammer/vimesrv/internal/adapters/transcode"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/config"
@@ -43,4 +44,10 @@ func registerJobs(cfg *config.Config, useCases *UseCases, adapters *Adapters) {
 	// Prepare Rebuild (periodic export of rebuild.json)
 	prepareRebuildJobHandler := rebuildadapter.NewPrepareRebuildJobHandler(useCases.PrepareRebuildUseCase)
 	adapters.HandlerRegistry.Register(shared.JobTypePrepareRebuild, prepareRebuildJobHandler)
+
+	// Build Recommendations (periodic recommendation model builds)
+	if cfg.Recommendations.Enabled && useCases.BuildRecommendationModelUseCase != nil {
+		buildRecommendationsJobHandler := recommendationadapter.NewBuildRecommendationsJobHandler(useCases.BuildRecommendationModelUseCase)
+		adapters.HandlerRegistry.Register(shared.JobTypeBuildRecommendations, buildRecommendationsJobHandler)
+	}
 }

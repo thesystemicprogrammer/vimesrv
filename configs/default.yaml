@@ -70,6 +70,15 @@ transcoding:
   # For h264_vaapi/h264_qsv: Not used (ignored)
   encoder_preset: "medium"
 
+  # VAAPI device path for hardware encoding (Linux only)
+  # Used for hybrid mode fallback when full VAAPI decode fails on unsupported input codecs
+  # Only needed when video_encoder is a VAAPI encoder (e.g., h264_vaapi)
+  # The system will automatically fall back through these tiers:
+  #   1. Full VAAPI (HW decode + HW encode) - Fastest, but limited codec support
+  #   2. Hybrid (SW decode + HW encode) - Uses this device path
+  #   3. Software (libx264) - Universal fallback if hardware is unavailable
+  vaapi_device: "/dev/dri/renderD128"
+
   # Additional FFmpeg arguments to add before -i input
   # Useful for hardware acceleration, e.g.:
   #   ffmpeg_input_args: ["-hwaccel", "cuda"]

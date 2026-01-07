@@ -4,6 +4,13 @@ package transcoding
 
 import "context"
 
+// Hardware acceleration mode constants
+const (
+	HWAccelFull     = "full"     // HW decode + HW encode (fastest, requires compatible input codec)
+	HWAccelHybrid   = "hybrid"   // SW decode + HW encode (fast, works with all input codecs)
+	HWAccelSoftware = "software" // SW decode + SW encode (universal fallback)
+)
+
 // Options contains options for transcoding operations
 type Options struct {
 	// Input configuration
@@ -23,6 +30,10 @@ type Options struct {
 	Preset          string   // Encoding preset (e.g., "medium", "fast")
 	FFmpegInputArgs []string // Additional FFmpeg arguments to add before -i (e.g., ["-hwaccel", "cuda"])
 	ScaleFilter     string   // Scale filter to use: "auto", "software", "vaapi", "qsv"
+
+	// Hardware acceleration fallback options
+	HardwareAccelMode string // Hardware acceleration mode: "full", "hybrid", "software" (empty = "full")
+	VaapiDevice       string // VAAPI device path for hybrid mode (e.g., "/dev/dri/renderD128")
 
 	// Audio encoding options (for audio tracks)
 	AudioCodec    string // Audio codec (e.g., "aac")

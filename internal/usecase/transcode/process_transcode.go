@@ -13,6 +13,7 @@ import (
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/config"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/logger"
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/ports"
+	"github.com/thesystemicprogrammer/vimesrv/pkg/transcoding"
 )
 
 // ProcessTranscodeInput represents the input for the ProcessTranscode use case
@@ -249,7 +250,7 @@ func (uc *ProcessTranscodeUseCase) Execute(ctx context.Context, input ProcessTra
 	}, nil
 }
 
-// transcodeVideo handles video transcoding
+// transcodeVideo handles video transcoding with automatic hardware acceleration fallback
 func (uc *ProcessTranscodeUseCase) transcodeVideo(ctx context.Context, jobID int64, media *domain.MediaFile, transcode *domain.Transcode, outputPath string) error {
 	var width, height, crf, maxBitrate int
 
@@ -348,12 +349,74 @@ func (uc *ProcessTranscodeUseCase) transcodeVideo(ctx context.Context, jobID int
 		Preset:          preset,
 		FFmpegInputArgs: uc.config.Transcoding.FFmpegInputArgs,
 		ScaleFilter:     uc.config.Transcoding.ScaleFilter,
+		VaapiDevice:     uc.config.Transcoding.VaapiDevice,
 		SegmentTime:     uc.config.Transcoding.SegmentDuration,
 		TrackType:       "video",
 	}
 
-	// Execute transcoding with progress callback
+	// Execute transcoding with hardware acceleration fallback
 	callback := uc.makeProgressCallback(jobID, transcode.ID, media.ID, string(transcode.TrackType), media.Filename, media.Duration)
+	return uc.transcodeVideoWithFallback(ctx, opts, callback)
+}
+
+// transcodeVideoWithFallback attempts video transcoding with automatic fallback through hardware acceleration tiers.
+// Tier 1: Full VAAPI (HW decode + HW encode) - Fastest
+// Tier 2: Hybrid (SW decode + HW encode) - Fast, works with all input codecs
+// Tier 3: Software (SW decode + SW encode) - Universal fallback
+func (uc *ProcessTranscodeUseCase) transcodeVideoWithFallback(ctx context.Context, opts ports.TranscodeOptions, callback ports.ProgressCallback) error {
+	// Check if using hardware encoder
+	isHWEncoder := transcoding.IsHardwareEncoder(opts.VideoCodec)
+	if !isHWEncoder {
+		// Software encoder - no fallback needed
+		return uc.transcoder.TranscodeVideo(ctx, opts, callback)
+	}
+
+	// Tier 1: Try full hardware acceleration (HW decode + HW encode)
+	opts.HardwareAccelMode = transcoding.HWAccelFull
+	err := uc.transcoder.TranscodeVideo(ctx, opts, callback)
+	if err == nil {
+		return nil
+	}
+
+	// Check if this is a retryable VAAPI decode error
+	retryable, reason := transcoding.IsRetryableHardwareError(err)
+	if !retryable {
+		// Not a hardware compatibility error - fail immediately
+		return err
+	}
+
+	// Log full error and fallback
+	logger.Warn().
+		Err(err).
+		Str("reason", reason).
+		Str("video_codec", opts.VideoCodec).
+		Msg("Full VAAPI acceleration failed, falling back to hybrid mode (SW decode + HW encode)")
+
+	// Tier 2: Try hybrid mode (SW decode + HW encode)
+	opts.HardwareAccelMode = transcoding.HWAccelHybrid
+	err = uc.transcoder.TranscodeVideo(ctx, opts, callback)
+	if err == nil {
+		return nil
+	}
+
+	// Check if hardware encoding itself failed
+	retryable, reason = transcoding.IsRetryableHardwareError(err)
+	if !retryable {
+		// Not a hardware compatibility error - fail immediately
+		return err
+	}
+
+	// Log full error and fallback to software
+	logger.Warn().
+		Err(err).
+		Str("reason", reason).
+		Str("original_codec", opts.VideoCodec).
+		Msg("Hybrid mode failed, falling back to software encoding (libx264)")
+
+	// Tier 3: Pure software fallback
+	opts.HardwareAccelMode = transcoding.HWAccelSoftware
+	// VideoCodec will be overridden to libx264 by buildVideoArgs when in software mode
+
 	return uc.transcoder.TranscodeVideo(ctx, opts, callback)
 }
 

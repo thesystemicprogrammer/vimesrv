@@ -19,6 +19,9 @@ import { MediaCardComponent } from './media-card.component';
 import { MediaRowComponent } from './media-row.component';
 import { MetadataMatchModalComponent } from './metadata-match-modal.component';
 import { FilterBottomSheetComponent } from './filter-bottom-sheet.component';
+import { ContinueWatchingRowComponent } from './continue-watching-row.component';
+import { FavoritesRowComponent } from './favorites-row.component';
+import { RecommendationsRowComponent } from './recommendations-row.component';
 
 type FilterTab = 'all' | 'movies' | 'series' | 'unmatched';
 
@@ -31,7 +34,7 @@ interface SortOption {
 @Component({
   selector: 'app-library',
   standalone: true,
-  imports: [MediaCardComponent, MediaRowComponent, MetadataMatchModalComponent, FilterBottomSheetComponent, TranslateModule],
+  imports: [MediaCardComponent, MediaRowComponent, MetadataMatchModalComponent, FilterBottomSheetComponent, ContinueWatchingRowComponent, FavoritesRowComponent, RecommendationsRowComponent, TranslateModule],
   template: `
     <div class="container mx-auto px-4 py-8">
       <!-- Header -->
@@ -148,6 +151,13 @@ interface SortOption {
         </div>
       }
 
+      <!-- Continue Watching, Favorites and Recommendations Rows (only shown on All tab) -->
+      @if (!loading() && !error() && activeTab() === 'all') {
+        <app-continue-watching-row />
+        <app-favorites-row />
+        <app-recommendations-row />
+      }
+
       @if (loading()) {
         <div class="flex justify-center items-center h-64">
           <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
@@ -169,49 +179,25 @@ interface SortOption {
           }
 
           @if (movies().length > 0) {
-            <section class="mb-10">
-              <div class="flex justify-between items-center mb-4">
-                <h2 class="text-xl font-bold text-white">{{ 'library.movies' | translate }}</h2>
-                <button
-                  (click)="setActiveTab('movies')"
-                  class="text-blue-400 hover:text-blue-300 text-sm font-medium transition"
-                >
-                  {{ 'library.seeAll' | translate }}
-                </button>
-              </div>
-              <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 gap-4">
-                @for (movie of movies().slice(0, 6); track movie.media_id) {
-                  <app-media-card
-                    cardType="movie"
-                    [movie]="movie"
-                    (cardClick)="navigateToMovie(movie)"
-                  />
-                }
-              </div>
-            </section>
+            <app-media-row
+              [title]="'library.movies' | translate"
+              cardType="movie"
+              [items]="movies().slice(0, 10)"
+              [showSeeAll]="true"
+              (itemClick)="onMovieClick($event)"
+              (seeAllClick)="setActiveTab('movies')"
+            />
           }
 
           @if (series().length > 0) {
-            <section class="mb-10">
-              <div class="flex justify-between items-center mb-4">
-                <h2 class="text-xl font-bold text-white">{{ 'library.series' | translate }}</h2>
-                <button
-                  (click)="setActiveTab('series')"
-                  class="text-blue-400 hover:text-blue-300 text-sm font-medium transition"
-                >
-                  {{ 'library.seeAll' | translate }}
-                </button>
-              </div>
-              <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 gap-4">
-                @for (s of series().slice(0, 6); track s.series_metadata_id) {
-                  <app-media-card
-                    cardType="series"
-                    [series]="s"
-                    (cardClick)="navigateToSeries(s)"
-                  />
-                }
-              </div>
-            </section>
+            <app-media-row
+              [title]="'library.series' | translate"
+              cardType="series"
+              [items]="series().slice(0, 10)"
+              [showSeeAll]="true"
+              (itemClick)="onSeriesClick($event)"
+              (seeAllClick)="setActiveTab('series')"
+            />
           }
 
           @if (movies().length === 0 && series().length === 0) {
@@ -684,6 +670,12 @@ export class LibraryComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
+  onSeriesClick(item: MovieSummary | SeriesSummary): void {
+    if ('series_metadata_id' in item) {
+      this.navigateToSeries(item as SeriesSummary);
+    }
+  }
+
   onRecentItemClick(item: RecentlyAddedItem): void {
     this.saveScrollState();
     if (item.type === 'movie' && item.media_id) {
@@ -768,6 +760,8 @@ export class LibraryComponent implements OnInit, OnDestroy, AfterViewInit {
       case 'not_found': return this.translate.instant('library.notFound');
       case 'failed': return this.translate.instant('library.failed');
       case 'skipped': return this.translate.instant('library.skipped');
+      case 'candidates_found': return this.translate.instant('library.candidatesFound');
+      case 'manual_required': return this.translate.instant('library.manualRequired');
       default: return status;
     }
   }

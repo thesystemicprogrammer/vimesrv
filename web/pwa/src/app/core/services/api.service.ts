@@ -352,11 +352,18 @@ export interface UnmatchedListResponse {
 export interface MetadataCandidate {
   id: number;
   tmdb_id: number;
-  media_type: 'movie' | 'tv';
+  candidate_type: 'movie' | 'series';
   title: string;
   release_date?: string;
-  confidence: number;
+  confidence_score: number;
   poster_url?: string;
+}
+
+export interface GetCandidatesResponse {
+  media_id: string;
+  enrichment_status: string;
+  candidates: MetadataCandidate[];
+  count: number;
 }
 
 export interface SearchResult {
@@ -758,10 +765,10 @@ export class ApiService {
   }
 
   // Metadata endpoints
-  getCandidates(mediaId: string, pendingOnly = false): Observable<ApiResponse<MetadataCandidate[]>> {
+  getCandidates(mediaId: string, pendingOnly = false): Observable<ApiResponse<GetCandidatesResponse>> {
     const params = new HttpParams().set('pending_only', pendingOnly.toString());
 
-    return this.http.get<ApiResponse<MetadataCandidate[]>>(
+    return this.http.get<ApiResponse<GetCandidatesResponse>>(
       `${this.baseUrl}/media/${mediaId}/candidates`,
       { params }
     );

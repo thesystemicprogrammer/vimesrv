@@ -2,6 +2,7 @@ package app
 
 import (
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/config"
+	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/favorite"
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/job"
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/library"
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/media"
@@ -9,8 +10,10 @@ import (
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/metadata/linker"
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/ports"
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/rebuild"
+	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/recommendation"
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/transcode"
 	"github.com/thesystemicprogrammer/vimesrv/internal/usecase/user"
+	watchprogress "github.com/thesystemicprogrammer/vimesrv/internal/usecase/watch_progress"
 	workeruc "github.com/thesystemicprogrammer/vimesrv/internal/usecase/worker"
 )
 
@@ -75,6 +78,17 @@ type UseCases struct {
 	ReportProgressUseCase    *workeruc.ReportProgressUseCase
 	// Rebuild use cases
 	PrepareRebuildUseCase *rebuild.PrepareUseCase
+	// Watch progress use cases
+	RecordWatchProgressUseCase        *watchprogress.RecordWatchProgressUseCase
+	GetWatchProgressUseCase           *watchprogress.GetWatchProgressUseCase
+	GetContinueWatchingUseCase        *watchprogress.GetContinueWatchingUseCase
+	RemoveFromContinueWatchingUseCase *watchprogress.RemoveFromContinueWatchingUseCase
+	// Favorite use cases
+	ToggleFavoriteUseCase   *favorite.ToggleFavoriteUseCase
+	GetUserFavoritesUseCase *favorite.GetUserFavoritesUseCase
+	// Recommendation use cases
+	BuildRecommendationModelUseCase       *recommendation.BuildRecommendationModelUseCase
+	GetPersonalizedRecommendationsUseCase *recommendation.GetPersonalizedRecommendationsUseCase
 }
 
 func initUseCases(cfg *config.Config, adapters *Adapters) *UseCases {
@@ -378,6 +392,36 @@ func initUseCases(cfg *config.Config, adapters *Adapters) *UseCases {
 			adapters.UserRepository,
 			adapters.RebuildRepository,
 			adapters.FileSystemService,
+		),
+		// Watch progress use cases
+		RecordWatchProgressUseCase: watchprogress.NewRecordWatchProgressUseCase(
+			adapters.WatchProgressRepository,
+		),
+		GetWatchProgressUseCase: watchprogress.NewGetWatchProgressUseCase(
+			adapters.WatchProgressRepository,
+		),
+		GetContinueWatchingUseCase: watchprogress.NewGetContinueWatchingUseCase(
+			adapters.WatchProgressRepository,
+		),
+		RemoveFromContinueWatchingUseCase: watchprogress.NewRemoveFromContinueWatchingUseCase(
+			adapters.WatchProgressRepository,
+		),
+		// Favorite use cases
+		ToggleFavoriteUseCase: favorite.NewToggleFavoriteUseCase(
+			adapters.FavoriteRepository,
+		),
+		GetUserFavoritesUseCase: favorite.NewGetUserFavoritesUseCase(
+			adapters.FavoriteRepository,
+		),
+		// Recommendation use cases
+		BuildRecommendationModelUseCase: recommendation.NewBuildRecommendationModelUseCase(
+			adapters.FeatureExtractionRepository,
+			adapters.RecommendationRepository,
+		),
+		GetPersonalizedRecommendationsUseCase: recommendation.NewGetPersonalizedRecommendationsUseCase(
+			adapters.RecommendationRepository,
+			adapters.UserWatchDataRepository,
+			adapters.FeatureExtractionRepository,
 		),
 	}
 
