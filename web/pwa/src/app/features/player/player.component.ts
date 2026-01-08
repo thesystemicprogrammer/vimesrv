@@ -8,6 +8,7 @@ import { WatchProgressService } from '../../core/services/watch-progress.service
 import { PlayerDebugPanelComponent } from './components/player-debug-panel.component';
 import { PlayerCenterControlsComponent } from './components/player-center-controls.component';
 import { PlayerBottomControlsComponent } from './components/player-bottom-controls.component';
+import { PlayerSettingsSheetComponent } from './components/player-settings-sheet.component';
 
 /** Time in milliseconds before player controls auto-hide after user interaction */
 const CONTROLS_HIDE_TIMEOUT_MS = 6000;
@@ -20,7 +21,8 @@ const CONTROLS_HIDE_TIMEOUT_MS = 6000;
     RouterModule,
     PlayerDebugPanelComponent,
     PlayerCenterControlsComponent,
-    PlayerBottomControlsComponent
+    PlayerBottomControlsComponent,
+    PlayerSettingsSheetComponent
   ],
   providers: [PlaybackEngineService],
   templateUrl: './player.component.html',
@@ -47,6 +49,7 @@ export class PlayerComponent implements OnInit, OnDestroy {
   showControls = signal(true);
   isFullscreen = signal(false);
   showDebugPanel = signal(false);
+  showSettingsSheet = signal(false);
 
   // Touch/click handling
   private tapCount = 0;
@@ -356,6 +359,21 @@ export class PlayerComponent implements OnInit, OnDestroy {
     } else {
       document.exitFullscreen();
     }
+  }
+
+  // ==================== Settings Sheet ====================
+
+  openSettingsSheet(): void {
+    this.showSettingsSheet.set(true);
+    // Keep controls visible while settings are open
+    if (this.controlsTimeout) {
+      clearTimeout(this.controlsTimeout);
+    }
+  }
+
+  closeSettingsSheet(): void {
+    this.showSettingsSheet.set(false);
+    this.resetControlsTimeout();
   }
 
   // ==================== Debug Panel ====================

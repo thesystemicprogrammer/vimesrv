@@ -43,6 +43,7 @@ export class PlayerBottomControlsComponent {
   @Output() audioTrackChanged = new EventEmitter<number>();
   @Output() subtitleTrackChanged = new EventEmitter<number>();
   @Output() qualityChanged = new EventEmitter<number>();
+  @Output() settingsRequested = new EventEmitter<void>();
   
   onSeek(event: MouseEvent): void {
     const progressBar = this.progressBar.nativeElement;
@@ -83,6 +84,15 @@ export class PlayerBottomControlsComponent {
   onQualityChange(event: Event): void {
     const select = event.target as HTMLSelectElement;
     this.qualityChanged.emit(parseInt(select.value, 10));
+  }
+  
+  onSettingsClick(event: Event): void {
+    event.stopPropagation();
+    this.settingsRequested.emit();
+  }
+  
+  hasTrackOptions(): boolean {
+    return this.audioTracks.length > 1 || this.subtitleTracks.length > 0 || this.qualityLevels.length > 1;
   }
   
   formatTime(seconds: number): string {

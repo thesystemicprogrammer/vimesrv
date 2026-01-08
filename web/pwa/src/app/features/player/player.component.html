@@ -97,7 +97,23 @@
         (audioTrackChanged)="playbackEngine.setAudioTrack($event)"
         (subtitleTrackChanged)="playbackEngine.setSubtitleTrack($event)"
         (qualityChanged)="playbackEngine.setQuality($event)"
+        (settingsRequested)="openSettingsSheet()"
       />
     }
+
+    <!-- Settings Bottom Sheet -->
+    <app-player-settings-sheet
+      [isOpen]="showSettingsSheet()"
+      [audioTracks]="playbackEngine.audioTracks()"
+      [currentAudioIndex]="playbackEngine.currentAudioIndex()"
+      [subtitleTracks]="playbackEngine.subtitleTracks()"
+      [currentSubtitleIndex]="playbackEngine.currentSubtitleIndex()"
+      [qualityLevels]="playbackEngine.qualityLevels()"
+      [currentQualityIndex]="playbackEngine.currentQualityIndex()"
+      (closed)="closeSettingsSheet()"
+      (audioTrackChanged)="playbackEngine.setAudioTrack($event)"
+      (subtitleTrackChanged)="playbackEngine.setSubtitleTrack($event)"
+      (qualityChanged)="playbackEngine.setQuality($event)"
+    />
   </div>
 </div>

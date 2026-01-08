@@ -66,9 +66,9 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
 
         <!-- Content overlay -->
         <div class="absolute bottom-0 left-0 right-0 p-4 md:p-8">
-          <div class="container mx-auto flex gap-6 items-end">
-            <!-- Poster -->
-            <div class="hidden md:block flex-shrink-0 w-40 lg:w-56 xl:w-64 max-w-[20%]">
+          <div class="container mx-auto flex gap-4 md:gap-6 items-end">
+            <!-- Poster (responsive: small on mobile, larger on desktop) -->
+            <div class="flex-shrink-0 w-20 sm:w-28 md:w-40 lg:w-56 xl:w-64 md:max-w-[20%]">
               <div class="aspect-[2/3] rounded-lg overflow-hidden shadow-2xl bg-slate-800">
                 @if (posterUrl()) {
                   <img
@@ -78,7 +78,7 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
                   />
                 } @else {
                   <div class="w-full h-full flex items-center justify-center">
-                    <svg class="w-16 h-16 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-8 h-8 md:w-16 md:h-16 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
                     </svg>
                   </div>
@@ -88,19 +88,19 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
 
             <!-- Info -->
             <div class="flex-1 min-w-0">
-              <h1 class="text-2xl md:text-3xl lg:text-4xl font-bold text-white mb-2">
+              <h1 class="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold text-white mb-1 md:mb-2">
                 {{ series()!.name }}
               </h1>
 
               <!-- Meta info row -->
-              <div class="flex flex-wrap items-center gap-3 text-sm text-slate-300 mb-3">
+              <div class="flex flex-wrap items-center gap-2 md:gap-3 text-xs sm:text-sm text-slate-300 mb-2 md:mb-3">
                 @if (series()!.year) {
                   <span>{{ series()!.year }}</span>
                 }
                 <span class="text-slate-500">•</span>
                 <span>{{ series()!.number_of_seasons }} seasons</span>
-                <span class="text-slate-500">•</span>
-                <span>{{ series()!.available_episodes }} / {{ series()!.number_of_episodes }} episodes</span>
+                <span class="hidden sm:inline text-slate-500">•</span>
+                <span class="hidden sm:inline">{{ series()!.available_episodes }} / {{ series()!.number_of_episodes }} episodes</span>
                 @if (series()!.vote_average > 0) {
                   <span class="text-slate-500">•</span>
                   <div class="flex items-center gap-1">
@@ -112,12 +112,19 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
                 }
               </div>
 
-              <!-- Genres -->
+              <!-- Genres (limit on mobile) -->
               @if (series()!.genres) {
-                <div class="flex flex-wrap gap-2 mb-4">
-                  @for (genre of parseGenres(series()!.genres); track genre) {
-                    <span class="px-3 py-1 bg-slate-700/80 text-slate-300 rounded-full text-sm">
+                <div class="flex flex-wrap gap-1.5 md:gap-2 mb-2 md:mb-4">
+                  @for (genre of parseGenres(series()!.genres).slice(0, 3); track genre) {
+                    <span class="px-2 py-0.5 md:px-3 md:py-1 bg-slate-700/80 text-slate-300 rounded-full text-xs md:text-sm">
                       {{ genre }}
+                    </span>
+                  }
+                  @if (parseGenres(series()!.genres).length > 3) {
+                    <span class="hidden md:inline-block px-3 py-1 bg-slate-700/80 text-slate-300 rounded-full text-sm">
+                      @for (genre of parseGenres(series()!.genres).slice(3); track genre) {
+                        {{ genre }}@if (!$last) {, }
+                      }
                     </span>
                   }
                 </div>
@@ -125,12 +132,12 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
 
               <!-- Favorite button -->
               @if (series()!.series_metadata_id) {
-                <div class="mt-3">
+                <div class="mt-2 md:mt-3">
                   <app-favorite-button
                     mediaType="series"
                     [metadataId]="series()!.series_metadata_id"
                     [showLabel]="true"
-                    buttonClass="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition"
+                    buttonClass="px-3 py-1.5 md:px-4 md:py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition text-sm md:text-base"
                   />
                 </div>
               }
@@ -251,14 +258,14 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
 
           <!-- Episode list -->
           @if (selectedSeason()) {
-            <div class="space-y-3">
+            <div class="space-y-2 md:space-y-3">
               @for (episode of selectedSeason()!.episodes || []; track episode.episode_metadata_id) {
                 <div
-                  class="flex items-center gap-4 p-4 bg-slate-800 rounded-lg hover:bg-slate-700 transition"
+                  class="flex items-center gap-3 md:gap-4 p-3 md:p-4 bg-slate-800 rounded-lg hover:bg-slate-700 transition"
                   [class.opacity-50]="!episode.media_id"
                 >
-                  <!-- Episode still image -->
-                  <div class="flex-shrink-0 w-32 md:w-40">
+                  <!-- Episode still image (hidden on small phones) -->
+                  <div class="hidden sm:block flex-shrink-0 w-24 md:w-40">
                     <div class="aspect-video rounded overflow-hidden bg-slate-700">
                       @if (episode.still_path) {
                         <img
@@ -269,7 +276,7 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
                         />
                       } @else {
                         <div class="w-full h-full flex items-center justify-center">
-                          <svg class="w-8 h-8 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg class="w-6 h-6 md:w-8 md:h-8 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
                           </svg>
                         </div>
@@ -279,17 +286,17 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
 
                   <!-- Episode info -->
                   <div class="flex-1 min-w-0">
-                    <div class="flex items-start justify-between gap-4">
-                      <div>
-                        <h3 class="text-white font-medium">
+                    <div class="flex items-start justify-between gap-2 md:gap-4">
+                      <div class="min-w-0">
+                        <h3 class="text-white font-medium text-sm md:text-base truncate">
                           {{ episode.episode_number }}. {{ episode.name }}
                         </h3>
                         <div class="flex items-center gap-2 mt-1 text-xs text-slate-400">
                           @if (episode.air_date) {
-                            <span>{{ formatDate(episode.air_date) }}</span>
+                            <span class="hidden sm:inline">{{ formatDate(episode.air_date) }}</span>
                           }
                           @if (episode.duration) {
-                            <span class="text-slate-500">•</span>
+                            <span class="hidden sm:inline text-slate-500">•</span>
                             <span>{{ formatDuration(episode.duration) }}</span>
                           }
                           @if (episode.vote_average > 0) {
@@ -303,34 +310,35 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
                           }
                         </div>
                         @if (episode.overview) {
-                          <p class="mt-2 text-sm text-slate-400 line-clamp-2">
+                          <p class="hidden md:block mt-2 text-sm text-slate-400 line-clamp-2">
                             {{ episode.overview }}
                           </p>
                         }
                       </div>
 
                       <!-- Action buttons -->
-                      <div class="flex-shrink-0 flex items-center gap-2">
+                      <div class="flex-shrink-0 flex items-center gap-1 md:gap-2">
                         <!-- Play button -->
                         @if (episode.media_id && episode.transcode_status === 'completed') {
                           <button
                             (click)="playEpisode(episode)"
-                            class="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition"
+                            class="flex items-center gap-1 md:gap-2 px-2 py-1.5 md:px-4 md:py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition text-sm"
                           >
-                            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                            <svg class="w-4 h-4 md:w-5 md:h-5" fill="currentColor" viewBox="0 0 24 24">
                               <path d="M8 5v14l11-7z"/>
                             </svg>
                             <span class="hidden sm:inline">Play</span>
                           </button>
                         } @else if (episode.media_id && episode.transcode_status === 'pending') {
-                          <div class="px-3 py-2 text-yellow-500 text-sm">
-                            <svg class="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <div class="px-2 py-1.5 md:px-3 md:py-2 text-yellow-500 text-sm">
+                            <svg class="w-4 h-4 md:w-5 md:h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
                             </svg>
                           </div>
                         } @else if (!episode.media_id) {
-                          <div class="px-3 py-2 text-slate-500 text-sm">
-                            Not available
+                          <div class="px-2 py-1.5 md:px-3 md:py-2 text-slate-500 text-xs md:text-sm">
+                            <span class="hidden sm:inline">Not available</span>
+                            <span class="sm:hidden">N/A</span>
                           </div>
                         }
 

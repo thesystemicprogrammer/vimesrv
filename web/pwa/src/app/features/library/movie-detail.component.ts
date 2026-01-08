@@ -58,9 +58,9 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
 
         <!-- Content overlay -->
         <div class="absolute bottom-0 left-0 right-0 p-4 md:p-8">
-          <div class="container mx-auto flex gap-6 items-end">
-            <!-- Poster -->
-            <div class="hidden md:block flex-shrink-0 w-40 lg:w-56 xl:w-64 max-w-[20%]">
+          <div class="container mx-auto flex gap-4 md:gap-6 items-end">
+            <!-- Poster (responsive: small on mobile, larger on desktop) -->
+            <div class="flex-shrink-0 w-20 sm:w-28 md:w-40 lg:w-56 xl:w-64 md:max-w-[20%]">
               <div class="aspect-[2/3] rounded-lg overflow-hidden shadow-2xl bg-slate-800">
                 @if (posterUrl()) {
                   <img
@@ -70,7 +70,7 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
                   />
                 } @else {
                   <div class="w-full h-full flex items-center justify-center">
-                    <svg class="w-16 h-16 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-8 h-8 md:w-16 md:h-16 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
                     </svg>
                   </div>
@@ -80,12 +80,12 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
 
             <!-- Info -->
             <div class="flex-1 min-w-0">
-              <h1 class="text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-3">
+              <h1 class="text-xl sm:text-2xl md:text-4xl lg:text-5xl font-bold text-white mb-2 md:mb-3">
                 {{ movie()!.title }}
               </h1>
 
               <!-- Meta info row -->
-              <div class="flex flex-wrap items-center gap-3 text-sm md:text-base text-slate-300 mb-4">
+              <div class="flex flex-wrap items-center gap-2 md:gap-3 text-xs sm:text-sm md:text-base text-slate-300 mb-2 md:mb-4">
                 @if (movie()!.certification) {
                   <span class="px-2 py-0.5 border border-slate-400 rounded text-xs font-medium">{{ movie()!.certification }}</span>
                 }
@@ -114,38 +114,45 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
                 }
               </div>
 
-              <!-- Genres -->
+              <!-- Genres (limit on mobile) -->
               @if (movie()!.genres) {
-                <div class="flex flex-wrap gap-2 mb-4">
-                  @for (genre of parseGenres(movie()!.genres); track genre) {
-                    <span class="px-3 py-1 bg-slate-700/80 text-slate-300 rounded-full text-sm">
+                <div class="flex flex-wrap gap-1.5 md:gap-2 mb-2 md:mb-4">
+                  @for (genre of parseGenres(movie()!.genres).slice(0, 3); track genre) {
+                    <span class="px-2 py-0.5 md:px-3 md:py-1 bg-slate-700/80 text-slate-300 rounded-full text-xs md:text-sm">
                       {{ genre }}
+                    </span>
+                  }
+                  @if (parseGenres(movie()!.genres).length > 3) {
+                    <span class="hidden md:inline-block px-3 py-1 bg-slate-700/80 text-slate-300 rounded-full text-sm">
+                      @for (genre of parseGenres(movie()!.genres).slice(3); track genre) {
+                        {{ genre }}@if (!$last) {, }
+                      }
                     </span>
                   }
                 </div>
               }
 
-              <!-- Tagline -->
+              <!-- Tagline (hidden on mobile) -->
               @if (movie()!.tagline) {
-                <p class="text-slate-400 italic mb-4">"{{ movie()!.tagline }}"</p>
+                <p class="hidden md:block text-slate-400 italic mb-4">"{{ movie()!.tagline }}"</p>
               }
 
               <!-- Action buttons -->
-              <div class="flex flex-wrap gap-3">
+              <div class="flex flex-wrap gap-2 md:gap-3">
                 <!-- Play button -->
                 @if (canPlay()) {
                   <button
                     (click)="playMovie()"
-                    class="flex items-center gap-3 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition shadow-lg"
+                    class="flex items-center gap-2 md:gap-3 px-4 py-2 md:px-6 md:py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition shadow-lg text-sm md:text-base"
                   >
-                    <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-5 h-5 md:w-6 md:h-6" fill="currentColor" viewBox="0 0 24 24">
                       <path d="M8 5v14l11-7z"/>
                     </svg>
-                    Play
+                    <span>Play</span>
                   </button>
                 } @else {
-                  <div class="flex items-center gap-2 text-yellow-500">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div class="flex items-center gap-2 text-yellow-500 text-sm">
+                    <svg class="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
                     </svg>
                     <span>Transcoding in progress...</span>
@@ -158,15 +165,16 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
                     mediaType="movie"
                     [metadataId]="movie()!.movie_metadata_id || 0"
                     [showLabel]="true"
-                    buttonClass="px-4 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition"
+                    buttonClass="px-3 py-2 md:px-4 md:py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition text-sm md:text-base"
                   />
                 }
 
-                <!-- Change Metadata button -->
+                <!-- Change Metadata button (icon-only on mobile) -->
                 <button
                   (click)="openChangeMetadata()"
                   [disabled]="resettingMetadata()"
-                  class="flex items-center gap-2 px-4 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition disabled:opacity-50"
+                  class="flex items-center gap-2 px-3 py-2 md:px-4 md:py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition disabled:opacity-50"
+                  title="Change Metadata"
                 >
                   @if (resettingMetadata()) {
                     <div class="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full"></div>
@@ -175,15 +183,16 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
                     </svg>
                   }
-                  <span>Change Metadata</span>
+                  <span class="hidden md:inline">Change Metadata</span>
                 </button>
 
-                <!-- Delete button (admin only) -->
+                <!-- Delete button (admin only, icon-only on mobile) -->
                 @if (auth.isAdmin()) {
                   <button
                     (click)="confirmDelete()"
                     [disabled]="deleting()"
-                    class="flex items-center gap-2 px-4 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg transition disabled:opacity-50"
+                    class="flex items-center gap-2 px-3 py-2 md:px-4 md:py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg transition disabled:opacity-50"
+                    title="Delete"
                   >
                     @if (deleting()) {
                       <div class="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full"></div>
@@ -192,7 +201,7 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
                       </svg>
                     }
-                    <span>Delete</span>
+                    <span class="hidden md:inline">Delete</span>
                   </button>
                 }
               </div>

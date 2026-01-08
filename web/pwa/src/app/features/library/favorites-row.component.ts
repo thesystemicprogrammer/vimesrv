@@ -23,11 +23,11 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w342';
         <!-- Items -->
         <div class="relative">
           <div
-            class="flex gap-4 overflow-x-auto py-2 px-1 -mx-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-slate-800"
+            class="flex gap-3 sm:gap-4 overflow-x-auto py-2 px-1 -mx-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-slate-800"
             style="scroll-behavior: smooth;"
           >
             @for (item of items(); track item.id) {
-              <div class="flex-shrink-0 w-40 snap-start">
+              <div class="flex-shrink-0 w-32 sm:w-36 md:w-40 snap-start">
                 <div
                   class="relative rounded-lg overflow-hidden shadow-lg hover:ring-2 hover:ring-blue-500 transition cursor-pointer group bg-slate-800"
                   (click)="onCardClick(item)"
