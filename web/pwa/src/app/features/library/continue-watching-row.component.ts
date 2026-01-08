@@ -134,14 +134,7 @@ export class ContinueWatchingRowComponent implements OnInit {
 
   ngOnInit(): void {
     // Load continue watching items on component init
-    this.watchProgressService.getContinueWatching().subscribe({
-      next: (response) => {
-        console.log('Continue watching items loaded:', response.data?.length, response.data);
-      },
-      error: (err) => {
-        console.error('Failed to load continue watching items:', err);
-      }
-    });
+    this.watchProgressService.getContinueWatching().subscribe();
   }
 
   getPosterUrl(item: ContinueWatchingItem): string {

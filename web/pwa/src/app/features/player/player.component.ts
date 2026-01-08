@@ -261,21 +261,12 @@ export class PlayerComponent implements OnInit, OnDestroy {
       return;
     }
 
-    console.log('Saving watch progress:', {
-      media_id: this.currentMediaId,
-      position_seconds: position,
-      duration_seconds: duration
-    });
-
     this.watchProgress.recordProgress({
       media_id: this.currentMediaId || undefined,
       episode_metadata_id: undefined, // Backend looks this up from media_files
       position_seconds: position,
       duration_seconds: duration
     }).subscribe({
-      next: () => {
-        console.log('Watch progress saved successfully');
-      },
       error: (err) => {
         console.error('Failed to save watch progress:', err);
       }

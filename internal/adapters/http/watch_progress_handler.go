@@ -167,18 +167,6 @@ func (h *WatchProgressHandler) SaveProgress(c *gin.Context) {
 		return
 	}
 
-	// Log the incoming request for debugging
-	mediaIDStr := "<nil>"
-	if req.MediaID != nil {
-		mediaIDStr = *req.MediaID
-	}
-	logger.Debug().
-		Str("user_id", userID.(string)).
-		Str("media_id", mediaIDStr).
-		Int("position", req.PositionSeconds).
-		Int("duration", req.DurationSeconds).
-		Msg("recording watch progress")
-
 	input := watch_progress.RecordProgressInput{
 		UserID:          userID.(string),
 		MediaID:         req.MediaID,
@@ -259,11 +247,6 @@ func (h *WatchProgressHandler) GetContinueWatching(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, server.ErrorResponse("INTERNAL_ERROR", "Failed to get continue watching items", ""))
 		return
 	}
-
-	logger.Debug().
-		Str("user_id", userID.(string)).
-		Int("count", len(items)).
-		Msg("returning continue watching items")
 
 	// Convert to response format
 	respItems := make([]ContinueWatchingItemResponse, len(items))
