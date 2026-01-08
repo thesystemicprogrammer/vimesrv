@@ -24,13 +24,13 @@ import { MediaCardComponent, CardType } from './media-card.component';
       <!-- Horizontal scroll container -->
       <div class="relative">
         <div
-          class="flex gap-4 overflow-x-auto py-2 px-1 -mx-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-slate-800"
+          class="flex gap-3 sm:gap-4 overflow-x-auto py-2 px-1 -mx-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-slate-800"
           style="scroll-behavior: smooth;"
         >
           <!-- Regular items (movies/series) -->
           @if (cardType !== 'recent') {
             @for (item of items; track trackItem(item)) {
-              <div class="flex-shrink-0 w-40 snap-start">
+              <div class="flex-shrink-0 w-32 sm:w-36 md:w-40 snap-start">
                 <app-media-card
                   [cardType]="cardType"
                   [movie]="cardType === 'movie' ? asMovie(item) : undefined"
@@ -44,7 +44,7 @@ import { MediaCardComponent, CardType } from './media-card.component';
           <!-- Recently added items -->
           @if (cardType === 'recent') {
             @for (item of recentItems; track trackRecentItem(item)) {
-              <div class="flex-shrink-0 w-40 snap-start">
+              <div class="flex-shrink-0 w-32 sm:w-36 md:w-40 snap-start">
                 <app-media-card
                   [cardType]="'recent'"
                   [recentItem]="item"

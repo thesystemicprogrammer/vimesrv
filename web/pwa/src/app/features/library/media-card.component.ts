@@ -83,8 +83,8 @@ export type CardType = 'movie' | 'series' | 'recent';
       </div>
 
       <!-- Title and info -->
-      <div class="p-3">
-        <h3 class="text-white font-medium truncate text-sm" [title]="title">
+      <div class="p-2 sm:p-3">
+        <h3 class="text-white font-medium truncate text-xs sm:text-sm" [title]="title">
           {{ title }}
         </h3>
         <div class="mt-1 flex items-center gap-2 text-xs text-slate-400">

@@ -223,7 +223,7 @@ interface SortOption {
               }
             </div>
           } @else {
-            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 gap-4">
+            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-3 md:gap-4">
               @for (movie of movies(); track movie.media_id) {
                 <app-media-card
                   cardType="movie"
@@ -268,7 +268,7 @@ interface SortOption {
               }
             </div>
           } @else {
-            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 gap-4">
+            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-3 md:gap-4">
               @for (s of series(); track s.series_metadata_id) {
                 <app-media-card
                   cardType="series"
