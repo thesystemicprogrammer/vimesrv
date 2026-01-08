@@ -86,8 +86,8 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w342';
                         <div class="truncate">{{ item.series_name }}</div>
                         <div class="mt-0.5">
                           S{{ formatSeasonEpisode(item.season_number) }}E{{ formatSeasonEpisode(item.episode_number) }}
-                          @if (item.episode_title) {
-                            <span> • {{ item.episode_title }}</span>
+                          @if (item.episode_name) {
+                            <span> • {{ item.episode_name }}</span>
                           }
                         </div>
                       } @else {
@@ -134,7 +134,14 @@ export class ContinueWatchingRowComponent implements OnInit {
 
   ngOnInit(): void {
     // Load continue watching items on component init
-    this.watchProgressService.getContinueWatching().subscribe();
+    this.watchProgressService.getContinueWatching().subscribe({
+      next: (response) => {
+        console.log('Continue watching items loaded:', response.data?.length, response.data);
+      },
+      error: (err) => {
+        console.error('Failed to load continue watching items:', err);
+      }
+    });
   }
 
   getPosterUrl(item: ContinueWatchingItem): string {

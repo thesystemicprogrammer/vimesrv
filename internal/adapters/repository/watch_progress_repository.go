@@ -135,6 +135,7 @@ func (r *WatchProgressRepository) SaveProgress(ctx context.Context, progress *do
 				progress_percent = excluded.progress_percent,
 				last_watched_at = excluded.last_watched_at,
 				completed = excluded.completed,
+				manually_removed = 0,
 				updated_at = excluded.updated_at
 		`
 		_, err = r.db.ExecContext(ctx, query,
@@ -167,6 +168,7 @@ func (r *WatchProgressRepository) SaveProgress(ctx context.Context, progress *do
 				progress_percent = excluded.progress_percent,
 				last_watched_at = excluded.last_watched_at,
 				completed = excluded.completed,
+				manually_removed = 0,
 				updated_at = excluded.updated_at
 		`
 		_, err = r.db.ExecContext(ctx, query,

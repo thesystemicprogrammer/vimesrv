@@ -26,13 +26,11 @@ export interface WatchProgress {
 export interface ContinueWatchingItem {
   // Progress info
   id: string;
-  user_id: string;
   media_id?: string;
   episode_metadata_id?: number;
   position_seconds: number;
   duration_seconds: number;
   progress_percent: number;
-  completed: boolean;
   last_watched_at: string;
   
   // Enriched metadata
@@ -41,13 +39,14 @@ export interface ContinueWatchingItem {
   backdrop_path?: string;
   media_type: 'movie' | 'episode';
   year?: number;
+  resolution?: string;
   
   // Episode-specific fields (when media_type = 'episode')
   series_name?: string;
   series_metadata_id?: number;
   season_number?: number;
   episode_number?: number;
-  episode_title?: string;
+  episode_name?: string;
 }
 
 export interface RecordProgressRequest {
