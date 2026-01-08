@@ -9,6 +9,9 @@ import { PlayerDebugPanelComponent } from './components/player-debug-panel.compo
 import { PlayerCenterControlsComponent } from './components/player-center-controls.component';
 import { PlayerBottomControlsComponent } from './components/player-bottom-controls.component';
 
+/** Time in milliseconds before player controls auto-hide after user interaction */
+const CONTROLS_HIDE_TIMEOUT_MS = 6000;
+
 @Component({
   selector: 'app-player',
   standalone: true,
@@ -328,7 +331,7 @@ export class PlayerComponent implements OnInit, OnDestroy {
       if (this.playbackEngine.isPlaying()) {
         this.showControls.set(false);
       }
-    }, 3000);
+    }, CONTROLS_HIDE_TIMEOUT_MS);
   }
 
   // ==================== Playback Control Handlers ====================
