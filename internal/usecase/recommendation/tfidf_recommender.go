@@ -86,24 +86,25 @@ func (r *TFIDFRecommender) GetSimilar(itemID int64, topN int) ([]domain.SimilarI
 		return nil, fmt.Errorf("item %d not found in model", itemID)
 	}
 
-	numRows, _ := r.matrix.Dims()
+	// Note: The TF-IDF matrix has rows=terms and columns=documents
+	_, numCols := r.matrix.Dims()
 
-	// Get the target row vector
-	targetVec := getRowVector(r.matrix, idx)
+	// Get the target column vector (document)
+	targetVec := getColVector(r.matrix, idx)
 
 	// Compute similarity with all other items
 	type scoredItem struct {
 		id    int64
 		score float64
 	}
-	similarities := make([]scoredItem, 0, numRows-1)
+	similarities := make([]scoredItem, 0, numCols-1)
 
-	for i := 0; i < numRows; i++ {
+	for i := 0; i < numCols; i++ {
 		if i == idx {
 			continue // Skip self
 		}
 
-		compareVec := getRowVector(r.matrix, i)
+		compareVec := getColVector(r.matrix, i)
 		similarity := cosineSimilarity(targetVec, compareVec)
 
 		if similarity > 0 {
@@ -152,23 +153,25 @@ func (r *TFIDFRecommender) GetFeatureCount() int {
 	if r.matrix == nil {
 		return 0
 	}
-	_, cols := r.matrix.Dims()
-	return cols
+	// Rows = terms/features, Columns = documents
+	rows, _ := r.matrix.Dims()
+	return rows
 }
 
-// getRowVector extracts a row from the matrix as a vector
-func getRowVector(m mat.Matrix, row int) []float64 {
-	_, cols := m.Dims()
-	vec := make([]float64, cols)
+// getColVector extracts a column from the matrix as a vector
+// Note: In the TF-IDF matrix, columns represent documents
+func getColVector(m mat.Matrix, col int) []float64 {
+	rows, _ := m.Dims()
+	vec := make([]float64, rows)
 
 	// Try sparse matrix first for efficiency
-	if sparse, ok := m.(*sparse.CSR); ok {
-		for j := 0; j < cols; j++ {
-			vec[j] = sparse.At(row, j)
+	if sp, ok := m.(*sparse.CSR); ok {
+		for i := 0; i < rows; i++ {
+			vec[i] = sp.At(i, col)
 		}
 	} else {
-		for j := 0; j < cols; j++ {
-			vec[j] = m.At(row, j)
+		for i := 0; i < rows; i++ {
+			vec[i] = m.At(i, col)
 		}
 	}
 
