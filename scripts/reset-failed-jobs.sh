@@ -3,8 +3,8 @@
 # reset-failed-jobs.sh - Reset failed jobs and transcodes
 #
 # This script resets:
-#   - Jobs with 'dead' status -> 'queued' (with attempts = 0)
-#   - Transcodes with 'failed' status -> 'pending' (with attempts = 0)
+#   - Jobs with 'dead' status -> 'queued' (with attempt = 0)
+#   - Transcodes with 'failed' status -> 'pending'
 #
 # Usage:
 #   ./scripts/reset-failed-jobs.sh              # Dry-run (preview only)
@@ -123,7 +123,7 @@ if [[ "$FAILED_JOBS" -gt 0 ]]; then
             id,
             type,
             status,
-            attempts,
+            attempt,
             max_attempts,
             substr(last_error, 1, 50) as last_error,
             datetime(finished_at) as finished_at
@@ -143,8 +143,7 @@ if [[ "$FAILED_TRANSCODES" -gt 0 ]]; then
             media_id,
             track_type,
             quality,
-            status,
-            attempts
+            status
         FROM transcodes 
         WHERE status = 'failed'
         ORDER BY id;
@@ -161,11 +160,10 @@ if $DRY_RUN; then
     echo "   - Clear started_at"
     echo "   - Clear finished_at"
     echo "   - Clear last_error"
-    echo "   - Reset attempts to 0"
+    echo "   - Reset attempt to 0"
     echo "   - Update updated_at"
     echo ""
     echo "2. Reset $FAILED_TRANSCODES transcodes: failed -> pending"
-    echo "   - Reset attempts to 0"
     echo "   - Update updated_at"
     echo ""
     echo -e "${YELLOW}This is a dry-run. No changes were made.${NC}"
@@ -198,7 +196,7 @@ if [[ "$FAILED_JOBS" -gt 0 ]]; then
             started_at = NULL, 
             finished_at = NULL,
             last_error = NULL,
-            attempts = 0,
+            attempt = 0,
             updated_at = CURRENT_TIMESTAMP 
         WHERE status = 'dead';
     "
@@ -211,7 +209,6 @@ if [[ "$FAILED_TRANSCODES" -gt 0 ]]; then
     sqlite3 "$DB_PATH" "
         UPDATE transcodes 
         SET status = 'pending', 
-            attempts = 0,
             updated_at = CURRENT_TIMESTAMP 
         WHERE status = 'failed';
     "
