@@ -76,6 +76,13 @@ type UseCases struct {
 	CompleteWorkerJobUseCase *workeruc.CompleteWorkerJobUseCase
 	FailWorkerJobUseCase     *workeruc.FailWorkerJobUseCase
 	ReportProgressUseCase    *workeruc.ReportProgressUseCase
+	// Worker admin use cases
+	ListWorkerConfigsUseCase   *workeruc.ListWorkerConfigsUseCase
+	GetLocalWorkerCountUseCase *workeruc.GetLocalWorkerCountUseCase
+	SetLocalWorkerCountUseCase *workeruc.SetLocalWorkerCountUseCase
+	GetWorkerConfigUseCase     *workeruc.GetWorkerConfigUseCase
+	UpdateWorkerConfigUseCase  *workeruc.UpdateWorkerConfigUseCase
+	DeleteWorkerConfigUseCase  *workeruc.DeleteWorkerConfigUseCase
 	// Rebuild use cases
 	PrepareRebuildUseCase *rebuild.PrepareUseCase
 	// Watch progress use cases
@@ -266,9 +273,9 @@ func initUseCases(cfg *config.Config, adapters *Adapters) *UseCases {
 		adapters.JobNotifier,
 	)
 
-	// If worker mode is enabled, exclude transcode jobs from local processing
+	// If remote worker mode is enabled (auth token configured), exclude transcode jobs from local processing
 	// (they will be processed exclusively by distributed workers)
-	if cfg.Worker.Enabled {
+	if cfg.Job.RemoteWorkerAuthToken != "" {
 		processNextJobUseCase = processNextJobUseCase.WithExcludedTypes([]string{"transcode_video"})
 	}
 
@@ -425,15 +432,16 @@ func initUseCases(cfg *config.Config, adapters *Adapters) *UseCases {
 		),
 	}
 
-	// Initialize worker use cases if worker mode is enabled
-	if cfg.Worker.Enabled && adapters.WorkerRegistry != nil {
-		useCases.RegisterWorkerUseCase = workeruc.NewRegisterWorkerUseCase(adapters.WorkerRegistry)
-		useCases.HeartbeatUseCase = workeruc.NewHeartbeatUseCase(adapters.WorkerRegistry, adapters.JobRepository)
+	// Initialize worker use cases if remote worker mode is enabled
+	if cfg.Job.RemoteWorkerAuthToken != "" && adapters.WorkerRegistry != nil {
+		useCases.RegisterWorkerUseCase = workeruc.NewRegisterWorkerUseCase(adapters.WorkerRegistry, adapters.WorkerConfigRepository)
+		useCases.HeartbeatUseCase = workeruc.NewHeartbeatUseCase(adapters.WorkerRegistry, adapters.JobRepository, adapters.WorkerConfigRepository)
 		useCases.ClaimJobForWorkerUseCase = workeruc.NewClaimJobForWorkerUseCase(
 			adapters.JobRepository,
 			adapters.TranscodeRepository,
 			adapters.MediaRepository,
 			adapters.WorkerRegistry,
+			adapters.WorkerConfigRepository,
 			adapters.JobNotifier,
 			adapters.BackoffStrategy,
 			cfg,
@@ -457,6 +465,18 @@ func initUseCases(cfg *config.Config, adapters *Adapters) *UseCases {
 			adapters.JobNotifier,
 		)
 	}
+
+	// Worker admin use cases (always available for managing local workers)
+	useCases.ListWorkerConfigsUseCase = workeruc.NewListWorkerConfigsUseCase(adapters.WorkerConfigRepository)
+	// Add registry for online status if distributed workers are enabled
+	if adapters.WorkerRegistry != nil {
+		useCases.ListWorkerConfigsUseCase.WithRegistry(adapters.WorkerRegistry)
+	}
+	useCases.GetLocalWorkerCountUseCase = workeruc.NewGetLocalWorkerCountUseCase(adapters.SettingsRepository)
+	useCases.SetLocalWorkerCountUseCase = workeruc.NewSetLocalWorkerCountUseCase(adapters.SettingsRepository, adapters.WorkerConfigRepository)
+	useCases.GetWorkerConfigUseCase = workeruc.NewGetWorkerConfigUseCase(adapters.WorkerConfigRepository)
+	useCases.UpdateWorkerConfigUseCase = workeruc.NewUpdateWorkerConfigUseCase(adapters.WorkerConfigRepository)
+	useCases.DeleteWorkerConfigUseCase = workeruc.NewDeleteWorkerConfigUseCase(adapters.WorkerConfigRepository)
 
 	return useCases
 }

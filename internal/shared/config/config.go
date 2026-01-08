@@ -19,7 +19,6 @@ type Config struct {
 	Library         LibraryConfig         `mapstructure:"library"`
 	WebSocket       WebSocketConfig       `mapstructure:"websocket"`
 	Rebuild         RebuildConfig         `mapstructure:"rebuild"`
-	Worker          WorkerConfig          `mapstructure:"worker"`
 	Recommendations RecommendationsConfig `mapstructure:"recommendations"`
 }
 
@@ -34,7 +33,6 @@ type AuthConfig struct {
 }
 
 type JobConfig struct {
-	WorkerCount                  int `mapstructure:"worker_count"`
 	PollingIntervalInSeconds     int `mapstructure:"polling_interval_in_seconds"`
 	MaxAttempts                  int `mapstructure:"max_attempts"`
 	SchedulerIntervalInSeconds   int `mapstructure:"scheduler_interval_in_seconds"`
@@ -43,6 +41,16 @@ type JobConfig struct {
 	BackoffMaxSeconds            int `mapstructure:"backoff_max_seconds"`
 	StuckJobThresholdMinutes     int `mapstructure:"stuck_job_threshold_minutes"`
 	StuckJobCheckIntervalMinutes int `mapstructure:"stuck_job_check_interval_minutes"`
+
+	// Remote worker settings (for distributed transcoding)
+	// RemoteWorkerAuthToken is the shared secret for remote worker authentication
+	RemoteWorkerAuthToken string `mapstructure:"remote_worker_auth_token"`
+	// RemoteWorkerHeartbeatTimeoutSeconds is how long before a worker is considered dead
+	RemoteWorkerHeartbeatTimeoutSeconds int `mapstructure:"remote_worker_heartbeat_timeout_seconds"`
+	// RemoteWorkerFallbackToLocal enables processing transcodes locally when no workers are available
+	RemoteWorkerFallbackToLocal bool `mapstructure:"remote_worker_fallback_to_local"`
+	// RemoteWorkerFallbackAfterMinutes is how long to wait before falling back to local processing
+	RemoteWorkerFallbackAfterMinutes int `mapstructure:"remote_worker_fallback_after_minutes"`
 }
 
 type ServerConfig struct {
@@ -168,26 +176,6 @@ type RebuildConfig struct {
 	PeriodicExport PeriodicExportConfig `mapstructure:"periodic_export"`
 }
 
-// WorkerConfig holds configuration for distributed transcoding workers
-type WorkerConfig struct {
-	// Enabled enables the worker API and exclusive worker processing for transcode jobs
-	Enabled bool `mapstructure:"enabled"`
-
-	// AuthToken is the shared secret for worker authentication (required if enabled)
-	AuthToken string `mapstructure:"auth_token"`
-
-	// HeartbeatTimeoutSeconds is how long before a worker is considered dead
-	// if no heartbeat or progress report is received
-	HeartbeatTimeoutSeconds int `mapstructure:"heartbeat_timeout_seconds"`
-
-	// FallbackToLocal enables processing transcodes locally when no workers are available
-	FallbackToLocal bool `mapstructure:"fallback_to_local"`
-
-	// FallbackAfterMinutes is how long to wait before falling back to local processing
-	// (only used if FallbackToLocal is true)
-	FallbackAfterMinutes int `mapstructure:"fallback_after_minutes"`
-}
-
 // RecommendationsConfig holds configuration for the recommendation system
 type RecommendationsConfig struct {
 	// Enabled enables the recommendation system and periodic model builds
@@ -250,12 +238,6 @@ func (c *Config) Validate() error {
 		}
 	}
 
-	if c.Worker.Enabled {
-		if err := c.Worker.Validate(); err != nil {
-			return fmt.Errorf("worker config: %w", err)
-		}
-	}
-
 	if c.Rebuild.PeriodicExport.Enabled {
 		if err := c.Rebuild.PeriodicExport.Validate(); err != nil {
 			return fmt.Errorf("rebuild.periodic_export config: %w", err)
@@ -310,10 +292,6 @@ func (a *AuthConfig) Validate() error {
 }
 
 func (j *JobConfig) Validate() error {
-	if j.WorkerCount < 1 || j.WorkerCount > 10 {
-		return fmt.Errorf("worker count must be between 1 and 10, got %d", j.WorkerCount)
-	}
-
 	if j.PollingIntervalInSeconds < 1 || j.PollingIntervalInSeconds > 60 {
 		return fmt.Errorf("polling interval must be between 1 and 60, got %d", j.PollingIntervalInSeconds)
 	}
@@ -344,6 +322,23 @@ func (j *JobConfig) Validate() error {
 
 	if j.StuckJobCheckIntervalMinutes < 1 || j.StuckJobCheckIntervalMinutes > 1440 {
 		return fmt.Errorf("stuck job check interval must be between 1 and 1440 minutes (24 hours), got %d", j.StuckJobCheckIntervalMinutes)
+	}
+
+	// Validate remote worker settings if auth token is provided
+	if j.RemoteWorkerAuthToken != "" {
+		if len(j.RemoteWorkerAuthToken) < 16 {
+			return fmt.Errorf("remote_worker_auth_token must be at least 16 characters for security")
+		}
+
+		if j.RemoteWorkerHeartbeatTimeoutSeconds < 10 || j.RemoteWorkerHeartbeatTimeoutSeconds > 600 {
+			return fmt.Errorf("remote_worker_heartbeat_timeout_seconds must be between 10 and 600, got %d", j.RemoteWorkerHeartbeatTimeoutSeconds)
+		}
+
+		if j.RemoteWorkerFallbackToLocal {
+			if j.RemoteWorkerFallbackAfterMinutes < 1 || j.RemoteWorkerFallbackAfterMinutes > 1440 {
+				return fmt.Errorf("remote_worker_fallback_after_minutes must be between 1 and 1440 (24 hours), got %d", j.RemoteWorkerFallbackAfterMinutes)
+			}
+		}
 	}
 
 	return nil
@@ -613,28 +608,6 @@ func (w *WebSocketConfig) Validate() error {
 
 	if w.MaxMessageSizeBytes < 256 || w.MaxMessageSizeBytes > 65536 {
 		return fmt.Errorf("max_message_size_bytes must be between 256 and 65536, got %d", w.MaxMessageSizeBytes)
-	}
-
-	return nil
-}
-
-func (w *WorkerConfig) Validate() error {
-	if w.AuthToken == "" {
-		return fmt.Errorf("auth_token cannot be empty when worker is enabled")
-	}
-
-	if len(w.AuthToken) < 16 {
-		return fmt.Errorf("auth_token must be at least 16 characters for security")
-	}
-
-	if w.HeartbeatTimeoutSeconds < 10 || w.HeartbeatTimeoutSeconds > 600 {
-		return fmt.Errorf("heartbeat_timeout_seconds must be between 10 and 600, got %d", w.HeartbeatTimeoutSeconds)
-	}
-
-	if w.FallbackToLocal {
-		if w.FallbackAfterMinutes < 1 || w.FallbackAfterMinutes > 1440 {
-			return fmt.Errorf("fallback_after_minutes must be between 1 and 1440 (24 hours), got %d", w.FallbackAfterMinutes)
-		}
 	}
 
 	return nil

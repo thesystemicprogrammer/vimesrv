@@ -88,14 +88,21 @@ func (uc *ProcessNextJobUseCase) retryStateTransition(ctx context.Context, opera
 	return lastErr
 }
 
+// Execute processes the next available job using the use case's configured exclude types
 func (uc *ProcessNextJobUseCase) Execute(ctx context.Context, workerID string) (found bool, err error) {
+	return uc.ExecuteWithExclusions(ctx, workerID, uc.excludeTypes)
+}
+
+// ExecuteWithExclusions processes the next available job, excluding specified job types.
+// This allows dynamic per-worker job type filtering based on worker configuration.
+func (uc *ProcessNextJobUseCase) ExecuteWithExclusions(ctx context.Context, workerID string, excludeTypes []string) (found bool, err error) {
 	var job *domain.Job
 	var ok bool
 	var claimErr error
 
 	// Use appropriate claim method based on excluded types
-	if len(uc.excludeTypes) > 0 {
-		job, ok, claimErr = uc.jobRepository.ClaimNextJobDueExcludingTypes(ctx, workerID, uc.excludeTypes)
+	if len(excludeTypes) > 0 {
+		job, ok, claimErr = uc.jobRepository.ClaimNextJobDueExcludingTypes(ctx, workerID, excludeTypes)
 	} else {
 		job, ok, claimErr = uc.jobRepository.ClaimNextJobDue(ctx, workerID)
 	}

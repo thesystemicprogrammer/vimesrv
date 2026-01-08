@@ -2,13 +2,14 @@ package app
 
 import (
 	"github.com/thesystemicprogrammer/vimesrv/internal/adapters/http"
+	"github.com/thesystemicprogrammer/vimesrv/internal/adapters/job"
 	"github.com/thesystemicprogrammer/vimesrv/internal/infrastructure/server"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/config"
 	"github.com/thesystemicprogrammer/vimesrv/internal/shared/logger"
 	"github.com/thesystemicprogrammer/vimesrv/web"
 )
 
-func registerHTTPHandlers(useCases *UseCases, adapters *Adapters, httpServer *server.HTTPServer, cfg *config.Config) {
+func registerHTTPHandlers(useCases *UseCases, adapters *Adapters, httpServer *server.HTTPServer, cfg *config.Config, jobManager *job.JobManager) {
 	router := httpServer.Router()
 
 	// Register PWA (Angular frontend)
@@ -130,6 +131,18 @@ func registerHTTPHandlers(useCases *UseCases, adapters *Adapters, httpServer *se
 			useCases.GetQualityProfilesUseCase,
 		)
 		transcodeAdminHandler.RegisterRoutes(apiGroup)
+
+		// Worker Admin API (admin only)
+		workerAdminHandler := http.NewWorkerAdminHandler(
+			useCases.ListWorkerConfigsUseCase,
+			useCases.GetLocalWorkerCountUseCase,
+			useCases.SetLocalWorkerCountUseCase,
+			useCases.GetWorkerConfigUseCase,
+			useCases.UpdateWorkerConfigUseCase,
+			useCases.DeleteWorkerConfigUseCase,
+			jobManager, // Implements WorkerReconfigurer interface
+		)
+		workerAdminHandler.RegisterRoutes(apiGroup)
 	}
 
 	// === Protected Streaming Routes ===
@@ -168,11 +181,11 @@ func registerHTTPHandlers(useCases *UseCases, adapters *Adapters, httpServer *se
 
 	// === Worker API Routes (separate auth via worker token) ===
 
-	// Register worker handler if worker mode is enabled
+	// Register worker handler if remote worker auth token is configured
 	// Note: Worker routes use their own auth middleware (not user auth)
-	if cfg.Worker.Enabled && useCases.RegisterWorkerUseCase != nil {
+	if cfg.Job.RemoteWorkerAuthToken != "" && useCases.RegisterWorkerUseCase != nil {
 		workerHandler := http.NewWorkerHandler(
-			&cfg.Worker,
+			cfg.Job.RemoteWorkerAuthToken,
 			useCases.RegisterWorkerUseCase,
 			useCases.HeartbeatUseCase,
 			useCases.ClaimJobForWorkerUseCase,

@@ -17,6 +17,8 @@ func initializeJobManager(cfg *config.Config, adapters *Adapters, useCases *UseC
 		RecoverStuckJobsUseCase: useCases.RecoverStuckJobsUseCase,
 		JobRepository:           adapters.JobRepository,
 		ScheduleRepository:      adapters.ScheduleRepository,
+		SettingsRepository:      adapters.SettingsRepository,
+		WorkerConfigRepository:  adapters.WorkerConfigRepository,
 		Handlers:                adapters.HandlerRegistry,
 		BackoffStrategy:         adapters.BackoffStrategy,
 		Cron:                    adapters.CronParser,

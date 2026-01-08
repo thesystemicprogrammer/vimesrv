@@ -1095,7 +1095,6 @@ func TestTMDBConfig_Validate(t *testing.T) {
 
 func TestConfig_Validate(t *testing.T) {
 	validJobConfig := JobConfig{
-		WorkerCount:                  2,
 		PollingIntervalInSeconds:     2,
 		MaxAttempts:                  3,
 		SchedulerIntervalInSeconds:   2,

@@ -180,6 +180,10 @@ func (m *MockJobRepository) ClaimNextTranscodeJob(ctx context.Context, workerID 
 	return nil, nil
 }
 
+func (m *MockJobRepository) ClaimNextTranscodeJobWithTypes(ctx context.Context, workerID string, allowedTypes []string) (*domain.Job, error) {
+	return nil, nil
+}
+
 func (m *MockJobRepository) CountQueuedTranscodeJobs(ctx context.Context) (int, error) {
 	return 0, nil
 }

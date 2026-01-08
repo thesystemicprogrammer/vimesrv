@@ -12,7 +12,6 @@ auth:
   stream_token_mins: 60
 
 job:
-  worker_count: 2
   polling_interval_in_seconds: 2
   scheduler_batch: 5
   scheduler_interval_in_seconds: 2
@@ -21,6 +20,13 @@ job:
   backoff_max_seconds: 300
   stuck_job_threshold_minutes: 480 # 8 hours - jobs running longer are considered stuck
   stuck_job_check_interval_minutes: 5 # Check for stuck jobs every 5 minutes
+  # Remote worker settings (distributed transcoding)
+  # When remote_worker_auth_token is set, transcode jobs are processed by remote workers
+  # Workers must have access to the same media library (e.g., via NFS)
+  remote_worker_auth_token: "" # Shared secret for worker authentication (set via REMOTE_WORKER_AUTH_TOKEN env var)
+  remote_worker_heartbeat_timeout_seconds: 60 # Worker considered dead if no heartbeat/progress within this time
+  remote_worker_fallback_to_local: false # Process locally when no workers are available
+  remote_worker_fallback_after_minutes: 30 # Wait time before local fallback (if enabled)
 
 media:
   library_path: "./library"
@@ -196,12 +202,3 @@ rebuild:
     run_at_startup: true # Also run immediately on server start
     priority: 10 # Low priority (higher number = lower priority)
 
-# Distributed transcoding worker configuration
-# When enabled, transcode jobs are processed exclusively by remote workers
-# Workers must have access to the same media library (e.g., via NFS)
-worker:
-  enabled: false # Enable worker API and exclusive worker processing
-  auth_token: "" # Shared secret for worker authentication (set via WORKER_AUTH_TOKEN env var)
-  heartbeat_timeout_seconds: 60 # Worker considered dead if no heartbeat/progress within this time
-  fallback_to_local: false # Process locally when no workers are available
-  fallback_after_minutes: 30 # Wait time before local fallback (if enabled)

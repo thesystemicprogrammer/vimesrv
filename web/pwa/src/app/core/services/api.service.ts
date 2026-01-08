@@ -563,6 +563,46 @@ export interface DeleteTranscodingResponse {
   deleted: boolean;
 }
 
+// Worker admin types
+export type WorkerType = 'local' | 'distributed';
+
+export interface WorkerConfig {
+  id: number;
+  name: string;
+  worker_type: WorkerType;
+  accepts_video: boolean;
+  accepts_audio: boolean;
+  online: boolean;
+  last_seen?: string;
+  active_jobs: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ListWorkersResponse {
+  local_workers: WorkerConfig[];
+  distributed_workers: WorkerConfig[];
+}
+
+export interface LocalWorkerCountResponse {
+  count: number;
+}
+
+export interface SetLocalWorkerCountRequest {
+  count: number;
+}
+
+export interface SetLocalWorkerCountResponse {
+  count: number;
+  message: string;
+  warning?: string;
+}
+
+export interface UpdateWorkerConfigRequest {
+  accepts_video?: boolean;
+  accepts_audio?: boolean;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -997,6 +1037,64 @@ export class ApiService {
   deleteTranscoding(transcodeId: string): Observable<ApiResponse<DeleteTranscodingResponse>> {
     return this.http.delete<ApiResponse<DeleteTranscodingResponse>>(
       `${this.baseUrl}/admin/transcodings/transcode/${transcodeId}`
+    );
+  }
+
+  // Worker admin endpoints
+
+  /**
+   * List all worker configurations (local and distributed)
+   */
+  listWorkers(): Observable<ListWorkersResponse> {
+    return this.http.get<ListWorkersResponse>(
+      `${this.baseUrl}/admin/workers`
+    );
+  }
+
+  /**
+   * Get local worker count setting
+   */
+  getLocalWorkerCount(): Observable<LocalWorkerCountResponse> {
+    return this.http.get<LocalWorkerCountResponse>(
+      `${this.baseUrl}/admin/workers/local/count`
+    );
+  }
+
+  /**
+   * Set local worker count (dynamically reconfigures workers)
+   */
+  setLocalWorkerCount(count: number): Observable<SetLocalWorkerCountResponse> {
+    return this.http.put<SetLocalWorkerCountResponse>(
+      `${this.baseUrl}/admin/workers/local/count`,
+      { count }
+    );
+  }
+
+  /**
+   * Get a specific worker configuration
+   */
+  getWorkerConfig(name: string): Observable<WorkerConfig> {
+    return this.http.get<WorkerConfig>(
+      `${this.baseUrl}/admin/workers/${encodeURIComponent(name)}`
+    );
+  }
+
+  /**
+   * Update a worker configuration
+   */
+  updateWorkerConfig(name: string, request: UpdateWorkerConfigRequest): Observable<WorkerConfig> {
+    return this.http.put<WorkerConfig>(
+      `${this.baseUrl}/admin/workers/${encodeURIComponent(name)}`,
+      request
+    );
+  }
+
+  /**
+   * Delete a distributed worker configuration
+   */
+  deleteWorkerConfig(name: string): Observable<{ message: string }> {
+    return this.http.delete<{ message: string }>(
+      `${this.baseUrl}/admin/workers/${encodeURIComponent(name)}`
     );
   }
 }

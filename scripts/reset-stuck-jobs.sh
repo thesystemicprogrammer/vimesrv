@@ -191,7 +191,7 @@ if [[ "$STUCK_JOBS" -gt 0 ]]; then
         SET status = 'queued', 
             worker_id = NULL, 
             started_at = NULL, 
-            attempts = 0,
+            attempt = 0,
             updated_at = CURRENT_TIMESTAMP 
         WHERE status = 'running';
     "
@@ -204,7 +204,7 @@ if [[ "$STUCK_TRANSCODES" -gt 0 ]]; then
     sqlite3 "$DB_PATH" "
         UPDATE transcodes 
         SET status = 'pending', 
-            attempts = 0,
+            attempt = 0,
             updated_at = CURRENT_TIMESTAMP 
         WHERE status = 'processing';
     "

@@ -263,6 +263,19 @@ interface LanguageOption {
                     </button>
                   }
 
+                  <!-- Workers (admin only) -->
+                  @if (auth.isAdmin()) {
+                    <button
+                      (click)="navigateToWorkers()"
+                      class="w-full px-4 py-2 text-left text-sm text-zinc-300 hover:bg-zinc-700 hover:text-white transition-colors flex items-center gap-2"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+                      </svg>
+                      {{ 'nav.workers' | translate }}
+                    </button>
+                  }
+
                   <div class="border-t border-zinc-700 my-1"></div>
 
                   <!-- Logout -->
@@ -489,6 +502,11 @@ export class NavbarComponent {
   navigateToTranscodings(): void {
     this.closeUserMenu();
     this.router.navigate(['/transcodings']);
+  }
+
+  navigateToWorkers(): void {
+    this.closeUserMenu();
+    this.router.navigate(['/admin/workers']);
   }
 
   selectLanguage(code: string): void {

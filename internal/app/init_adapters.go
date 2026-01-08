@@ -20,6 +20,8 @@ type Adapters struct {
 	HandlerRegistry              *job.HandlerRegistry
 	JobRepository                ports.JobRepository
 	ScheduleRepository           ports.ScheduleRepository
+	SettingsRepository           ports.SettingsRepository
+	WorkerConfigRepository       ports.WorkerConfigRepository
 	FileHasher                   ports.FileHasher
 	FFProbeService               ports.FFProbeService
 	FileSystemService            ports.FileSystemService
@@ -63,6 +65,8 @@ func initAdapters(cfg *config.Config, db *database.DB) *Adapters {
 		HandlerRegistry:              job.NewHandlerRegistry(),
 		JobRepository:                repository.NewJobRepository(db),
 		ScheduleRepository:           repository.NewScheduleRepository(db),
+		SettingsRepository:           repository.NewSettingsRepository(db),
+		WorkerConfigRepository:       repository.NewWorkerConfigRepository(db),
 		FileHasher:                   media.NewBlake2bHasher(),
 		FFProbeService:               media.NewFFProbeAdapter(cfg.Media.FFProbeTimeoutSeconds),
 		FileSystemService:            media.NewOSFileSystem(),
@@ -109,9 +113,9 @@ func initAdapters(cfg *config.Config, db *database.DB) *Adapters {
 		adapters.ImageDownloader = metadataAdapter.NewHTTPImageDownloader(cfg.TMDB, adapters.TMDBClient)
 	}
 
-	// Initialize WorkerRegistry if worker mode is enabled
-	if cfg.Worker.Enabled {
-		timeout := time.Duration(cfg.Worker.HeartbeatTimeoutSeconds) * time.Second
+	// Initialize WorkerRegistry if remote worker mode is enabled (auth token configured)
+	if cfg.Job.RemoteWorkerAuthToken != "" {
+		timeout := time.Duration(cfg.Job.RemoteWorkerHeartbeatTimeoutSeconds) * time.Second
 		adapters.WorkerRegistry = workerAdapter.NewRegistry(timeout)
 	}
 

@@ -22,6 +22,7 @@
     "adminPanel": "Admin-Bereich",
     "jobs": "Aufträge",
     "transcodings": "Transkodierungen",
+    "workers": "Worker",
     "logout": "Abmelden",
     "language": "Sprache",
     "viewAllResults": "Alle Ergebnisse anzeigen"
@@ -311,5 +312,38 @@
   "footer": {
     "poweredBy": "Bereitgestellt von VimeSrv",
     "metadataProvidedBy": "Metadaten bereitgestellt von"
+  },
+  "workersAdmin": {
+    "title": "Worker-Verwaltung",
+    "subtitle": "Lokale und verteilte Worker verwalten",
+    "localWorkers": "Lokale Worker",
+    "localWorkersDesc": "Worker, die auf diesem Server laufen",
+    "distributedWorkers": "Verteilte Worker",
+    "distributedWorkersDesc": "Entfernte Worker, die mit dem Server verbunden sind",
+    "setMaxParallelJobs": "Max. parallele Aufträge festlegen",
+    "name": "Name",
+    "acceptsVideo": "Video akzeptieren",
+    "acceptsAudio": "Audio akzeptieren",
+    "activeJobs": "Aktive Aufträge",
+    "lastSeen": "Zuletzt gesehen",
+    "status": "Status",
+    "actions": "Aktionen",
+    "online": "Online",
+    "offline": "Offline",
+    "delete": "Löschen",
+    "noLocalWorkers": "Keine lokalen Worker konfiguriert",
+    "noDistributedWorkers": "Keine verteilten Worker registriert",
+    "workerCount": "Worker-Anzahl",
+    "countHint": "Anzahl der gleichzeitigen lokalen Worker (0 zum Deaktivieren)",
+    "acceptsVideoHint": "Diesem Worker erlauben, Video-Transkodierungsaufträge zu verarbeiten",
+    "acceptsAudioHint": "Diesem Worker erlauben, Audio-Transkodierungsaufträge zu verarbeiten",
+    "deleteWorker": "Worker löschen",
+    "deleteConfirm": "Sind Sie sicher, dass Sie diese Worker-Konfiguration löschen möchten?",
+    "deleteHint": "Dies entfernt die Worker-Konfiguration. Der Worker kann sich mit Standardeinstellungen erneut registrieren.",
+    "updateSuccess": "Worker-Konfiguration aktualisiert",
+    "deleteSuccess": "Worker-Konfiguration gelöscht",
+    "justNow": "Gerade eben",
+    "minutesAgo": "vor {{count}} Min.",
+    "hoursAgo": "vor {{count}} Std."
   }
 }

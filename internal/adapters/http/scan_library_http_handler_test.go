@@ -101,6 +101,14 @@ func (m *MockJobRepository) ClaimNextTranscodeJob(ctx context.Context, workerID 
 	return args.Get(0).(*domain.Job), args.Error(1)
 }
 
+func (m *MockJobRepository) ClaimNextTranscodeJobWithTypes(ctx context.Context, workerID string, allowedTypes []string) (*domain.Job, error) {
+	args := m.Called(ctx, workerID, allowedTypes)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.Job), args.Error(1)
+}
+
 func (m *MockJobRepository) CountQueuedTranscodeJobs(ctx context.Context) (int, error) {
 	args := m.Called(ctx)
 	return args.Int(0), args.Error(1)

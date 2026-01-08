@@ -74,13 +74,12 @@ func TestJobManager_SingleJobLifecycle(t *testing.T) {
 
 func TestJobManager_MultipleWorkersConcurrency(t *testing.T) {
 	cfg := testJobConfig()
-	cfg.WorkerCount = 3
 
 	counter := &atomic.Int32{}
 	handlers := map[string]ports.JobHandler{
 		"counter-job": newCounterHandler(counter),
 	}
-	manager, deps := setupTestJobManager(t, cfg, handlers)
+	manager, deps := setupTestJobManagerWithWorkerCount(t, cfg, handlers, 3)
 
 	// Start manager
 	err := manager.Start()
@@ -112,7 +111,6 @@ func TestJobManager_MultipleWorkersConcurrency(t *testing.T) {
 
 func TestJobManager_JobPriorityOrdering(t *testing.T) {
 	cfg := testJobConfig()
-	cfg.WorkerCount = 1 // Single worker to ensure ordering
 
 	var executionOrder []int
 	var mu sync.Mutex
@@ -128,7 +126,7 @@ func TestJobManager_JobPriorityOrdering(t *testing.T) {
 	handlers := map[string]ports.JobHandler{
 		"priority-job": handler,
 	}
-	manager, deps := setupTestJobManager(t, cfg, handlers)
+	manager, deps := setupTestJobManagerWithWorkerCount(t, cfg, handlers, 1) // Single worker to ensure ordering
 
 	// Enqueue jobs with different priorities (enqueue low priority first)
 	ctx := context.Background()

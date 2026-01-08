@@ -397,7 +397,27 @@ func (repo *JobRepository) Get(ctx context.Context, jobID int64) (*domain.Job, e
 // for processing by a distributed worker. Returns (nil, nil) if no jobs available.
 // Handles all transcode job types: video, audio, and subtitle.
 func (repo *JobRepository) ClaimNextTranscodeJob(ctx context.Context, workerID string) (*domain.Job, error) {
-	const command = `
+	return repo.ClaimNextTranscodeJobWithTypes(ctx, workerID, []string{"transcode_video", "transcode_audio", "transcode_subtitle"})
+}
+
+// ClaimNextTranscodeJobWithTypes atomically claims the next queued transcode job
+// matching the specified job types. Returns (nil, nil) if no jobs available.
+// allowedTypes should contain one or more of: transcode_video, transcode_audio, transcode_subtitle
+func (repo *JobRepository) ClaimNextTranscodeJobWithTypes(ctx context.Context, workerID string, allowedTypes []string) (*domain.Job, error) {
+	if len(allowedTypes) == 0 {
+		return nil, nil // No types allowed means no jobs can be claimed
+	}
+
+	// Build placeholders for IN clause
+	placeholders := make([]string, len(allowedTypes))
+	args := make([]interface{}, len(allowedTypes)+1)
+	args[0] = workerID
+	for i, t := range allowedTypes {
+		placeholders[i] = "?"
+		args[i+1] = t
+	}
+
+	command := fmt.Sprintf(`
 	UPDATE jobs
 	SET status='running',
 	    worker_id=?,
@@ -406,18 +426,19 @@ func (repo *JobRepository) ClaimNextTranscodeJob(ctx context.Context, workerID s
 	    updated_at=CURRENT_TIMESTAMP
 	WHERE id = (
 	  SELECT id FROM jobs
-	  WHERE status='queued' AND type IN ('transcode_video', 'transcode_audio', 'transcode_subtitle') AND run_at <= CURRENT_TIMESTAMP
+	  WHERE status='queued' AND type IN (%s) AND run_at <= CURRENT_TIMESTAMP
 	  ORDER BY priority DESC, run_at ASC, id ASC
 	  LIMIT 1
 	)
 	RETURNING id, type, payload, status, priority, run_at, attempt, max_attempts, last_error, worker_id, scheduled_id, created_at, started_at, finished_at, updated_at
-	`
-	job, err := repo.scanJobRow(repo.db.QueryRowContext(ctx, command, workerID))
+	`, strings.Join(placeholders, ", "))
+
+	job, err := repo.scanJobRow(repo.db.QueryRowContext(ctx, command, args...))
 	if err == sql.ErrNoRows {
 		return nil, nil // No jobs available
 	}
 	if err != nil {
-		logger.Error().Err(err).Msg("sql error claiming next transcode job")
+		logger.Error().Err(err).Msg("sql error claiming next transcode job with types")
 		return nil, err
 	}
 	return job, nil

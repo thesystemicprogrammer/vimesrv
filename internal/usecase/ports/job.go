@@ -45,6 +45,10 @@ type JobRepository interface {
 	// for processing by a distributed worker. Returns (nil, nil) if no jobs available.
 	// Handles all transcode job types: video, audio, and subtitle.
 	ClaimNextTranscodeJob(ctx context.Context, workerID string) (*domain.Job, error)
+	// ClaimNextTranscodeJobWithTypes atomically claims the next queued transcode job
+	// matching the specified job types. Returns (nil, nil) if no jobs available.
+	// allowedTypes should contain one or more of: transcode_video, transcode_audio, transcode_subtitle
+	ClaimNextTranscodeJobWithTypes(ctx context.Context, workerID string, allowedTypes []string) (*domain.Job, error)
 	// CountQueuedTranscodeJobs returns the number of queued transcode jobs.
 	// Counts all transcode job types: video, audio, and subtitle.
 	CountQueuedTranscodeJobs(ctx context.Context) (int, error)

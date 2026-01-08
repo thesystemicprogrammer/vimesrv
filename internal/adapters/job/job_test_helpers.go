@@ -33,6 +33,41 @@ type JobManagerDependencies struct {
 	Clock                 ports.Clock
 }
 
+// MockSettingsRepository is a mock implementation for testing
+type MockSettingsRepository struct {
+	workerCount int
+}
+
+func NewMockSettingsRepository(workerCount int) *MockSettingsRepository {
+	return &MockSettingsRepository{workerCount: workerCount}
+}
+
+func (m *MockSettingsRepository) Get(ctx context.Context, key string) (string, error) {
+	if key == SettingsKeyMaxParallelJobs {
+		return fmt.Sprintf("%d", m.workerCount), nil
+	}
+	return "", nil
+}
+
+func (m *MockSettingsRepository) Set(ctx context.Context, key, value string) error {
+	return nil
+}
+
+func (m *MockSettingsRepository) GetInt(ctx context.Context, key string) (int, error) {
+	if key == SettingsKeyMaxParallelJobs {
+		return m.workerCount, nil
+	}
+	return 0, nil
+}
+
+func (m *MockSettingsRepository) SetInt(ctx context.Context, key string, value int) error {
+	return nil
+}
+
+func (m *MockSettingsRepository) Delete(ctx context.Context, key string) error {
+	return nil
+}
+
 // ===============================================
 // Database Setup
 // ===============================================
@@ -77,7 +112,13 @@ func setupTestDatabase(t *testing.T) (*database.DB, *sql.DB) {
 // ===============================================
 
 // setupTestJobManager creates a fully configured JobManager with all dependencies
+// Uses a default worker count of 2 for backwards compatibility with existing tests
 func setupTestJobManager(t *testing.T, cfg config.JobConfig, handlers map[string]ports.JobHandler) (*JobManager, *JobManagerDependencies) {
+	return setupTestJobManagerWithWorkerCount(t, cfg, handlers, 2)
+}
+
+// setupTestJobManagerWithWorkerCount creates a JobManager with a specific worker count
+func setupTestJobManagerWithWorkerCount(t *testing.T, cfg config.JobConfig, handlers map[string]ports.JobHandler, workerCount int) (*JobManager, *JobManagerDependencies) {
 	t.Helper()
 
 	db, sqlDB := setupTestDatabase(t)
@@ -85,6 +126,7 @@ func setupTestJobManager(t *testing.T, cfg config.JobConfig, handlers map[string
 	// Create repositories
 	jobRepo := repository.NewJobRepository(db)
 	scheduleRepo := repository.NewScheduleRepository(db)
+	settingsRepo := NewMockSettingsRepository(workerCount)
 
 	// Create handler registry
 	handlerRegistry := NewHandlerRegistry()
@@ -112,6 +154,7 @@ func setupTestJobManager(t *testing.T, cfg config.JobConfig, handlers map[string
 		RecoverStuckJobsUseCase: recoverStuckJobsUC,
 		JobRepository:           jobRepo,
 		ScheduleRepository:      scheduleRepo,
+		SettingsRepository:      settingsRepo,
 		Handlers:                handlerRegistry,
 		BackoffStrategy:         backoffStrategy,
 		Cron:                    cronParser,
@@ -144,6 +187,7 @@ func setupTestJobManagerWithMockClock(t *testing.T, cfg config.JobConfig, handle
 	// Create repositories
 	jobRepo := repository.NewJobRepository(db)
 	scheduleRepo := repository.NewScheduleRepository(db)
+	settingsRepo := NewMockSettingsRepository(2) // Default 2 workers for tests
 
 	// Create handler registry
 	handlerRegistry := NewHandlerRegistry()
@@ -170,6 +214,7 @@ func setupTestJobManagerWithMockClock(t *testing.T, cfg config.JobConfig, handle
 		RecoverStuckJobsUseCase: recoverStuckJobsUC,
 		JobRepository:           jobRepo,
 		ScheduleRepository:      scheduleRepo,
+		SettingsRepository:      settingsRepo,
 		Handlers:                handlerRegistry,
 		BackoffStrategy:         backoffStrategy,
 		Cron:                    cronParser,
@@ -206,6 +251,7 @@ func setupTestJobManagerWithSecondCron(t *testing.T, cfg config.JobConfig, handl
 	// Create repositories
 	jobRepo := repository.NewJobRepository(db)
 	scheduleRepo := repository.NewScheduleRepository(db)
+	settingsRepo := NewMockSettingsRepository(2) // Default 2 workers for tests
 
 	// Create handler registry
 	handlerRegistry := NewHandlerRegistry()
@@ -233,6 +279,7 @@ func setupTestJobManagerWithSecondCron(t *testing.T, cfg config.JobConfig, handl
 		RecoverStuckJobsUseCase: recoverStuckJobsUC,
 		JobRepository:           jobRepo,
 		ScheduleRepository:      scheduleRepo,
+		SettingsRepository:      settingsRepo,
 		Handlers:                handlerRegistry,
 		BackoffStrategy:         backoffStrategy,
 		Cron:                    cronParser,
@@ -271,7 +318,6 @@ func setupTestJobManagerWithSecondCron(t *testing.T, cfg config.JobConfig, handl
 // for deterministic stuck job recovery behavior.
 func testJobConfig() config.JobConfig {
 	return config.JobConfig{
-		WorkerCount:                  2,
 		PollingIntervalInSeconds:     1,
 		MaxAttempts:                  3,
 		SchedulerIntervalInSeconds:   36000, // 10 hours - effectively disabled for manual testing

@@ -6,13 +6,17 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/thesystemicprogrammer/vimesrv/internal/shared/config"
 	workeruc "github.com/thesystemicprogrammer/vimesrv/internal/usecase/worker"
 )
 
+// RemoteWorkerConfig holds the configuration for remote worker authentication
+type RemoteWorkerConfig struct {
+	AuthToken string
+}
+
 // WorkerHandler handles worker-related HTTP requests
 type WorkerHandler struct {
-	config           *config.WorkerConfig
+	config           *RemoteWorkerConfig
 	registerUC       *workeruc.RegisterWorkerUseCase
 	heartbeatUC      *workeruc.HeartbeatUseCase
 	claimJobUC       *workeruc.ClaimJobForWorkerUseCase
@@ -23,7 +27,7 @@ type WorkerHandler struct {
 
 // NewWorkerHandler creates a new WorkerHandler
 func NewWorkerHandler(
-	cfg *config.WorkerConfig,
+	authToken string,
 	registerUC *workeruc.RegisterWorkerUseCase,
 	heartbeatUC *workeruc.HeartbeatUseCase,
 	claimJobUC *workeruc.ClaimJobForWorkerUseCase,
@@ -32,7 +36,7 @@ func NewWorkerHandler(
 	reportProgressUC *workeruc.ReportProgressUseCase,
 ) *WorkerHandler {
 	return &WorkerHandler{
-		config:           cfg,
+		config:           &RemoteWorkerConfig{AuthToken: authToken},
 		registerUC:       registerUC,
 		heartbeatUC:      heartbeatUC,
 		claimJobUC:       claimJobUC,
@@ -63,18 +67,6 @@ func (h *WorkerHandler) RegisterRoutes(router *gin.RouterGroup) {
 // workerAuthMiddleware validates the worker auth token
 func (h *WorkerHandler) workerAuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Check if worker API is enabled
-		if !h.config.Enabled {
-			c.JSON(http.StatusNotFound, gin.H{
-				"error": gin.H{
-					"code":    "NOT_FOUND",
-					"message": "Worker API not enabled",
-				},
-			})
-			c.Abort()
-			return
-		}
-
 		// Validate Authorization header
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
@@ -124,7 +116,7 @@ func (h *WorkerHandler) Register(c *gin.Context) {
 		return
 	}
 
-	err := h.registerUC.Execute(c.Request.Context(), workeruc.RegisterWorkerInput{
+	output, err := h.registerUC.Execute(c.Request.Context(), workeruc.RegisterWorkerInput{
 		WorkerID: req.WorkerID,
 		Name:     req.Name,
 		Capacity: req.Capacity,
@@ -139,10 +131,15 @@ func (h *WorkerHandler) Register(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	response := gin.H{
 		"registered": true,
 		"message":    "Worker registered successfully",
-	})
+	}
+	if output != nil && output.Config != nil {
+		response["config"] = output.Config
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
 // HeartbeatRequest is the request body for POST /worker/heartbeat
@@ -182,11 +179,16 @@ func (h *WorkerHandler) Heartbeat(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	response := gin.H{
 		"ok":          output.OK,
 		"server_time": output.ServerTime,
 		"queued_jobs": output.QueuedJobs,
-	})
+	}
+	if output.Config != nil {
+		response["config"] = output.Config
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
 // ClaimJobRequest is the request body for POST /worker/jobs/claim

@@ -54,13 +54,14 @@ type WorkerTranscodeOptions struct {
 
 // ClaimJobForWorkerUseCase handles claiming a transcode job for a distributed worker
 type ClaimJobForWorkerUseCase struct {
-	jobRepo        ports.JobRepository
-	transcodeRepo  ports.TranscodeRepository
-	mediaRepo      ports.MediaRepository
-	workerRegistry *worker.Registry
-	jobNotifier    ports.JobNotifier
-	backoff        ports.BackoffStrategy
-	config         *config.Config
+	jobRepo          ports.JobRepository
+	transcodeRepo    ports.TranscodeRepository
+	mediaRepo        ports.MediaRepository
+	workerRegistry   *worker.Registry
+	workerConfigRepo ports.WorkerConfigRepository
+	jobNotifier      ports.JobNotifier
+	backoff          ports.BackoffStrategy
+	config           *config.Config
 }
 
 // NewClaimJobForWorkerUseCase creates a new ClaimJobForWorkerUseCase
@@ -69,18 +70,20 @@ func NewClaimJobForWorkerUseCase(
 	transcodeRepo ports.TranscodeRepository,
 	mediaRepo ports.MediaRepository,
 	workerRegistry *worker.Registry,
+	workerConfigRepo ports.WorkerConfigRepository,
 	jobNotifier ports.JobNotifier,
 	backoff ports.BackoffStrategy,
 	cfg *config.Config,
 ) *ClaimJobForWorkerUseCase {
 	return &ClaimJobForWorkerUseCase{
-		jobRepo:        jobRepo,
-		transcodeRepo:  transcodeRepo,
-		mediaRepo:      mediaRepo,
-		workerRegistry: workerRegistry,
-		jobNotifier:    jobNotifier,
-		backoff:        backoff,
-		config:         cfg,
+		jobRepo:          jobRepo,
+		transcodeRepo:    transcodeRepo,
+		mediaRepo:        mediaRepo,
+		workerRegistry:   workerRegistry,
+		workerConfigRepo: workerConfigRepo,
+		jobNotifier:      jobNotifier,
+		backoff:          backoff,
+		config:           cfg,
 	}
 }
 
@@ -92,8 +95,23 @@ func (uc *ClaimJobForWorkerUseCase) Execute(ctx context.Context, workerID string
 		return nil, fmt.Errorf("worker not registered: %s", workerID)
 	}
 
-	// 2. Claim next transcode job atomically
-	job, err := uc.jobRepo.ClaimNextTranscodeJob(ctx, workerID)
+	// 2. Get worker config to determine allowed job types
+	workerConfig, err := uc.workerConfigRepo.Get(ctx, workerID)
+	if err != nil {
+		logger.Warn().Err(err).Str("worker_id", workerID).Msg("failed to get worker config, using defaults")
+		// Default: allow all types if config not found
+		workerConfig = nil
+	}
+
+	// 3. Build list of allowed job types based on worker config
+	allowedTypes := uc.buildAllowedJobTypes(workerConfig)
+	if len(allowedTypes) == 0 {
+		logger.Debug().Str("worker_id", workerID).Msg("worker not configured to accept any job types")
+		return nil, nil // Worker can't process any job types
+	}
+
+	// 4. Claim next transcode job atomically with type filtering
+	job, err := uc.jobRepo.ClaimNextTranscodeJobWithTypes(ctx, workerID, allowedTypes)
 	if err != nil {
 		return nil, err
 	}
@@ -363,4 +381,30 @@ func (uc *ClaimJobForWorkerUseCase) failClaimedJob(ctx context.Context, job *dom
 
 		uc.jobNotifier.NotifyJobFailed(job, errMsg)
 	}
+}
+
+// buildAllowedJobTypes returns the list of job types a worker is allowed to claim
+// based on its configuration. Subtitles are always allowed for any worker that
+// can accept either video or audio.
+func (uc *ClaimJobForWorkerUseCase) buildAllowedJobTypes(cfg *domain.WorkerConfig) []string {
+	// If no config, allow all types (backward compatibility)
+	if cfg == nil {
+		return []string{"transcode_video", "transcode_audio", "transcode_subtitle"}
+	}
+
+	var types []string
+
+	if cfg.AcceptsVideo {
+		types = append(types, "transcode_video")
+	}
+	if cfg.AcceptsAudio {
+		types = append(types, "transcode_audio")
+	}
+	// Subtitles are lightweight and can be processed by any worker
+	// that accepts either video or audio
+	if cfg.AcceptsVideo || cfg.AcceptsAudio {
+		types = append(types, "transcode_subtitle")
+	}
+
+	return types
 }

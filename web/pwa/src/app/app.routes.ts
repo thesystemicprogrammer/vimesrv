@@ -70,6 +70,11 @@ export const routes: Routes = [
     loadComponent: () => import('./features/admin/transcoding-admin.component').then(m => m.TranscodingAdminComponent)
   },
   {
+    path: 'admin/workers',
+    canActivate: [adminGuard, passwordChangeGuard],
+    loadComponent: () => import('./features/admin/workers-admin.component').then(m => m.WorkersAdminComponent)
+  },
+  {
     path: '**',
     redirectTo: ''
   }

@@ -80,7 +80,7 @@ func (app *Application) initialize() error {
 		return fmt.Errorf("job handler validation failed: %w", err)
 	}
 
-	registerHTTPHandlers(app.useCases, app.adapters, app.httpServer, app.config)
+	registerHTTPHandlers(app.useCases, app.adapters, app.httpServer, app.config, app.jobManager)
 
 	initSuccess = true // Mark initialization as successful
 	return nil

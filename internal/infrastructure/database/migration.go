@@ -935,6 +935,95 @@ DROP INDEX IF EXISTS idx_movie_rec_source;
 DROP TABLE IF EXISTS movie_recommendations;
 `,
 	},
+	{
+		version: 15,
+		name:    "create_dynamic_worker_tables",
+		up: `
+-- Settings table for key-value config persistence
+CREATE TABLE IF NOT EXISTS settings (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Worker configuration table for dynamic job management
+-- Stores configuration for both local (server) workers and distributed (remote) workers
+CREATE TABLE IF NOT EXISTS worker_configs (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    name          TEXT NOT NULL UNIQUE,
+    worker_type   TEXT NOT NULL CHECK (worker_type IN ('local', 'distributed')),
+    accepts_video BOOLEAN NOT NULL DEFAULT 0,
+    accepts_audio BOOLEAN NOT NULL DEFAULT 0,
+    queue_count   INTEGER NOT NULL DEFAULT 1,
+    created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_worker_configs_type ON worker_configs(worker_type);
+
+-- Initialize with 1 local worker (enabled with video+audio processing)
+INSERT INTO settings (key, value) VALUES ('local_worker_count', '1');
+INSERT INTO worker_configs (name, worker_type, accepts_video, accepts_audio, queue_count)
+VALUES ('server-worker-1', 'local', 1, 1, 1);
+`,
+		down: `
+DROP INDEX IF EXISTS idx_worker_configs_type;
+DROP TABLE IF EXISTS worker_configs;
+DROP TABLE IF EXISTS settings;
+`,
+	},
+	{
+		version: 16,
+		name:    "rename_to_max_parallel_jobs",
+		up: `
+-- Rename setting key from local_worker_count to max_parallel_jobs
+UPDATE settings SET key = 'max_parallel_jobs' WHERE key = 'local_worker_count';
+
+-- Rename column in worker_configs from queue_count to max_parallel_jobs
+ALTER TABLE worker_configs RENAME COLUMN queue_count TO max_parallel_jobs;
+`,
+		down: `
+-- Rename column back
+ALTER TABLE worker_configs RENAME COLUMN max_parallel_jobs TO queue_count;
+
+-- Rename setting key back
+UPDATE settings SET key = 'local_worker_count' WHERE key = 'max_parallel_jobs';
+`,
+	},
+	{
+		version: 17,
+		name:    "remove_worker_max_parallel_jobs",
+		up: `
+-- SQLite doesn't support DROP COLUMN, so we need to recreate the table
+-- Create new table without max_parallel_jobs
+CREATE TABLE worker_configs_new (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    name          TEXT NOT NULL UNIQUE,
+    worker_type   TEXT NOT NULL CHECK (worker_type IN ('local', 'distributed')),
+    accepts_video BOOLEAN NOT NULL DEFAULT 0,
+    accepts_audio BOOLEAN NOT NULL DEFAULT 0,
+    created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Copy data from old table (excluding max_parallel_jobs)
+INSERT INTO worker_configs_new (id, name, worker_type, accepts_video, accepts_audio, created_at, updated_at)
+SELECT id, name, worker_type, accepts_video, accepts_audio, created_at, updated_at FROM worker_configs;
+
+-- Drop old table
+DROP TABLE worker_configs;
+
+-- Rename new table to original name
+ALTER TABLE worker_configs_new RENAME TO worker_configs;
+
+-- Recreate index
+CREATE INDEX IF NOT EXISTS idx_worker_configs_type ON worker_configs(worker_type);
+`,
+		down: `
+-- Add max_parallel_jobs column back
+ALTER TABLE worker_configs ADD COLUMN max_parallel_jobs INTEGER NOT NULL DEFAULT 1;
+`,
+	},
 }
 
 func NewDatabaseMigration(db *sql.DB) *DatabaseMigration {

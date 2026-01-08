@@ -62,6 +62,9 @@ func (m *mockJobRepository) ListJobs(ctx context.Context, filter ports.JobListFi
 func (m *mockJobRepository) ClaimNextTranscodeJob(ctx context.Context, workerID string) (*domain.Job, error) {
 	return nil, nil
 }
+func (m *mockJobRepository) ClaimNextTranscodeJobWithTypes(ctx context.Context, workerID string, allowedTypes []string) (*domain.Job, error) {
+	return nil, nil
+}
 func (m *mockJobRepository) CountQueuedTranscodeJobs(ctx context.Context) (int, error) {
 	return 0, nil
 }
