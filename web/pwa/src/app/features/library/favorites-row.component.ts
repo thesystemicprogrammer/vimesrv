@@ -12,36 +12,15 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w342';
   standalone: true,
   imports: [LazyLoadDirective, TranslateModule, FavoriteButtonComponent],
   template: `
-    <div class="mb-8">
-      <!-- Row header -->
-      <div class="flex justify-between items-center mb-4">
-        <h2 class="text-xl font-bold text-white">{{ 'library.favorites' | translate }}</h2>
-      </div>
-
-      <!-- Loading state -->
-      @if (favoritesService.favoritesLoading()) {
-        <div class="flex gap-4 overflow-x-auto py-2 px-1 -mx-1">
-          @for (i of [1,2,3,4,5]; track i) {
-            <div class="flex-shrink-0 w-40">
-              <div class="aspect-[2/3] bg-slate-700 rounded-lg animate-pulse"></div>
-            </div>
-          }
+    <!-- Only show when there are items -->
+    @if (items().length > 0) {
+      <div class="mb-8">
+        <!-- Row header -->
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-xl font-bold text-white">{{ 'library.favorites' | translate }}</h2>
         </div>
-      }
 
-      <!-- Empty state -->
-      @else if (items().length === 0) {
-        <div class="text-center text-slate-400 py-12 bg-slate-800/50 rounded-lg border border-slate-700">
-          <svg class="w-16 h-16 mx-auto mb-4 text-slate-600" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-          </svg>
-          <p class="text-lg">{{ 'library.favoritesEmpty' | translate }}</p>
-          <p class="text-sm mt-2">{{ 'library.favoritesEmptyHint' | translate }}</p>
-        </div>
-      }
-
-      <!-- Items -->
-      @else {
+        <!-- Items -->
         <div class="relative">
           <div
             class="flex gap-4 overflow-x-auto py-2 px-1 -mx-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-slate-800"
@@ -120,8 +99,8 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w342';
             }
           </div>
         </div>
-      }
-    </div>
+      </div>
+    }
   `,
   styles: [`
     /* Custom scrollbar styling */

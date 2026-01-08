@@ -11,36 +11,15 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w342';
   standalone: true,
   imports: [LazyLoadDirective, TranslateModule],
   template: `
-    <div class="mb-8">
-      <!-- Row header -->
-      <div class="flex justify-between items-center mb-4">
-        <h2 class="text-xl font-bold text-white">{{ 'library.continueWatching' | translate }}</h2>
-      </div>
-
-      <!-- Loading state -->
-      @if (watchProgressService.continueWatchingLoading()) {
-        <div class="flex gap-4 overflow-x-auto py-2 px-1 -mx-1">
-          @for (i of [1,2,3,4,5]; track i) {
-            <div class="flex-shrink-0 w-64">
-              <div class="aspect-video bg-slate-700 rounded-lg animate-pulse"></div>
-            </div>
-          }
+    <!-- Only show when there are items -->
+    @if (items().length > 0) {
+      <div class="mb-8">
+        <!-- Row header -->
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-xl font-bold text-white">{{ 'library.continueWatching' | translate }}</h2>
         </div>
-      }
 
-      <!-- Empty state -->
-      @else if (items().length === 0) {
-        <div class="text-center text-slate-400 py-12 bg-slate-800/50 rounded-lg border border-slate-700">
-          <svg class="w-16 h-16 mx-auto mb-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-          </svg>
-          <p class="text-lg">{{ 'library.continueWatchingEmpty' | translate }}</p>
-        </div>
-      }
-
-      <!-- Items -->
-      @else {
+        <!-- Items -->
         <div class="relative">
           <div
             class="flex gap-4 overflow-x-auto py-2 px-1 -mx-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-slate-800"
@@ -125,8 +104,8 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w342';
             }
           </div>
         </div>
-      }
-    </div>
+      </div>
+    }
   `,
   styles: [`
     /* Custom scrollbar styling */

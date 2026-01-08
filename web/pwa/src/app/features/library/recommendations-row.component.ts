@@ -12,41 +12,15 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w342';
   standalone: true,
   imports: [LazyLoadDirective, TranslateModule, FavoriteButtonComponent],
   template: `
-    <div class="mb-8">
-      <!-- Row header -->
-      <div class="flex justify-between items-center mb-4">
-        <h2 class="text-xl font-bold text-white">{{ 'library.recommendations' | translate }}</h2>
-      </div>
-
-      <!-- Loading state -->
-      @if (recommendationsService.recommendationsLoading()) {
-        <div class="flex gap-4 overflow-x-auto py-2 px-1 -mx-1">
-          @for (i of [1,2,3,4,5]; track i) {
-            <div class="flex-shrink-0 w-40">
-              <div class="aspect-[2/3] bg-slate-700 rounded-lg animate-pulse"></div>
-            </div>
-          }
+    <!-- Only show when there are items (hide on empty or error) -->
+    @if (items().length > 0 && !recommendationsService.recommendationsError()) {
+      <div class="mb-8">
+        <!-- Row header -->
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-xl font-bold text-white">{{ 'library.recommendations' | translate }}</h2>
         </div>
-      }
 
-      <!-- Empty state (no recommendations yet) -->
-      @else if (items().length === 0 && !recommendationsService.recommendationsError()) {
-        <div class="text-center text-slate-400 py-12 bg-slate-800/50 rounded-lg border border-slate-700">
-          <svg class="w-16 h-16 mx-auto mb-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
-          </svg>
-          <p class="text-lg">{{ 'library.recommendationsEmpty' | translate }}</p>
-          <p class="text-sm mt-2">{{ 'library.recommendationsEmptyHint' | translate }}</p>
-        </div>
-      }
-
-      <!-- Error state -->
-      @else if (recommendationsService.recommendationsError()) {
-        <!-- Silently hide on error - recommendations are optional -->
-      }
-
-      <!-- Items -->
-      @else {
+        <!-- Items -->
         <div class="relative">
           <div
             class="flex gap-4 overflow-x-auto py-2 px-1 -mx-1 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-slate-800"
@@ -126,8 +100,8 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w342';
             }
           </div>
         </div>
-      }
-    </div>
+      </div>
+    }
   `,
   styles: [`
     /* Custom scrollbar styling */
