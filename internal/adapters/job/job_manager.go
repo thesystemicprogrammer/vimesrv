@@ -53,6 +53,10 @@ type JobManager struct {
 	workerCfgs   map[string]*domain.WorkerConfig // worker name -> config
 	workerCfgsMu sync.RWMutex                    // protects workerCfgs
 
+	// Available workers pool
+	availableWorkers []string
+	workersMu        sync.Mutex // protects availableWorkers
+
 	// Reconfiguration
 	reconfigureMu sync.Mutex // prevents concurrent reconfiguration
 }
@@ -66,6 +70,15 @@ func NewJobManager(input JobManagerInput) *JobManager {
 		JobManagerInput: input,
 		stopCh:          make(chan struct{}),
 		workerCfgs:      make(map[string]*domain.WorkerConfig),
+	}
+}
+
+func (manager *JobManager) initializeAvailableWorkers(maxJobs int) {
+	manager.workersMu.Lock()
+	defer manager.workersMu.Unlock()
+	manager.availableWorkers = make([]string, 0, maxJobs)
+	for i := 1; i <= maxJobs; i++ {
+		manager.availableWorkers = append(manager.availableWorkers, fmt.Sprintf("server-worker-%d", i))
 	}
 }
 
@@ -86,6 +99,8 @@ func (manager *JobManager) Start() error {
 		maxJobs = 1
 	}
 	atomic.StoreInt32(&manager.maxParallelJobs, int32(maxJobs))
+
+	manager.initializeAvailableWorkers(maxJobs)
 
 	// Load worker configs from database
 	if err := manager.loadWorkerConfigs(ctx); err != nil {
@@ -152,9 +167,22 @@ func (manager *JobManager) dispatcherLoop(ctx context.Context) {
 		}
 
 		// Try to claim and process a job
-		// Use a worker name based on a slot number for config lookup
-		slotNumber := currentJobs + 1
-		workerName := fmt.Sprintf("server-worker-%d", slotNumber)
+		manager.workersMu.Lock()
+		if len(manager.availableWorkers) == 0 {
+			manager.workersMu.Unlock()
+			// Wait before checking again
+			select {
+			case <-ticker.C:
+			case <-manager.stopCh:
+				return
+			case <-ctx.Done():
+				return
+			}
+			continue
+		}
+		workerName := manager.availableWorkers[0]
+		manager.availableWorkers = manager.availableWorkers[1:]
+		manager.workersMu.Unlock()
 
 		// Get allowed job types for this worker slot
 		excludeTypes := manager.getExcludedTypesForWorker(workerName)
@@ -164,6 +192,11 @@ func (manager *JobManager) dispatcherLoop(ctx context.Context) {
 
 		go func() {
 			defer atomic.AddInt32(&manager.activeJobs, -1)
+			defer func() {
+				manager.workersMu.Lock()
+				manager.availableWorkers = append(manager.availableWorkers, workerName)
+				manager.workersMu.Unlock()
+			}()
 
 			found, err := manager.ProcessNextJobUseCase.ExecuteWithExclusions(ctx, workerName, excludeTypes)
 			if err != nil {
@@ -234,7 +267,19 @@ func (manager *JobManager) GetWorkerConfig(workerName string) *domain.WorkerConf
 // ReloadWorkerConfigs reloads worker configurations from the database.
 // This allows config changes (video/audio settings) to take effect without restart.
 func (manager *JobManager) ReloadWorkerConfigs(ctx context.Context) error {
-	return manager.loadWorkerConfigs(ctx)
+	logger.Info().Msg("reloading worker configurations")
+
+	if err := manager.loadWorkerConfigs(ctx); err != nil {
+		logger.Error().Err(err).Msg("failed to reload worker configurations")
+		return err
+	}
+
+	manager.workerCfgsMu.RLock()
+	configCount := len(manager.workerCfgs)
+	manager.workerCfgsMu.RUnlock()
+
+	logger.Info().Int("configCount", configCount).Msg("worker configurations reloaded successfully")
+	return nil
 }
 
 // Reconfigure dynamically adjusts the max parallel jobs based on database settings.
@@ -254,6 +299,18 @@ func (manager *JobManager) Reconfigure(ctx context.Context) error {
 
 	oldMax := atomic.LoadInt32(&manager.maxParallelJobs)
 	atomic.StoreInt32(&manager.maxParallelJobs, int32(newMax))
+
+	// Resize available workers pool
+	manager.workersMu.Lock()
+	currentLen := len(manager.availableWorkers)
+	if newMax > currentLen {
+		for i := currentLen + 1; i <= newMax; i++ {
+			manager.availableWorkers = append(manager.availableWorkers, fmt.Sprintf("server-worker-%d", i))
+		}
+	} else if newMax < currentLen {
+		manager.availableWorkers = manager.availableWorkers[:newMax]
+	}
+	manager.workersMu.Unlock()
 
 	// Reload worker configs
 	if err := manager.loadWorkerConfigs(ctx); err != nil {
@@ -307,6 +364,7 @@ func (manager *JobManager) getExcludedTypesForWorker(workerName string) []string
 	cfg := manager.GetWorkerConfig(workerName)
 	if cfg == nil {
 		// No config found - accept all job types (default for backwards compatibility)
+		logger.Debug().Str("worker", workerName).Msg("no config found for worker, accepting all job types")
 		return nil
 	}
 
@@ -318,6 +376,13 @@ func (manager *JobManager) getExcludedTypesForWorker(workerName string) []string
 	if !cfg.AcceptsAudio {
 		excludeTypes = append(excludeTypes, "transcode_audio")
 	}
+
+	logger.Debug().
+		Str("worker", workerName).
+		Bool("acceptsVideo", cfg.AcceptsVideo).
+		Bool("acceptsAudio", cfg.AcceptsAudio).
+		Strs("excludeTypes", excludeTypes).
+		Msg("worker config applied for job exclusions")
 
 	return excludeTypes
 }

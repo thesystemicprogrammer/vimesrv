@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/thesystemicprogrammer/vimesrv/internal/domain"
+	"github.com/thesystemicprogrammer/vimesrv/internal/shared/logger"
 	workeruc "github.com/thesystemicprogrammer/vimesrv/internal/usecase/worker"
 )
 
@@ -212,7 +213,14 @@ func (h *WorkerAdminHandler) UpdateWorkerConfig(c *gin.Context) {
 
 	// Reload worker configs to apply changes immediately
 	if h.reconfigurer != nil {
-		_ = h.reconfigurer.ReloadWorkerConfigs(c.Request.Context())
+		if err := h.reconfigurer.ReloadWorkerConfigs(c.Request.Context()); err != nil {
+			logger.Error().Err(err).Msg("failed to reload worker configs after update")
+			c.JSON(http.StatusOK, gin.H{
+				"config":  workerConfigToResponse(config),
+				"warning": "Worker config updated, but settings may not apply immediately due to reload failure: " + err.Error(),
+			})
+			return
+		}
 	}
 
 	c.JSON(http.StatusOK, workerConfigToResponse(config))

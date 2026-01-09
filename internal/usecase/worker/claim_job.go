@@ -401,10 +401,7 @@ func (uc *ClaimJobForWorkerUseCase) buildAllowedJobTypes(cfg *domain.WorkerConfi
 		types = append(types, "transcode_audio")
 	}
 	// Subtitles are lightweight and can be processed by any worker
-	// that accepts either video or audio
-	if cfg.AcceptsVideo || cfg.AcceptsAudio {
-		types = append(types, "transcode_subtitle")
-	}
+	types = append(types, "transcode_subtitle")
 
 	return types
 }
