@@ -57,6 +57,13 @@ export class MetadataMatchModalComponent implements OnInit {
   searching = signal(false);
   hasSearched = signal(false);
 
+  // TV Prompt state
+  showTvPrompt = signal(false);
+  selectedTvResult = signal<SearchResult | null>(null);
+  selectedSeason: number | null = null;
+  selectedEpisode: number | null = null;
+  tvPromptError = signal<string | null>(null);
+
   searchQuery = '';
   searchType: MediaType | '' = '';
 
@@ -177,14 +184,18 @@ export class MetadataMatchModalComponent implements OnInit {
   selectSearchResult(result: SearchResult): void {
     if (!this.media) return;
 
-    this.linking.set(true);
-    this.error.set(null);
-
-    if ((result.media_type = 'tv')) {
-      alert('TV Show detected');
+    if (result.media_type === 'tv') {
+      this.selectedTvResult.set(result);
+      this.showTvPrompt.set(true);
+      this.selectedSeason = null;
+      this.selectedEpisode = null;
+      this.tvPromptError.set(null);
       return;
     }
 
+    // this.linking.set(true);
+    // this.error.set(null);
+    //
     // const request = {
     //   tmdb_id: result.tmdb_id,
     //   media_type: result.media_type,
@@ -201,6 +212,60 @@ export class MetadataMatchModalComponent implements OnInit {
     //     this.linking.set(false);
     //   },
     // });
+  }
+
+  confirmTvMatch(): void {
+    const result = this.selectedTvResult();
+    if (!this.media || !result) return;
+
+    if (
+      !this.selectedSeason ||
+      this.selectedSeason < 1 ||
+      this.selectedSeason > 100
+    ) {
+      this.tvPromptError.set('Season must be between 1 and 100');
+      return;
+    }
+
+    if (
+      !this.selectedEpisode ||
+      this.selectedEpisode < 1 ||
+      this.selectedEpisode > 50
+    ) {
+      this.tvPromptError.set('Episode must be between 1 and 50');
+      return;
+    }
+
+    this.linking.set(true);
+    this.tvPromptError.set(null);
+
+    const request = {
+      tmdb_id: result.tmdb_id,
+      media_type: result.media_type,
+      season_number: this.selectedSeason,
+      episode_number: this.selectedEpisode,
+    };
+
+    this.api.linkSearchResult(this.media.media_id, request).subscribe({
+      next: () => {
+        this.linking.set(false);
+        this.showTvPrompt.set(false);
+        this.matched.emit();
+        this.close();
+      },
+      error: (err) => {
+        this.tvPromptError.set(
+          err.error?.error?.message || 'Failed to link metadata',
+        );
+        this.linking.set(false);
+      },
+    });
+  }
+
+  cancelTvMatch(): void {
+    this.showTvPrompt.set(false);
+    this.selectedTvResult.set(null);
+    this.tvPromptError.set(null);
   }
 
   skipMatch(): void {

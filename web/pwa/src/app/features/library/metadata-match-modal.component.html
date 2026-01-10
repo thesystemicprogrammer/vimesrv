@@ -43,7 +43,71 @@
         </div>
 
         <!-- Content -->
-        <div class="flex-1 overflow-y-auto p-4">
+        <div class="flex-1 overflow-y-auto p-4 relative">
+          @if (showTvPrompt()) {
+            <!-- TV Episode Dialog Overlay -->
+            <div class="absolute inset-0 bg-slate-900/95 z-30 flex flex-col items-center justify-center p-6 text-center">
+              <div class="w-full max-w-sm">
+                <h3 class="text-xl font-bold text-white mb-2">Identify TV Episode</h3>
+                <p class="text-slate-400 mb-6">
+                  Please enter the season and episode number for <br>
+                  <span class="text-blue-400 font-medium">{{ selectedTvResult()?.title }}</span>
+                </p>
+
+                <div class="grid grid-cols-2 gap-4 mb-6">
+                  <div>
+                    <label class="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1 text-left">Season</label>
+                    <input
+                      type="number"
+                      [(ngModel)]="selectedSeason"
+                      placeholder="1-100"
+                      min="1"
+                      max="100"
+                      class="w-full px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1 text-left">Episode</label>
+                    <input
+                      type="number"
+                      [(ngModel)]="selectedEpisode"
+                      placeholder="1-50"
+                      min="1"
+                      max="50"
+                      class="w-full px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+
+                @if (tvPromptError()) {
+                  <div class="text-red-400 text-sm mb-4">
+                    {{ tvPromptError() }}
+                  </div>
+                }
+
+                <div class="flex gap-3">
+                  <button
+                    (click)="cancelTvMatch()"
+                    class="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition"
+                  >
+                    Back
+                  </button>
+                  <button
+                    (click)="confirmTvMatch()"
+                    [disabled]="linking() || !selectedSeason || !selectedEpisode"
+                    class="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition disabled:opacity-50"
+                  >
+                    @if (linking()) {
+                      <div class="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full mx-auto"></div>
+                    } @else {
+                      Confirm
+                    }
+                  </button>
+                </div>
+              </div>
+            </div>
+          }
+
           @if (loading()) {
             <div class="flex justify-center items-center h-48">
               <div class="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-blue-500"></div>
