@@ -53,7 +53,7 @@ export interface AudioStream {
   language: string;
   title: string;
   channels: number;
-  codec: string;  // e.g., "aac", "ac3", "dts", "eac3"
+  codec: string; // e.g., "aac", "ac3", "dts", "eac3"
 }
 
 export interface SubtitleStream {
@@ -77,17 +77,17 @@ export interface MediaDetail {
   available_qualities: string[];
 
   // Source file info for playback decision
-  format: string;              // "mp4", "mkv", "avi", "mov"
-  video_codec: string;         // "h264", "hevc", "av1", "vp9"
-  audio_codecs: string[];      // ["aac", "ac3", "dts", "eac3"]
-  bitrate: number;             // Total bitrate in bits/sec
-  file_size: number;           // File size in bytes
+  format: string; // "mp4", "mkv", "avi", "mov"
+  video_codec: string; // "h264", "hevc", "av1", "vp9"
+  audio_codecs: string[]; // ["aac", "ac3", "dts", "eac3"]
+  bitrate: number; // Total bitrate in bits/sec
+  file_size: number; // File size in bytes
 
   // Direct play eligibility (computed server-side)
-  direct_play_supported: boolean;    // true if MP4/MOV
-  direct_stream_supported: boolean;  // true if MKV/AVI (needs remux)
-  direct_play_url?: string;          // /stream/direct/{id}
-  direct_stream_url?: string;        // /stream/remux/{id}
+  direct_play_supported: boolean; // true if MP4/MOV
+  direct_stream_supported: boolean; // true if MKV/AVI (needs remux)
+  direct_play_url?: string; // /stream/direct/{id}
+  direct_stream_url?: string; // /stream/remux/{id}
 }
 
 // Library types
@@ -239,8 +239,8 @@ export interface SeriesCreditPerson {
   id: number;
   tmdb_person_id: number;
   name: string;
-  roles?: string;  // JSON string of roles for cast
-  jobs?: string;   // JSON string of jobs for crew
+  roles?: string; // JSON string of roles for cast
+  jobs?: string; // JSON string of jobs for crew
   department?: string;
   profile_path?: string;
   total_episode_count: number;
@@ -354,6 +354,8 @@ export interface MetadataCandidate {
   tmdb_id: number;
   candidate_type: 'movie' | 'series';
   title: string;
+  season_number?: number;
+  episode_number?: number;
   release_date?: string;
   confidence_score: number;
   poster_url?: string;
@@ -432,7 +434,13 @@ export interface ChangePasswordRequest {
 
 // Job types
 export type JobStatus = 'queued' | 'running' | 'succeeded' | 'dead';
-export type JobType = 'scan_library' | 'transcode_video' | 'transcode_audio' | 'transcode_subtitle' | 'enrich_metadata' | 'fetch_translations';
+export type JobType =
+  | 'scan_library'
+  | 'transcode_video'
+  | 'transcode_audio'
+  | 'transcode_subtitle'
+  | 'enrich_metadata'
+  | 'fetch_translations';
 
 export interface JobProgress {
   frame?: number;
@@ -604,7 +612,7 @@ export interface UpdateWorkerConfigRequest {
 }
 
 @Injectable({
-  providedIn: 'root'
+  providedIn: 'root',
 })
 export class ApiService {
   private readonly http = inject(HttpClient);
@@ -613,61 +621,70 @@ export class ApiService {
 
   // Auth endpoints
   login(credentials: LoginRequest): Observable<ApiResponse<LoginResponse>> {
-    return this.http.post<ApiResponse<LoginResponse>>(
-      `${this.baseUrl}/auth/login`,
-      credentials
-    ).pipe(
-      tap(response => {
-        this.auth.setToken(response.data.token);
-      })
-    );
+    return this.http
+      .post<
+        ApiResponse<LoginResponse>
+      >(`${this.baseUrl}/auth/login`, credentials)
+      .pipe(
+        tap((response) => {
+          this.auth.setToken(response.data.token);
+        }),
+      );
   }
 
   getMe(): Observable<ApiResponse<UserInfo>> {
     return this.http.get<ApiResponse<UserInfo>>(`${this.baseUrl}/auth/me`).pipe(
-      tap(response => {
+      tap((response) => {
         this.auth.setUsername(response.data.username);
-      })
+      }),
     );
   }
 
   getStreamToken(): Observable<ApiResponse<StreamTokenResponse>> {
-    return this.http.post<ApiResponse<StreamTokenResponse>>(
-      `${this.baseUrl}/auth/stream-token`,
-      {}
-    ).pipe(
-      tap(response => {
-        this.auth.setStreamToken(response.data.token);
-      })
-    );
+    return this.http
+      .post<
+        ApiResponse<StreamTokenResponse>
+      >(`${this.baseUrl}/auth/stream-token`, {})
+      .pipe(
+        tap((response) => {
+          this.auth.setStreamToken(response.data.token);
+        }),
+      );
   }
 
   // Media endpoints
-  listMedia(page = 1, perPage = 20): Observable<ApiResponse<MediaListResponse>> {
+  listMedia(
+    page = 1,
+    perPage = 20,
+  ): Observable<ApiResponse<MediaListResponse>> {
     const params = new HttpParams()
       .set('page', page.toString())
       .set('per_page', perPage.toString());
 
     return this.http.get<ApiResponse<MediaListResponse>>(
       `${this.baseUrl}/media`,
-      { params }
+      { params },
     );
   }
 
   getMedia(id: string): Observable<ApiResponse<MediaDetail>> {
-    return this.http.get<ApiResponse<MediaDetail>>(`${this.baseUrl}/media/${id}`);
+    return this.http.get<ApiResponse<MediaDetail>>(
+      `${this.baseUrl}/media/${id}`,
+    );
   }
 
   // Library endpoints
   scanLibrary(): Observable<ApiResponse<{ job_id: number }>> {
     return this.http.post<ApiResponse<{ job_id: number }>>(
       `${this.baseUrl}/scanlib`,
-      {}
+      {},
     );
   }
 
   // Library browsing endpoints
-  listMovies(options: ListFilterOptions = {}): Observable<ApiResponse<MoviesListResponse>> {
+  listMovies(
+    options: ListFilterOptions = {},
+  ): Observable<ApiResponse<MoviesListResponse>> {
     const lang = this.auth.language();
     let params = new HttpParams()
       .set('page', (options.page ?? 1).toString())
@@ -695,7 +712,7 @@ export class ApiService {
 
     return this.http.get<ApiResponse<MoviesListResponse>>(
       `${this.baseUrl}/library/movies`,
-      { params }
+      { params },
     );
   }
 
@@ -705,17 +722,21 @@ export class ApiService {
 
     return this.http.get<ApiResponse<MovieDetail>>(
       `${this.baseUrl}/library/movies/${mediaId}`,
-      { params }
+      { params },
     );
   }
 
-  getMovieCredits(movieMetadataId: number): Observable<ApiResponse<MovieCreditsResponse>> {
+  getMovieCredits(
+    movieMetadataId: number,
+  ): Observable<ApiResponse<MovieCreditsResponse>> {
     return this.http.get<ApiResponse<MovieCreditsResponse>>(
-      `${this.baseUrl}/library/movies/${movieMetadataId}/credits`
+      `${this.baseUrl}/library/movies/${movieMetadataId}/credits`,
     );
   }
 
-  listSeries(options: ListFilterOptions & { includeEmpty?: boolean } = {}): Observable<ApiResponse<SeriesListResponse>> {
+  listSeries(
+    options: ListFilterOptions & { includeEmpty?: boolean } = {},
+  ): Observable<ApiResponse<SeriesListResponse>> {
     const lang = this.auth.language();
     let params = new HttpParams()
       .set('page', (options.page ?? 1).toString())
@@ -744,7 +765,7 @@ export class ApiService {
 
     return this.http.get<ApiResponse<SeriesListResponse>>(
       `${this.baseUrl}/library/series`,
-      { params }
+      { params },
     );
   }
 
@@ -754,13 +775,15 @@ export class ApiService {
 
     return this.http.get<ApiResponse<SeriesDetail>>(
       `${this.baseUrl}/library/series/${seriesId}`,
-      { params }
+      { params },
     );
   }
 
-  getSeriesCredits(seriesMetadataId: number): Observable<ApiResponse<SeriesCreditsResponse>> {
+  getSeriesCredits(
+    seriesMetadataId: number,
+  ): Observable<ApiResponse<SeriesCreditsResponse>> {
     return this.http.get<ApiResponse<SeriesCreditsResponse>>(
-      `${this.baseUrl}/library/series/${seriesMetadataId}/credits`
+      `${this.baseUrl}/library/series/${seriesMetadataId}/credits`,
     );
   }
 
@@ -770,28 +793,34 @@ export class ApiService {
 
     return this.http.get<ApiResponse<RecentListResponse>>(
       `${this.baseUrl}/library/recent`,
-      { params }
+      { params },
     );
   }
 
-  listUnmatched(page = 1, perPage = 20): Observable<ApiResponse<UnmatchedListResponse>> {
+  listUnmatched(
+    page = 1,
+    perPage = 20,
+  ): Observable<ApiResponse<UnmatchedListResponse>> {
     const params = new HttpParams()
       .set('page', page.toString())
       .set('per_page', perPage.toString());
 
     return this.http.get<ApiResponse<UnmatchedListResponse>>(
       `${this.baseUrl}/library/unmatched`,
-      { params }
+      { params },
     );
   }
 
   listGenres(): Observable<ApiResponse<GenresResponse>> {
     return this.http.get<ApiResponse<GenresResponse>>(
-      `${this.baseUrl}/library/genres`
+      `${this.baseUrl}/library/genres`,
     );
   }
 
-  searchLibrary(query: string, limit = 20): Observable<ApiResponse<LibrarySearchResponse>> {
+  searchLibrary(
+    query: string,
+    limit = 20,
+  ): Observable<ApiResponse<LibrarySearchResponse>> {
     const lang = this.auth.language();
     const params = new HttpParams()
       .set('q', query)
@@ -800,61 +829,76 @@ export class ApiService {
 
     return this.http.get<ApiResponse<LibrarySearchResponse>>(
       `${this.baseUrl}/library/search`,
-      { params }
+      { params },
     );
   }
 
   // Metadata endpoints
-  getCandidates(mediaId: string, pendingOnly = false): Observable<ApiResponse<GetCandidatesResponse>> {
+  getCandidates(
+    mediaId: string,
+    pendingOnly = false,
+  ): Observable<ApiResponse<GetCandidatesResponse>> {
     const params = new HttpParams().set('pending_only', pendingOnly.toString());
 
     return this.http.get<ApiResponse<GetCandidatesResponse>>(
       `${this.baseUrl}/media/${mediaId}/candidates`,
-      { params }
+      { params },
     );
   }
 
-  searchMetadata(mediaId: string, request: SearchRequest): Observable<ApiResponse<SearchMetadataResponse>> {
+  searchMetadata(
+    mediaId: string,
+    request: SearchRequest,
+  ): Observable<ApiResponse<SearchMetadataResponse>> {
     return this.http.post<ApiResponse<SearchMetadataResponse>>(
       `${this.baseUrl}/media/${mediaId}/search`,
-      request
+      request,
     );
   }
 
-  linkCandidate(mediaId: string, candidateId: number): Observable<ApiResponse<object>> {
+  linkCandidate(
+    mediaId: string,
+    candidateId: number,
+  ): Observable<ApiResponse<object>> {
     return this.http.post<ApiResponse<object>>(
       `${this.baseUrl}/media/${mediaId}/link`,
-      { candidate_id: candidateId }
+      { candidate_id: candidateId },
     );
   }
 
-  linkSearchResult(mediaId: string, request: LinkSearchRequest): Observable<ApiResponse<object>> {
+  linkSearchResult(
+    mediaId: string,
+    request: LinkSearchRequest,
+  ): Observable<ApiResponse<object>> {
     return this.http.post<ApiResponse<object>>(
       `${this.baseUrl}/media/${mediaId}/link-search`,
-      request
+      request,
     );
   }
 
   skipEnrichment(mediaId: string): Observable<ApiResponse<object>> {
     return this.http.post<ApiResponse<object>>(
       `${this.baseUrl}/media/${mediaId}/skip`,
-      {}
+      {},
     );
   }
 
   resetEnrichment(mediaId: string): Observable<ApiResponse<object>> {
     return this.http.post<ApiResponse<object>>(
       `${this.baseUrl}/media/${mediaId}/reset`,
-      {}
+      {},
     );
   }
 
   // Translation endpoints
-  fetchTranslations(language: string): Observable<ApiResponse<{ message: string; job_id?: number; queued: boolean }>> {
-    return this.http.post<ApiResponse<{ message: string; job_id?: number; queued: boolean }>>(
-      `${this.baseUrl}/translations/fetch`,
-      { language }
-    );
+  fetchTranslations(
+    language: string,
+  ): Observable<
+    ApiResponse<{ message: string; job_id?: number; queued: boolean }>
+  > {
+    return this.http.post<
+      ApiResponse<{ message: string; job_id?: number; queued: boolean }>
+    >(`${this.baseUrl}/translations/fetch`, { language });
   }
 
   // User management endpoints
@@ -870,35 +914,51 @@ export class ApiService {
     return this.http.post<ApiResponse<User>>(`${this.baseUrl}/users`, request);
   }
 
-  updateUser(id: string, request: UpdateUserRequest): Observable<ApiResponse<User>> {
-    return this.http.put<ApiResponse<User>>(`${this.baseUrl}/users/${id}`, request);
+  updateUser(
+    id: string,
+    request: UpdateUserRequest,
+  ): Observable<ApiResponse<User>> {
+    return this.http.put<ApiResponse<User>>(
+      `${this.baseUrl}/users/${id}`,
+      request,
+    );
   }
 
   deleteUser(id: string): Observable<ApiResponse<{ message: string }>> {
-    return this.http.delete<ApiResponse<{ message: string }>>(`${this.baseUrl}/users/${id}`);
+    return this.http.delete<ApiResponse<{ message: string }>>(
+      `${this.baseUrl}/users/${id}`,
+    );
   }
 
-  resetUserPassword(id: string, request: ResetPasswordRequest): Observable<ApiResponse<{ message: string }>> {
+  resetUserPassword(
+    id: string,
+    request: ResetPasswordRequest,
+  ): Observable<ApiResponse<{ message: string }>> {
     return this.http.post<ApiResponse<{ message: string }>>(
       `${this.baseUrl}/users/${id}/reset-password`,
-      request
+      request,
     );
   }
 
-  changePassword(request: ChangePasswordRequest): Observable<ApiResponse<{ message: string; token: string }>> {
-    return this.http.post<ApiResponse<{ message: string; token: string }>>(
-      `${this.baseUrl}/auth/change-password`,
-      request
-    ).pipe(
-      tap(response => {
-        // Update the token with the new one (must_change_password will be false)
-        this.auth.setToken(response.data.token);
-      })
-    );
+  changePassword(
+    request: ChangePasswordRequest,
+  ): Observable<ApiResponse<{ message: string; token: string }>> {
+    return this.http
+      .post<
+        ApiResponse<{ message: string; token: string }>
+      >(`${this.baseUrl}/auth/change-password`, request)
+      .pipe(
+        tap((response) => {
+          // Update the token with the new one (must_change_password will be false)
+          this.auth.setToken(response.data.token);
+        }),
+      );
   }
 
   // Job management endpoints
-  listJobs(options: JobListOptions = {}): Observable<ApiResponse<JobListResponse>> {
+  listJobs(
+    options: JobListOptions = {},
+  ): Observable<ApiResponse<JobListResponse>> {
     let params = new HttpParams();
 
     if (options.status && options.status.length > 0) {
@@ -911,10 +971,9 @@ export class ApiService {
       params = params.set('include_old', 'true');
     }
 
-    return this.http.get<ApiResponse<JobListResponse>>(
-      `${this.baseUrl}/jobs`,
-      { params }
-    );
+    return this.http.get<ApiResponse<JobListResponse>>(`${this.baseUrl}/jobs`, {
+      params,
+    });
   }
 
   // Delete endpoints (admin only)
@@ -927,7 +986,7 @@ export class ApiService {
    */
   deleteMedia(mediaId: string): Observable<ApiResponse<{ deleted: boolean }>> {
     return this.http.delete<ApiResponse<{ deleted: boolean }>>(
-      `${this.baseUrl}/media/${mediaId}`
+      `${this.baseUrl}/media/${mediaId}`,
     );
   }
 
@@ -937,10 +996,14 @@ export class ApiService {
    * - Permanently deletes transcoded files
    * - Blocks if any media has running transcode jobs
    */
-  deleteSeason(seasonId: number): Observable<ApiResponse<{ deleted: boolean; deleted_media_count: number }>> {
-    return this.http.delete<ApiResponse<{ deleted: boolean; deleted_media_count: number }>>(
-      `${this.baseUrl}/library/seasons/${seasonId}`
-    );
+  deleteSeason(
+    seasonId: number,
+  ): Observable<
+    ApiResponse<{ deleted: boolean; deleted_media_count: number }>
+  > {
+    return this.http.delete<
+      ApiResponse<{ deleted: boolean; deleted_media_count: number }>
+    >(`${this.baseUrl}/library/seasons/${seasonId}`);
   }
 
   /**
@@ -949,10 +1012,22 @@ export class ApiService {
    * - Permanently deletes transcoded files
    * - Blocks if any media has running transcode jobs
    */
-  deleteSeries(seriesId: number): Observable<ApiResponse<{ deleted: boolean; deleted_media_count: number; deleted_season_count: number }>> {
-    return this.http.delete<ApiResponse<{ deleted: boolean; deleted_media_count: number; deleted_season_count: number }>>(
-      `${this.baseUrl}/library/series/${seriesId}`
-    );
+  deleteSeries(
+    seriesId: number,
+  ): Observable<
+    ApiResponse<{
+      deleted: boolean;
+      deleted_media_count: number;
+      deleted_season_count: number;
+    }>
+  > {
+    return this.http.delete<
+      ApiResponse<{
+        deleted: boolean;
+        deleted_media_count: number;
+        deleted_season_count: number;
+      }>
+    >(`${this.baseUrl}/library/series/${seriesId}`);
   }
 
   // Helper to build stream URL with token
@@ -975,8 +1050,8 @@ export class ApiService {
       responseType: 'arraybuffer',
       headers: {
         'Cache-Control': 'no-store',
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-      }
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
     });
   }
 
@@ -987,56 +1062,67 @@ export class ApiService {
    */
   getTranscodingConfig(): Observable<ApiResponse<TranscodingConfigResponse>> {
     return this.http.get<ApiResponse<TranscodingConfigResponse>>(
-      `${this.baseUrl}/admin/transcodings/config`
+      `${this.baseUrl}/admin/transcodings/config`,
     );
   }
 
   /**
    * Search media files for transcoding management
    */
-  searchMediaForTranscodings(query: string): Observable<ApiResponse<TranscodingSearchResponse>> {
+  searchMediaForTranscodings(
+    query: string,
+  ): Observable<ApiResponse<TranscodingSearchResponse>> {
     const params = new HttpParams().set('q', query);
     return this.http.get<ApiResponse<TranscodingSearchResponse>>(
       `${this.baseUrl}/admin/transcodings/search`,
-      { params }
+      { params },
     );
   }
 
   /**
    * Get transcoding details for a media file
    */
-  getMediaTranscodings(mediaId: string): Observable<ApiResponse<MediaTranscodingDetails>> {
+  getMediaTranscodings(
+    mediaId: string,
+  ): Observable<ApiResponse<MediaTranscodingDetails>> {
     return this.http.get<ApiResponse<MediaTranscodingDetails>>(
-      `${this.baseUrl}/admin/transcodings/media/${mediaId}`
+      `${this.baseUrl}/admin/transcodings/media/${mediaId}`,
     );
   }
 
   /**
    * Add a new transcoding for a media file
    */
-  addTranscoding(mediaId: string, request: AddTranscodingRequest): Observable<ApiResponse<AddTranscodingResponse>> {
+  addTranscoding(
+    mediaId: string,
+    request: AddTranscodingRequest,
+  ): Observable<ApiResponse<AddTranscodingResponse>> {
     return this.http.post<ApiResponse<AddTranscodingResponse>>(
       `${this.baseUrl}/admin/transcodings/media/${mediaId}`,
-      request
+      request,
     );
   }
 
   /**
    * Recreate an existing transcoding (delete files and re-enqueue job)
    */
-  recreateTranscoding(transcodeId: string): Observable<ApiResponse<RecreateTranscodingResponse>> {
+  recreateTranscoding(
+    transcodeId: string,
+  ): Observable<ApiResponse<RecreateTranscodingResponse>> {
     return this.http.post<ApiResponse<RecreateTranscodingResponse>>(
       `${this.baseUrl}/admin/transcodings/transcode/${transcodeId}/recreate`,
-      {}
+      {},
     );
   }
 
   /**
    * Delete a transcoding and its output files
    */
-  deleteTranscoding(transcodeId: string): Observable<ApiResponse<DeleteTranscodingResponse>> {
+  deleteTranscoding(
+    transcodeId: string,
+  ): Observable<ApiResponse<DeleteTranscodingResponse>> {
     return this.http.delete<ApiResponse<DeleteTranscodingResponse>>(
-      `${this.baseUrl}/admin/transcodings/transcode/${transcodeId}`
+      `${this.baseUrl}/admin/transcodings/transcode/${transcodeId}`,
     );
   }
 
@@ -1046,9 +1132,7 @@ export class ApiService {
    * List all worker configurations (local and distributed)
    */
   listWorkers(): Observable<ListWorkersResponse> {
-    return this.http.get<ListWorkersResponse>(
-      `${this.baseUrl}/admin/workers`
-    );
+    return this.http.get<ListWorkersResponse>(`${this.baseUrl}/admin/workers`);
   }
 
   /**
@@ -1056,7 +1140,7 @@ export class ApiService {
    */
   getLocalWorkerCount(): Observable<LocalWorkerCountResponse> {
     return this.http.get<LocalWorkerCountResponse>(
-      `${this.baseUrl}/admin/workers/local/count`
+      `${this.baseUrl}/admin/workers/local/count`,
     );
   }
 
@@ -1066,7 +1150,7 @@ export class ApiService {
   setLocalWorkerCount(count: number): Observable<SetLocalWorkerCountResponse> {
     return this.http.put<SetLocalWorkerCountResponse>(
       `${this.baseUrl}/admin/workers/local/count`,
-      { count }
+      { count },
     );
   }
 
@@ -1075,17 +1159,20 @@ export class ApiService {
    */
   getWorkerConfig(name: string): Observable<WorkerConfig> {
     return this.http.get<WorkerConfig>(
-      `${this.baseUrl}/admin/workers/${encodeURIComponent(name)}`
+      `${this.baseUrl}/admin/workers/${encodeURIComponent(name)}`,
     );
   }
 
   /**
    * Update a worker configuration
    */
-  updateWorkerConfig(name: string, request: UpdateWorkerConfigRequest): Observable<WorkerConfig> {
+  updateWorkerConfig(
+    name: string,
+    request: UpdateWorkerConfigRequest,
+  ): Observable<WorkerConfig> {
     return this.http.put<WorkerConfig>(
       `${this.baseUrl}/admin/workers/${encodeURIComponent(name)}`,
-      request
+      request,
     );
   }
 
@@ -1094,7 +1181,7 @@ export class ApiService {
    */
   deleteWorkerConfig(name: string): Observable<{ message: string }> {
     return this.http.delete<{ message: string }>(
-      `${this.baseUrl}/admin/workers/${encodeURIComponent(name)}`
+      `${this.baseUrl}/admin/workers/${encodeURIComponent(name)}`,
     );
   }
 }
