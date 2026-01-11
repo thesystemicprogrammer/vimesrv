@@ -27,7 +27,7 @@ const (
   ░░█████    █████ █████░███ █████░░██████  ██████  █████      ░░█████   
    ░░░░░    ░░░░░ ░░░░░ ░░░ ░░░░░  ░░░░░░  ░░░░░░  ░░░░░        ░░░░░    
 
-vimesrv - Video Media Server with DASH and HLS Transcoding
+vimesrv - Video Media Server with DASH Transcoding
 
 
 `
