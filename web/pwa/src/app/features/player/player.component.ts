@@ -1,4 +1,13 @@
-import { Component, OnInit, OnDestroy, ViewChild, ElementRef, signal, inject, HostListener } from '@angular/core';
+import {
+  Component,
+  OnInit,
+  OnDestroy,
+  ViewChild,
+  ElementRef,
+  signal,
+  inject,
+  HostListener,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { ApiService, MediaDetail } from '../../core/services/api.service';
@@ -22,14 +31,15 @@ const CONTROLS_HIDE_TIMEOUT_MS = 6000;
     PlayerDebugPanelComponent,
     PlayerCenterControlsComponent,
     PlayerBottomControlsComponent,
-    PlayerSettingsSheetComponent
+    PlayerSettingsSheetComponent,
   ],
   providers: [PlaybackEngineService],
   templateUrl: './player.component.html',
-  styleUrl: './player.component.css'
+  styleUrl: './player.component.css',
 })
 export class PlayerComponent implements OnInit, OnDestroy {
-  @ViewChild('videoElement', { static: true }) videoElement!: ElementRef<HTMLVideoElement>;
+  @ViewChild('videoElement', { static: true })
+  videoElement!: ElementRef<HTMLVideoElement>;
   @ViewChild('playerContainer') playerContainer!: ElementRef<HTMLDivElement>;
 
   private readonly route = inject(ActivatedRoute);
@@ -37,7 +47,7 @@ export class PlayerComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
   private readonly playbackDecision = inject(PlaybackDecisionService);
   private readonly watchProgress = inject(WatchProgressService);
-  
+
   // Inject playback engine (provided at component level)
   readonly playbackEngine = inject(PlaybackEngineService);
 
@@ -57,7 +67,7 @@ export class PlayerComponent implements OnInit, OnDestroy {
   private controlsTimeout: any = null;
   private notificationTimeout: any = null;
   private debugPanelTimeout: any = null;
-  
+
   // Progress tracking
   private progressInterval: any = null;
   private currentMediaId: string | null = null;
@@ -65,10 +75,13 @@ export class PlayerComponent implements OnInit, OnDestroy {
 
   @HostListener('document:keydown', ['$event'])
   onKeyDown(event: KeyboardEvent): void {
-    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) {
+    if (
+      event.target instanceof HTMLInputElement ||
+      event.target instanceof HTMLSelectElement
+    ) {
       return;
     }
-    
+
     switch (event.code) {
       case 'Space':
         event.preventDefault();
@@ -123,7 +136,7 @@ export class PlayerComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.playbackEngine.destroy();
-    
+
     if (this.controlsTimeout) {
       clearTimeout(this.controlsTimeout);
     }
@@ -148,7 +161,7 @@ export class PlayerComponent implements OnInit, OnDestroy {
       if (!mediaResponse?.data) {
         throw new Error('Media not found');
       }
-      
+
       const media = mediaResponse.data;
       this.media.set(media);
 
@@ -179,15 +192,16 @@ export class PlayerComponent implements OnInit, OnDestroy {
         },
         onError: (error) => {
           this.error.set(error);
-        }
+        },
       });
 
       // Set up watch progress tracking
       this.setupWatchProgress(media);
-      
     } catch (err) {
       console.error('Failed to load media:', err);
-      this.error.set(err instanceof Error ? err.message : 'Failed to load media');
+      this.error.set(
+        err instanceof Error ? err.message : 'Failed to load media',
+      );
       this.loading.set(false);
     }
   }
@@ -204,21 +218,21 @@ export class PlayerComponent implements OnInit, OnDestroy {
     this.currentEpisodeId = null; // Not needed - backend looks it up from media_files
 
     // Restore previous watch position
-    this.watchProgress.getProgress(
-      this.currentMediaId, 
-      undefined
-    ).subscribe({
+    this.watchProgress.getProgress(this.currentMediaId, undefined).subscribe({
       next: (response) => {
         if (response.data && response.data.position_seconds > 10) {
           // Only restore if position is > 10 seconds (skip intro resume)
           const video = this.videoElement.nativeElement;
           video.currentTime = response.data.position_seconds;
-          console.log('Restored watch position:', response.data.position_seconds);
+          console.log(
+            'Restored watch position:',
+            response.data.position_seconds,
+          );
         }
       },
       error: (err) => {
         console.log('No previous watch progress found:', err);
-      }
+      },
     });
 
     // Start periodic progress saving (every 10 seconds)
@@ -235,7 +249,7 @@ export class PlayerComponent implements OnInit, OnDestroy {
 
     this.progressInterval = setInterval(() => {
       const video = this.videoElement.nativeElement;
-      
+
       // Only save if video is playing and has valid duration
       if (!video.paused && video.duration > 0 && !isNaN(video.duration)) {
         this.saveProgress();
@@ -248,7 +262,7 @@ export class PlayerComponent implements OnInit, OnDestroy {
    */
   private saveProgress(): void {
     const video = this.videoElement.nativeElement;
-    
+
     if (!video.duration || isNaN(video.duration)) {
       return;
     }
@@ -261,16 +275,18 @@ export class PlayerComponent implements OnInit, OnDestroy {
       return;
     }
 
-    this.watchProgress.recordProgress({
-      media_id: this.currentMediaId || undefined,
-      episode_metadata_id: undefined, // Backend looks this up from media_files
-      position_seconds: position,
-      duration_seconds: duration
-    }).subscribe({
-      error: (err) => {
-        console.error('Failed to save watch progress:', err);
-      }
-    });
+    this.watchProgress
+      .recordProgress({
+        media_id: this.currentMediaId || undefined,
+        episode_metadata_id: undefined, // Backend looks this up from media_files
+        position_seconds: position,
+        duration_seconds: duration,
+      })
+      .subscribe({
+        error: (err) => {
+          console.error('Failed to save watch progress:', err);
+        },
+      });
   }
 
   // ==================== UI Event Handlers ====================
@@ -282,11 +298,13 @@ export class PlayerComponent implements OnInit, OnDestroy {
    */
   onContainerClick(event: Event): void {
     const target = event.target as HTMLElement;
-    
+
     // Only handle clicks on the container or video element directly
     // Ignore clicks on child components (controls, buttons, etc.)
-    if (target !== this.playerContainer?.nativeElement && 
-        target !== this.videoElement?.nativeElement) {
+    if (
+      target !== this.playerContainer?.nativeElement &&
+      target !== this.videoElement?.nativeElement
+    ) {
       return;
     }
 
@@ -319,7 +337,7 @@ export class PlayerComponent implements OnInit, OnDestroy {
   }
 
   private toggleControlsVisibility(): void {
-    this.showControls.update(v => !v);
+    this.showControls.update((v) => !v);
     if (this.showControls()) {
       this.resetControlsTimeout();
     }
@@ -329,7 +347,7 @@ export class PlayerComponent implements OnInit, OnDestroy {
     if (this.controlsTimeout) {
       clearTimeout(this.controlsTimeout);
     }
-    
+
     this.controlsTimeout = setTimeout(() => {
       if (this.playbackEngine.isPlaying()) {
         this.showControls.set(false);
