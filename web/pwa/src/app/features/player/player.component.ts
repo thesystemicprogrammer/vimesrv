@@ -222,8 +222,9 @@ export class PlayerComponent implements OnInit, OnDestroy {
       next: (response) => {
         if (response.data && response.data.position_seconds > 10) {
           // Only restore if position is > 10 seconds (skip intro resume)
-          const video = this.videoElement.nativeElement;
-          video.currentTime = response.data.position_seconds;
+          // const video = this.videoElement.nativeElement;
+          // video.currentTime = response.data.position_seconds;
+          this.playbackEngine.seekTo(response.data.position_seconds);
           console.log(
             'Restored watch position:',
             response.data.position_seconds,
