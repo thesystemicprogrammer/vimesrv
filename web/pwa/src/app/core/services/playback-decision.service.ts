@@ -16,7 +16,7 @@ export interface PlaybackDecision {
 }
 
 @Injectable({
-  providedIn: 'root'
+  providedIn: 'root',
 })
 export class PlaybackDecisionService {
   private readonly capabilityService = inject(PlaybackCapabilityService);
@@ -42,7 +42,7 @@ export class PlaybackDecisionService {
         mode: 'dash',
         url: dashUrl,
         reason: 'Direct play not supported for this media',
-        fallbackAvailable: false
+        fallbackAvailable: false,
       };
     }
 
@@ -54,7 +54,7 @@ export class PlaybackDecisionService {
         mode: 'dash',
         url: dashUrl,
         reason: capability.reason,
-        fallbackAvailable: false
+        fallbackAvailable: false,
       };
     }
 
@@ -65,12 +65,15 @@ export class PlaybackDecisionService {
       try {
         measurement = await this.bandwidthService.measure();
       } catch (err) {
-        console.warn('Bandwidth measurement failed, falling back to DASH:', err);
+        console.warn(
+          'Bandwidth measurement failed, falling back to DASH:',
+          err,
+        );
         return {
           mode: 'dash',
           url: dashUrl,
           reason: 'Could not measure bandwidth',
-          fallbackAvailable: false
+          fallbackAvailable: false,
         };
       }
     }
@@ -84,7 +87,7 @@ export class PlaybackDecisionService {
         url: dashUrl,
         reason: `Bandwidth insufficient (${bandwidthMbps.toFixed(1)} Mbps available, ${requiredMbps.toFixed(1)} Mbps required)`,
         fallbackAvailable: false,
-        bandwidthMbps
+        bandwidthMbps,
       };
     }
 
@@ -95,7 +98,7 @@ export class PlaybackDecisionService {
         url: media.direct_play_url,
         reason: 'Direct play: codec and bandwidth supported',
         fallbackAvailable,
-        bandwidthMbps
+        bandwidthMbps,
       };
     }
 
@@ -106,7 +109,7 @@ export class PlaybackDecisionService {
         reason: 'Direct stream: remuxing container',
         fallbackAvailable,
         bandwidthMbps,
-        selectedAudioTrackIndex: capability.selectedAudioTrackIndex
+        selectedAudioTrackIndex: capability.selectedAudioTrackIndex,
       };
     }
 
@@ -116,7 +119,7 @@ export class PlaybackDecisionService {
       url: dashUrl,
       reason: 'No direct play URL available',
       fallbackAvailable: false,
-      bandwidthMbps
+      bandwidthMbps,
     };
   }
 
@@ -133,7 +136,7 @@ export class PlaybackDecisionService {
       return {
         directPlayPossible: false,
         directStreamPossible: false,
-        reason: 'Direct play not supported for this media'
+        reason: 'Direct play not supported for this media',
       };
     }
 
@@ -142,7 +145,7 @@ export class PlaybackDecisionService {
     return {
       directPlayPossible: capability.canDirectPlay,
       directStreamPossible: capability.canDirectStream,
-      reason: capability.reason
+      reason: capability.reason,
     };
   }
 }

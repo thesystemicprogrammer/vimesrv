@@ -11,7 +11,10 @@ import {
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { ApiService, MediaDetail } from '../../core/services/api.service';
-import { PlaybackDecisionService } from '../../core/services/playback-decision.service';
+import {
+  PlaybackDecision,
+  PlaybackDecisionService,
+} from '../../core/services/playback-decision.service';
 import { PlaybackEngineService } from './services/playback-engine.service';
 import { WatchProgressService } from '../../core/services/watch-progress.service';
 import { PlayerDebugPanelComponent } from './components/player-debug-panel.component';
@@ -174,6 +177,7 @@ export class PlayerComponent implements OnInit, OnDestroy {
 
       // Make playback decision
       const decision = await this.playbackDecision.decide(media);
+      // decision.mode = 'dash';
       console.log('Playback decision:', decision);
 
       // Initialize playback engine
@@ -222,13 +226,7 @@ export class PlayerComponent implements OnInit, OnDestroy {
       next: (response) => {
         if (response.data && response.data.position_seconds > 10) {
           // Only restore if position is > 10 seconds (skip intro resume)
-          // const video = this.videoElement.nativeElement;
-          // video.currentTime = response.data.position_seconds;
-          this.playbackEngine.seekTo(response.data.position_seconds);
-          console.log(
-            'Restored watch position:',
-            response.data.position_seconds,
-          );
+          this.playbackEngine.continueWatching(response.data.position_seconds);
         }
       },
       error: (err) => {
