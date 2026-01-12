@@ -87,6 +87,10 @@ func (app *Application) initialize() error {
 }
 
 func (app *Application) Start() error {
+	// TODO: Fix this if required, it is just for a small test
+	screenState := DetectScreen()
+	logger.Info().Bool("hasDisplay", screenState.HasDisplayServer).Bool("HasMonitor", screenState.HasMonitor).Bool("usable screen", screenState.UsableScreen).Msg("Checking screen state")
+
 	// Channel to listen for errors from HTTP server
 	serverErrors := make(chan error, 1)
 

@@ -177,6 +177,10 @@ export class PlayerComponent implements OnInit, OnDestroy {
 
       // Make playback decision
       const decision = await this.playbackDecision.decide(media);
+
+      // TODO : For now, we just play DASH. We need to rework this once we know how to handle direct play
+      decision.mode = 'dash';
+
       // decision.mode = 'dash';
       console.log('Playback decision:', decision);
 
