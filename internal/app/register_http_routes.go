@@ -199,6 +199,12 @@ func registerHTTPHandlers(useCases *UseCases, adapters *Adapters, httpServer *se
 		logger.Info().Msg("Worker API routes registered")
 	}
 
+	// === Observability Routes (unprotected for now) ===
+	observabilityAPIGroup := router.Group("/api/v1")
+	observabilityHandler := http.NewObservabilityHandler()
+	observabilityHandler.RegisterRoutes(observabilityAPIGroup)
+	logger.Info().Msg("Observability API routes registered")
+
 	logger.Info().
 		Bool("auth_enabled", cfg.Auth.Enabled).
 		Msg("HTTP routes registered")
